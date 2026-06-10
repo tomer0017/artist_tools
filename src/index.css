@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 6% 10%;
+    --foreground: 40 12% 88%;
+
+    --card: 240 5% 13%;
+    --card-foreground: 40 12% 88%;
+
+    --popover: 240 5% 15%;
+    --popover-foreground: 40 12% 88%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 240 6% 10%;
+
+    --secondary: 240 4% 18%;
+    --secondary-foreground: 40 10% 78%;
+
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 50%;
+
+    --accent: 38 80% 45%;
+    --accent-foreground: 240 6% 10%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 40 12% 95%;
+
+    --border: 240 4% 20%;
+    --input: 240 4% 22%;
+    --ring: 38 92% 50%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 240 5% 11%;
+    --sidebar-foreground: 40 10% 78%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 240 6% 10%;
+    --sidebar-accent: 240 4% 16%;
+    --sidebar-accent-foreground: 40 12% 88%;
+    --sidebar-border: 240 4% 20%;
+    --sidebar-ring: 38 92% 50%;
+
+    --canvas-bg: 240 6% 8%;
+    --toolbar-bg: 240 5% 12%;
+    --panel-bg: 240 5% 12%;
+    --surface-hover: 240 4% 22%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(240 4% 25%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(240 4% 35%);
+}
+
+@layer utilities {
+  .canvas-area {
+    background: hsl(var(--canvas-bg));
+  }
+
+  .toolbar-surface {
+    background: hsl(var(--toolbar-bg));
+  }
+
+  .panel-surface {
+    background: hsl(var(--panel-bg));
+  }
+
+  .btn-tool {
+    @apply flex min-h-10 min-w-10 items-center justify-center rounded-md p-2 text-muted-foreground transition-colors;
+  }
+
+  .btn-tool:hover {
+    background: hsl(var(--surface-hover));
+    @apply text-foreground;
+  }
+
+  .btn-tool.active {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .tab-button {
+    @apply px-4 py-2 text-sm font-medium transition-colors rounded-md text-muted-foreground;
+  }
+
+  .tab-button:hover {
+    @apply text-foreground;
+    background: hsl(var(--surface-hover));
+  }
+
+  .tab-button.active {
+    @apply bg-primary text-primary-foreground;
+  }
+}
