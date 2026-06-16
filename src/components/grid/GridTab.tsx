@@ -76,25 +76,32 @@ export default function GridTab() {
     // Draw image if present
     if (activeImage) {
       const img = new Image();
+      img.onerror = (e) => {
+        console.error('[GridTab] Failed to load image for grid preview:', e);
+      };
       img.onload = () => {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, w, h);
-        ctx.clip();
+        try {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 0, w, h);
+          ctx.clip();
 
-        const baseScale = getFitScale(img.naturalWidth, img.naturalHeight);
-        const imgW = img.naturalWidth * baseScale * gs.imageScale * scale;
-        const imgH = img.naturalHeight * baseScale * gs.imageScale * scale;
-        const ox = gs.imageOffsetX * scale;
-        const oy = gs.imageOffsetY * scale;
+          const baseScale = getFitScale(img.naturalWidth, img.naturalHeight);
+          const imgW = img.naturalWidth * baseScale * gs.imageScale * scale;
+          const imgH = img.naturalHeight * baseScale * gs.imageScale * scale;
+          const ox = gs.imageOffsetX * scale;
+          const oy = gs.imageOffsetY * scale;
 
-        // Center image then apply offset
-        const cx = (w - imgW) / 2 + ox;
-        const cy = (h - imgH) / 2 + oy;
-        ctx.drawImage(img, cx, cy, imgW, imgH);
-        ctx.restore();
+          // Center image then apply offset
+          const cx = (w - imgW) / 2 + ox;
+          const cy = (h - imgH) / 2 + oy;
+          ctx.drawImage(img, cx, cy, imgW, imgH);
+          ctx.restore();
 
-        drawGrid(ctx, w, h);
+          drawGrid(ctx, w, h);
+        } catch (error) {
+          console.error('[GridTab] Failed to draw grid preview canvas:', error);
+        }
       };
       img.src = activeImage;
     } else {
@@ -152,6 +159,9 @@ export default function GridTab() {
     const img = new Image();
     img.onload = () => {
       setImageNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.onerror = (e) => {
+      console.error('[GridTab] Failed to load image to read natural size:', e);
     };
     img.src = activeImage;
   }, [activeImage]);
@@ -240,30 +250,41 @@ export default function GridTab() {
     ctx.fillRect(0, 0, exportW, exportH);
 
     const doExport = () => {
-      drawGridOnCtx(ctx, exportW, exportH);
-      const link = document.createElement('a');
-      link.download = `grid-${gs.columns}x${gs.rows}-${gs.canvasWidth}x${gs.canvasHeight}${gs.unit}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      try {
+        drawGridOnCtx(ctx, exportW, exportH);
+        const link = document.createElement('a');
+        link.download = `grid-${gs.columns}x${gs.rows}-${gs.canvasWidth}x${gs.canvasHeight}${gs.unit}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      } catch (error) {
+        console.error('[GridTab] Failed to export grid PNG:', error);
+      }
     };
 
     if (activeImage) {
       const img = new Image();
+      img.onerror = (e) => {
+        console.error('[GridTab] Failed to load image for grid PNG export:', e);
+      };
       img.onload = () => {
-        const baseScale = getFitScale(img.naturalWidth, img.naturalHeight);
-        const unitScale = exportW / gs.canvasWidth;
-        const imgW = img.naturalWidth * baseScale * gs.imageScale * unitScale;
-        const imgH = img.naturalHeight * baseScale * gs.imageScale * unitScale;
-        const ox = gs.imageOffsetX * (exportW / gs.canvasWidth);
-        const oy = gs.imageOffsetY * (exportW / gs.canvasWidth);
-        const cx = (exportW - imgW) / 2 + ox;
-        const cy = (exportH - imgH) / 2 + oy;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, exportW, exportH);
-        ctx.clip();
-        ctx.drawImage(img, cx, cy, imgW, imgH);
-        ctx.restore();
+        try {
+          const baseScale = getFitScale(img.naturalWidth, img.naturalHeight);
+          const unitScale = exportW / gs.canvasWidth;
+          const imgW = img.naturalWidth * baseScale * gs.imageScale * unitScale;
+          const imgH = img.naturalHeight * baseScale * gs.imageScale * unitScale;
+          const ox = gs.imageOffsetX * (exportW / gs.canvasWidth);
+          const oy = gs.imageOffsetY * (exportW / gs.canvasWidth);
+          const cx = (exportW - imgW) / 2 + ox;
+          const cy = (exportH - imgH) / 2 + oy;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 0, exportW, exportH);
+          ctx.clip();
+          ctx.drawImage(img, cx, cy, imgW, imgH);
+          ctx.restore();
+        } catch (error) {
+          console.error('[GridTab] Failed to draw image onto grid export canvas:', error);
+        }
         doExport();
       };
       img.src = activeImage;

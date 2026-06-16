@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
-import { distanceBetween } from '@/types/project';
+import { realWorldLength } from '@/types/project';
 import {
   Trash2, Download, FileJson, FilePlus, Eye, EyeOff,
   ChevronDown, ChevronRight, Pencil,
@@ -20,13 +20,10 @@ export default function MeasurePanel() {
   const [layersOpen, setLayersOpen] = useState(true);
   const [linesOpen, setLinesOpen] = useState(true);
 
-  const getRealSize = useCallback((line: typeof measurements[0]) => {
-    if (!calibration) return '—';
-    const calDist = distanceBetween(calibration.start, calibration.end);
-    if (calDist === 0) return '—';
-    const scale = calibration.realWorldSize / calDist;
-    return (distanceBetween(line.start, line.end) * scale).toFixed(1) + ' ' + calibration.unit;
-  }, [calibration]);
+  const getRealSize = useCallback(
+    (line: typeof measurements[0]) => realWorldLength(line, calibration),
+    [calibration],
+  );
 
   const startEditLabel = (line: typeof measurements[0]) => {
     setEditingLabel(line.id);
@@ -44,7 +41,11 @@ export default function MeasurePanel() {
     if (!image) return;
     const canvas = document.createElement('canvas');
     const img = new Image();
+    img.onerror = (e) => {
+      console.error('[MeasurePanel] Failed to load image for PNG export:', e);
+    };
     img.onload = () => {
+      try {
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       const ctx = canvas.getContext('2d')!;
@@ -69,19 +70,26 @@ export default function MeasurePanel() {
       link.download = 'studio-companion-export.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
+      } catch (error) {
+        console.error('[MeasurePanel] Failed to export annotated PNG:', error);
+      }
     };
     img.src = image;
   }, [image, measurements, getRealSize]);
 
   const handleExportJSON = useCallback(() => {
-    const json = exportProjectJSON();
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = 'studio-companion-project.json';
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const json = exportProjectJSON();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = 'studio-companion-project.json';
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('[MeasurePanel] Failed to export project JSON:', error);
+    }
   }, [exportProjectJSON]);
 
   const handleNew = () => {

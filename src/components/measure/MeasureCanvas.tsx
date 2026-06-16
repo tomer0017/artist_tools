@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsTouchOrMobile } from '@/hooks/use-touch-or-mobile';
-import { type Point, type MeasurementLine, type SampledColor, genId, distanceBetween, angleBetween, midpoint } from '@/types/project';
+import { type Point, type MeasurementLine, type SampledColor, genId, angleBetween, midpoint, realWorldLength } from '@/types/project';
 import { X, Check } from 'lucide-react';
 
 interface Props {
@@ -58,8 +58,12 @@ export default function MeasureCanvas({ containerRef }: Props) {
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(img, 0, 0);
-    eyedropperReady.current = true;
+    try {
+      ctx.drawImage(img, 0, 0);
+      eyedropperReady.current = true;
+    } catch (error) {
+      console.error('[MeasureCanvas] Failed to prepare eyedropper canvas:', error);
+    }
   }, []);
 
   const sampleColorAt = useCallback((imgX: number, imgY: number): { hex: string; rgb: { r: number; g: number; b: number } } | null => {
@@ -69,9 +73,15 @@ export default function MeasureCanvas({ containerRef }: Props) {
     if (!ctx) return null;
     const px = Math.max(0, Math.min(canvas.width - 1, Math.floor(imgX)));
     const py = Math.max(0, Math.min(canvas.height - 1, Math.floor(imgY)));
-    const pixel = ctx.getImageData(px, py, 1, 1).data;
-    const hex = `#${pixel[0].toString(16).padStart(2, '0')}${pixel[1].toString(16).padStart(2, '0')}${pixel[2].toString(16).padStart(2, '0')}`;
-    return { hex, rgb: { r: pixel[0], g: pixel[1], b: pixel[2] } };
+    try {
+      const pixel = ctx.getImageData(px, py, 1, 1).data;
+      const hex = `#${pixel[0].toString(16).padStart(2, '0')}${pixel[1].toString(16).padStart(2, '0')}${pixel[2].toString(16).padStart(2, '0')}`;
+      return { hex, rgb: { r: pixel[0], g: pixel[1], b: pixel[2] } };
+    } catch (error) {
+      // getImageData throws on a CORS-tainted canvas.
+      console.error('[MeasureCanvas] Failed to sample pixel color (eyedropper):', error);
+      return null;
+    }
   }, []);
 
   // Load image dimensions
@@ -388,14 +398,10 @@ export default function MeasureCanvas({ containerRef }: Props) {
   }, []);
 
   // Calculate real-world size for a line
-  const getRealSize = useCallback((line: MeasurementLine): string => {
-    if (!calibration) return '—';
-    const calDist = distanceBetween(calibration.start, calibration.end);
-    if (calDist === 0) return '—';
-    const scale = calibration.realWorldSize / calDist;
-    const dist = distanceBetween(line.start, line.end);
-    return (dist * scale).toFixed(1) + ' ' + calibration.unit;
-  }, [calibration]);
+  const getRealSize = useCallback(
+    (line: MeasurementLine): string => realWorldLength(line, calibration),
+    [calibration],
+  );
 
   // Line endpoint drag
   const startDrag = useCallback((lineId: string, endpoint: 'start' | 'end', e: React.MouseEvent | React.TouchEvent) => {

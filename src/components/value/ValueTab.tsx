@@ -188,7 +188,11 @@ export default function ValueTab() {
     if (!activeImage || !canvasRef.current) return;
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    img.onerror = (e) => {
+      console.error('[ValueTab] Failed to load image for processing:', e);
+    };
     img.onload = () => {
+      try {
       const canvas = canvasRef.current!;
       // Cap dimensions for performance
       const scale = Math.min(1, MAX_PROCESS_DIM / Math.max(img.naturalWidth, img.naturalHeight));
@@ -472,6 +476,9 @@ export default function ValueTab() {
         });
       }
       setGroups(newGroups);
+      } catch (error) {
+        console.error('[ValueTab] Failed to process image (canvas pipeline):', error);
+      }
     };
     img.src = activeImage;
   }, [activeImage, mode, levels, focus, contrast, brightness, isolatedIdx]);
@@ -497,6 +504,7 @@ export default function ValueTab() {
 
   const exportPalette = () => {
     if (!groups.length) return;
+    try {
     const w = 1200, swatchH = 220, labelH = 80;
     const c = document.createElement('canvas');
     c.width = w; c.height = swatchH + labelH;
@@ -515,16 +523,20 @@ export default function ValueTab() {
       ctx.fillText(`${g.pct.toFixed(1)}% • ${brightnessLabel(g.hsl.l)}`, i * sw + 14, swatchH + 50);
     });
     downloadDataUrl(c.toDataURL('image/png'), 'value-palette.png');
+    } catch (error) {
+      console.error('[ValueTab] Failed to export value palette:', error);
+    }
   };
 
   const exportStudySheet = async () => {
     if (!activeImage || !processedUrl || !groups.length) return;
+    try {
     const W = 1600, pad = 40, gap = 24, headerH = 60, stripH = 60, paletteH = 110, domH = 150;
     const orig = new Image(); const proc = new Image();
     orig.crossOrigin = 'anonymous'; proc.crossOrigin = 'anonymous';
     await Promise.all([
-      new Promise<void>(res => { orig.onload = () => res(); orig.src = activeImage; }),
-      new Promise<void>(res => { proc.onload = () => res(); proc.src = processedUrl; }),
+      new Promise<void>((res, rej) => { orig.onload = () => res(); orig.onerror = () => rej(new Error('original image failed to load')); orig.src = activeImage; }),
+      new Promise<void>((res, rej) => { proc.onload = () => res(); proc.onerror = () => rej(new Error('processed image failed to load')); proc.src = processedUrl; }),
     ]);
     const imgAreaW = (W - pad * 2 - gap) / 2;
     const ratio = orig.naturalHeight / orig.naturalWidth;
@@ -588,6 +600,9 @@ export default function ValueTab() {
       ctx.fillText(d.paintHint.slice(0, 38), pad + i * dsw + 6, yDom + 128);
     });
     downloadDataUrl(c.toDataURL('image/png'), 'value-study-sheet.png');
+    } catch (error) {
+      console.error('[ValueTab] Failed to export value study sheet:', error);
+    }
   };
 
   if (!activeImage) {

@@ -8,7 +8,7 @@ import {
 import { useProject } from '@/hooks/useProjectStore';
 import ImageUploader from '@/components/common/ImageUploader';
 import {
-  type Point, type MeasurementLine, genId, distanceBetween,
+  type Point, type MeasurementLine, genId, distanceBetween, realWorldLength,
 } from '@/types/project';
 
 type Tool = 'pan' | 'edit' | 'add' | 'cal';
@@ -134,9 +134,13 @@ export default function MeasureMobile() {
     c.height = imgRef.current.naturalHeight;
     const ctx = c.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(imgRef.current, 0, 0);
-    offscreenRef.current = c;
-    offscreenReady.current = true;
+    try {
+      ctx.drawImage(imgRef.current, 0, 0);
+      offscreenRef.current = c;
+      offscreenReady.current = true;
+    } catch (error) {
+      console.error('[MeasureMobile] Failed to prepare offscreen canvas (magnifier):', error);
+    }
   }, []);
 
   // ---------- Coord helpers ----------
@@ -184,6 +188,7 @@ export default function MeasureMobile() {
     const srcSize = 50; // px of source image
     const ctx = dst.getContext('2d');
     if (!ctx) return;
+    try {
     dst.width = size; dst.height = size;
     ctx.clearRect(0, 0, size, size);
     ctx.save();
@@ -209,6 +214,9 @@ export default function MeasureMobile() {
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
     ctx.stroke();
+    } catch (error) {
+      console.error('[MeasureMobile] Failed to render magnifier:', error);
+    }
   }, [prepareOffscreen]);
 
   // ---------- Touch handling ----------
@@ -439,12 +447,10 @@ export default function MeasureMobile() {
   }, [fitImage, drag, zoom, panOffset.x, panOffset.y]);
 
   // ---------- Real-world size ----------
-  const getRealSize = useCallback((line: MeasurementLine) => {
-    if (!calibration) return '—';
-    const cd = distanceBetween(calibration.start, calibration.end);
-    if (cd === 0) return '—';
-    return (distanceBetween(line.start, line.end) * (calibration.realWorldSize / cd)).toFixed(1) + ' ' + calibration.unit;
-  }, [calibration]);
+  const getRealSize = useCallback(
+    (line: MeasurementLine) => realWorldLength(line, calibration),
+    [calibration],
+  );
 
   // ---------- Precision nudge ----------
   const nudge = (dx: number, dy: number) => {
@@ -457,18 +463,22 @@ export default function MeasureMobile() {
 
   // ---------- Export PNG ----------
   const triggerDownload = useCallback((blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.rel = 'noopener';
-    a.target = '_blank'; // iOS Safari: opens in new tab if download attr is ignored
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 1000);
+    try {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.rel = 'noopener';
+      a.target = '_blank'; // iOS Safari: opens in new tab if download attr is ignored
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (error) {
+      console.error('[MeasureMobile] Failed to trigger file download:', error);
+    }
   }, []);
 
   const exportPNG = useCallback(() => {
@@ -477,6 +487,7 @@ export default function MeasureMobile() {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      try {
       const c = document.createElement('canvas');
       c.width = img.naturalWidth;
       c.height = img.naturalHeight;
@@ -556,15 +567,24 @@ export default function MeasureMobile() {
         for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
         finish(new Blob([arr], { type: 'image/png' }));
       }
+      } catch (error) {
+        console.error('[MeasureMobile] Failed to render annotated PNG export:', error);
+      }
     };
-    img.onerror = () => { /* swallow; nothing to export */ };
+    img.onerror = (e) => {
+      console.error('[MeasureMobile] Failed to load image for PNG export:', e);
+    };
     img.src = image;
   }, [image, measurements, layers, getRealSize, triggerDownload]);
 
   const exportJSON = useCallback(() => {
     setSheet(null);
-    const blob = new Blob([exportProjectJSON()], { type: 'application/json' });
-    triggerDownload(blob, 'studio-companion-project.json');
+    try {
+      const blob = new Blob([exportProjectJSON()], { type: 'application/json' });
+      triggerDownload(blob, 'studio-companion-project.json');
+    } catch (error) {
+      console.error('[MeasureMobile] Failed to export project JSON:', error);
+    }
   }, [exportProjectJSON, triggerDownload]);
 
   // ---------- Export preview actions ----------
@@ -601,9 +621,14 @@ export default function MeasureMobile() {
         setShareState('unsupported');
       }
     } catch (err) {
-      // User cancellation is fine; only flag real errors
+      // User cancellation is fine; only flag (and log) real errors
       const name = (err as Error)?.name;
-      setShareState(name === 'AbortError' ? 'idle' : 'error');
+      if (name === 'AbortError') {
+        setShareState('idle');
+      } else {
+        console.error('[MeasureMobile] Failed to share export:', err);
+        setShareState('error');
+      }
     }
   }, [exportPreview]);
 
@@ -738,8 +763,8 @@ export default function MeasureMobile() {
                 // Push label slightly along the line (away from start) and perpendicular
                 const along = 8 / zoom;
                 const perp = anchorOffsetPx / zoom;
-                let lx = line.start.x + (dx / len) * along + px * perp;
-                let ly = line.start.y + (dy / len) * along + py * perp;
+                const lx = line.start.x + (dx / len) * along + px * perp;
+                const ly = line.start.y + (dy / len) * along + py * perp;
                 return { line, lx, ly };
               });
               // Sort so selected renders last (on top)

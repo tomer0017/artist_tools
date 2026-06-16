@@ -52,14 +52,14 @@ function warmer(hex: string): string {
   // pull hue toward 40° (warm yellow-orange) and slightly boost saturation
   const [h, s, v] = hexToHsv(hex);
   const target = 40;
-  let diff = ((target - h + 540) % 360) - 180;
+  const diff = ((target - h + 540) % 360) - 180;
   const newH = (h + diff * 0.35 + 360) % 360;
   return hsvToHex(newH, Math.min(100, s + 6), v);
 }
 function cooler(hex: string): string {
   const [h, s, v] = hexToHsv(hex);
   const target = 220;
-  let diff = ((target - h + 540) % 360) - 180;
+  const diff = ((target - h + 540) % 360) - 180;
   const newH = (h + diff * 0.35 + 360) % 360;
   return hsvToHex(newH, Math.min(100, s + 6), v);
 }
@@ -545,10 +545,14 @@ export default function ColorTab() {
   const pickImgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
-    const fromSampler = sessionStorage.getItem('use-color-in-tab');
-    if (fromSampler && isValidHex(fromSampler)) {
-      applyHex(fromSampler);
-      sessionStorage.removeItem('use-color-in-tab');
+    try {
+      const fromSampler = sessionStorage.getItem('use-color-in-tab');
+      if (fromSampler && isValidHex(fromSampler)) {
+        applyHex(fromSampler);
+        sessionStorage.removeItem('use-color-in-tab');
+      }
+    } catch (error) {
+      console.warn('[ColorTab] Failed to read handed-off color from sessionStorage:', error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -582,22 +586,31 @@ export default function ColorTab() {
   const warmHex = warmer(selectedHex);
   const coolHex = cooler(selectedHex);
 
-  const copyHex = (hex: string) => { navigator.clipboard?.writeText(hex).catch(() => {}); };
+  const copyHex = (hex: string) => {
+    navigator.clipboard?.writeText(hex).catch((error) => {
+      console.warn('[ColorTab] Clipboard copy failed:', error);
+    });
+  };
 
   const handlePickClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
     if (!picking || !pickCanvasRef.current) return;
-    const img = e.currentTarget;
-    const rect = img.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * img.naturalWidth;
-    const y = ((e.clientY - rect.top) / rect.height) * img.naturalHeight;
-    const canvas = pickCanvasRef.current;
-    canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(img, 0, 0);
-    const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
-    const hex = `#${p[0].toString(16).padStart(2, '0')}${p[1].toString(16).padStart(2, '0')}${p[2].toString(16).padStart(2, '0')}`;
-    applyHex(hex);
-    setPicking(false);
+    try {
+      const img = e.currentTarget;
+      const rect = img.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * img.naturalWidth;
+      const y = ((e.clientY - rect.top) / rect.height) * img.naturalHeight;
+      const canvas = pickCanvasRef.current;
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+      const hex = `#${p[0].toString(16).padStart(2, '0')}${p[1].toString(16).padStart(2, '0')}${p[2].toString(16).padStart(2, '0')}`;
+      applyHex(hex);
+      setPicking(false);
+    } catch (error) {
+      // getImageData throws on a CORS-tainted canvas; sampling silently fails otherwise.
+      console.error('[ColorTab] Failed to sample color from image (eyedropper):', error);
+    }
   }, [picking, applyHex]);
 
   return (

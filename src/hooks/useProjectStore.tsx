@@ -79,7 +79,8 @@ function loadFromStorage(): Partial<StoreState> {
       sampledColors: data.sampledColors || [],
       gridSettings: data.gridSettings || { ...DEFAULT_GRID_SETTINGS },
     };
-  } catch {
+  } catch (error) {
+    console.error('[useProjectStore] Failed to read project from localStorage:', error);
     return {};
   }
 }
@@ -98,8 +99,9 @@ function saveToStorage(state: StoreState) {
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // storage full or unavailable
+  } catch (error) {
+    // storage full or unavailable (e.g. private browsing quota)
+    console.error('[useProjectStore] Failed to save project to localStorage:', error);
   }
 }
 
@@ -265,7 +267,11 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     setGridSettingsRaw({ ...DEFAULT_GRID_SETTINGS });
     setIsImageLoading(false);
     setImageLoadError(null);
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.error('[useProjectStore] Failed to clear project from localStorage:', error);
+    }
   }, []);
 
   const exportProjectJSON = useCallback(() => {

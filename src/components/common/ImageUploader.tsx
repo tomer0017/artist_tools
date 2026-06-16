@@ -17,12 +17,20 @@ export default function ImageUploader({ onImageLoad, compact, disabled, onUpload
     }
     // Signal loading immediately — before FileReader/decoding work begins.
     onUploadStart?.();
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) onImageLoad(e.target.result as string);
-    };
-    reader.onerror = () => onUploadError?.('Failed to read image file.');
-    reader.readAsDataURL(file);
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) onImageLoad(e.target.result as string);
+      };
+      reader.onerror = (e) => {
+        console.error('[ImageUploader] FileReader failed to read image file:', e);
+        onUploadError?.('Failed to read image file.');
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('[ImageUploader] Failed to start reading image file:', error);
+      onUploadError?.('Failed to read image file.');
+    }
   }, [onImageLoad, onUploadStart, onUploadError]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {

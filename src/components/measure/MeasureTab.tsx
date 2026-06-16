@@ -41,7 +41,11 @@ export default function MeasureTab() {
   }, [isMobile, setZoom, setPanOffset]);
 
   const handleUseInColorTab = (hex: string) => {
-    sessionStorage.setItem('use-color-in-tab', hex);
+    try {
+      sessionStorage.setItem('use-color-in-tab', hex);
+    } catch (error) {
+      console.error('[MeasureTab] Failed to hand off color to Color tab via sessionStorage:', error);
+    }
     setActiveTab('color');
   };
 

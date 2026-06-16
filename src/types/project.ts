@@ -119,3 +119,18 @@ export function angleBetween(a: Point, b: Point): number {
 export function midpoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
+
+// Format a measurement line's length in real-world units using the calibration
+// reference. Returns an em-dash when there's no usable calibration. Shared by
+// every Measure surface (desktop canvas, panel, mobile) so the result is
+// always identical.
+export function realWorldLength(
+  line: Pick<MeasurementLine, 'start' | 'end'>,
+  calibration: CalibrationLine | null,
+): string {
+  if (!calibration) return '—';
+  const calDist = distanceBetween(calibration.start, calibration.end);
+  if (calDist === 0) return '—';
+  const scale = calibration.realWorldSize / calDist;
+  return (distanceBetween(line.start, line.end) * scale).toFixed(1) + ' ' + calibration.unit;
+}
