@@ -3,7 +3,7 @@ import {
   type Point, type MeasurementLine, type CalibrationLine, type Layer,
   type ValueSettings, type InteractionMode, type TabId, type ProjectData,
   type SampledColor, type GridSettings,
-  DEFAULT_LAYERS, DEFAULT_VALUE_SETTINGS, DEFAULT_GRID_SETTINGS, genId,
+  DEFAULT_LAYERS, DEFAULT_VALUE_SETTINGS, DEFAULT_GRID_SETTINGS, LAYER_COLORS, genId,
 } from '@/types/project';
 
 const STORAGE_KEY = 'painter-studio-project';
@@ -42,6 +42,8 @@ interface StoreActions {
   toggleMeasurements: () => void;
   toggleLayerVisibility: (layerId: string) => void;
   setActiveLayerId: (id: string) => void;
+  addLayer: (name: string) => void;
+  deleteLayer: (layerId: string) => void;
   setValueSettings: (updates: Partial<ValueSettings>) => void;
   addSampledColor: (color: SampledColor) => void;
   removeSampledColor: (id: string) => void;
@@ -211,6 +213,34 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, visible: !l.visible } : l));
   }, []);
 
+  const addLayer = useCallback((name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const id = genId();
+    // Cycle through the shared palette by position so new layers get distinct,
+    // on-brand colors without inventing a new palette.
+    setLayers(prev => [...prev, {
+      id, name: trimmed, visible: true,
+      color: LAYER_COLORS[prev.length % LAYER_COLORS.length],
+    }]);
+    setActiveLayerId(id);
+  }, []);
+
+  const deleteLayer = useCallback((layerId: string) => {
+    // Never delete the last remaining layer (UI hides the control too).
+    if (layers.length <= 1) {
+      console.warn('[useProjectStore] Refused to delete the last remaining layer:', layerId);
+      return;
+    }
+    const remaining = layers.filter(l => l.id !== layerId);
+    // Move any lines on the deleted layer to a fallback (prefer the general
+    // layer, else the first remaining one) instead of dropping user data.
+    const fallback = remaining.find(l => l.id === 'general') ?? remaining[0];
+    setMeasurements(prev => prev.map(m => m.layerId === layerId ? { ...m, layerId: fallback.id } : m));
+    setLayers(remaining);
+    if (activeLayerId === layerId) setActiveLayerId(fallback.id);
+  }, [layers, activeLayerId]);
+
   const setValueSettings = useCallback((updates: Partial<ValueSettings>) => {
     setValueSettingsRaw(prev => ({ ...prev, ...updates }));
   }, []);
@@ -292,6 +322,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     calibration, setCalibration,
     measurements, setMeasurements,
     layers, activeLayerId, setActiveLayerId,
+    addLayer, deleteLayer,
     selectedLineId, setSelectedLineId,
     mode, setMode,
     lineColor, setLineColor,

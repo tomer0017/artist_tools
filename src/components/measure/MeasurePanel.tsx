@@ -3,13 +3,13 @@ import { useProject } from '@/hooks/useProjectStore';
 import { realWorldLength } from '@/types/project';
 import {
   Trash2, Download, FileJson, FilePlus, Eye, EyeOff,
-  ChevronDown, ChevronRight, Pencil,
+  ChevronDown, ChevronRight, Pencil, Plus,
 } from 'lucide-react';
 
 export default function MeasurePanel() {
   const {
     measurements, updateMeasurement, deleteMeasurement, selectedLineId, setSelectedLineId,
-    layers, activeLayerId, setActiveLayerId, toggleLayerVisibility,
+    layers, activeLayerId, setActiveLayerId, toggleLayerVisibility, addLayer, deleteLayer,
     calibration, clearAllLines, newProject, exportProjectJSON, image,
   } = useProject();
 
@@ -19,6 +19,14 @@ export default function MeasurePanel() {
   const [labelValue, setLabelValue] = useState('');
   const [layersOpen, setLayersOpen] = useState(true);
   const [linesOpen, setLinesOpen] = useState(true);
+  const [addingLayer, setAddingLayer] = useState(false);
+  const [newLayerName, setNewLayerName] = useState('');
+
+  const commitNewLayer = () => {
+    if (newLayerName.trim()) addLayer(newLayerName);
+    setNewLayerName('');
+    setAddingLayer(false);
+  };
 
   const getRealSize = useCallback(
     (line: typeof measurements[0]) => realWorldLength(line, calibration),
@@ -115,18 +123,41 @@ export default function MeasurePanel() {
           <div className="space-y-0.5">
             {layers.map(layer => (
               <div key={layer.id}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${activeLayerId === layer.id ? 'bg-secondary' : 'hover:bg-secondary/50'}`}
+                className={`group flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${activeLayerId === layer.id ? 'bg-secondary' : 'hover:bg-secondary/50'}`}
                 onClick={() => setActiveLayerId(layer.id)}>
                 <button onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}
                   className="text-muted-foreground hover:text-foreground">
                   {layer.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                 </button>
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: layer.color }} />
-                <span className={`truncate ${activeLayerId === layer.id ? 'text-foreground' : 'text-muted-foreground'}`}>
+                <span className={`flex-1 truncate ${activeLayerId === layer.id ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {layer.name}
                 </span>
+                {layers.length > 1 && (
+                  <button onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                    title="Delete layer">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             ))}
+            {addingLayer ? (
+              <input value={newLayerName} onChange={(e) => setNewLayerName(e.target.value)}
+                onBlur={commitNewLayer}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitNewLayer();
+                  if (e.key === 'Escape') { setNewLayerName(''); setAddingLayer(false); }
+                }}
+                placeholder="Layer name"
+                className="w-full bg-secondary px-2 py-1.5 text-foreground rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                autoFocus />
+            ) : (
+              <button onClick={() => { setNewLayerName(''); setAddingLayer(true); }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
+                <Plus className="w-3 h-3" /> Add layer
+              </button>
+            )}
           </div>
         )}
       </section>

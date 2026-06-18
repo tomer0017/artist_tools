@@ -4,8 +4,7 @@ import {
   Eye, EyeOff, Maximize, Pipette, Hand,
 } from 'lucide-react';
 import ImageUploader from '@/components/common/ImageUploader';
-
-const LINE_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#ffffff', '#94a3b8'];
+import { LINE_COLORS } from '@/types/project';
 
 interface Props {
   onResetView: () => void;

@@ -7,7 +7,9 @@ artists. The user uploads a reference photo once and then works through four
 focused tools that share that image and a single saved project:
 
 - **Measure** — calibrate the photo against a known real-world length and
-  measure proportions across it, organised into anatomical layers.
+  measure proportions across it, organised into user-managed layers (a new
+  project starts with one generic "General Lines" layer; the artist can add and
+  delete layers for any subject — figures, landscapes, objects, etc.).
 - **Value** — reduce the photo to a fixed number of value groups, extract a
   dominant-color palette, and export value studies with paint-mixing hints.
 - **Color** — an interactive color wheel with harmonies, paint-mixing recipes,
@@ -118,15 +120,21 @@ exists only to serve that page and a 404 fallback from GitHub Pages.
   calibrate, measure, pan, eyedropper), undo/redo, show/hide measurements,
   reset view, line-color palette, and an uploader. Has a `mobile` layout mode.
 - **MeasurePanel** (`measure/MeasurePanel.tsx`) — Side panel listing layers
-  (toggle visibility, set active) and measurement lines (rename label, delete),
-  plus actions: Export PNG (image + drawn lines), Export JSON (full project),
-  Clear all lines, New project (both with inline confirm).
+  (toggle visibility, set active, add via an inline name input, delete via a
+  per-row trash button that is hidden when only one layer remains) and
+  measurement lines (rename label, delete), plus actions: Export PNG (image +
+  drawn lines), Export JSON (full project), Clear all lines, New project (both
+  with inline confirm).
 - **MeasureMobile** (`measure/MeasureMobile.tsx`) — A purpose-built
   touch-first Measure experience (kept separate so desktop is untouched).
   Adds: a magnifier loupe while dragging endpoints, large hit-targets,
   bottom-sheet panels (layers / selected line / reference / precision / more),
   precision nudge controls, an export-preview modal with Web Share / Save Image
-  / Download, and extensive iOS visual-viewport / keyboard handling.
+  / Download, and extensive iOS visual-viewport / keyboard handling. The
+  **Layers** sheet supports adding (inline input) and deleting layers; the
+  **Selected/Lines** sheet hosts a "New line color" swatch picker that reads/
+  writes the same `lineColor`/`setLineColor` store state as the desktop toolbar
+  (so the active line color is shared across both surfaces).
 
 ### Value tool
 - **ValueTab** (`value/ValueTab.tsx`) — Self-contained value-study workspace
@@ -170,9 +178,12 @@ exists only to serve that page and a 404 fallback from GitHub Pages.
 - Export the whole project to JSON and (implicitly) reload it by keeping it in
   storage. New-project and clear-lines actions with confirmation.
 - **Measure:** calibrate to a real-world reference line; draw measurement lines
-  that display real-world lengths; organise lines into 6 default anatomical
-  layers (general, eyes, nose, mouth, jaw, hair) with per-layer visibility;
-  rename/label lines; select and drag endpoints; undo/redo; pan/zoom;
+  that display real-world lengths; organise lines into user-managed layers (a
+  new project starts with one "General Lines" layer; add/delete layers, with
+  deleted layers' lines reassigned to the general/first layer so no data is
+  lost) with per-layer visibility; rename/label lines; pick the active line
+  color from a shared palette (desktop toolbar + mobile sheet); select and drag
+  endpoints; undo/redo; pan/zoom;
   shift-constrain to horizontal/vertical; show/hide all measurements; reset
   view; eyedropper color sampling into a session palette; export annotated PNG.
   A dedicated mobile UI adds a magnifier, precision nudging, bottom sheets, and
@@ -271,7 +282,10 @@ stay consistent.
   state and storage. Zoom/pan, selection, mode, and loading flags are
   intentionally *not* persisted.
 - **Undo/redo** is scoped to measurement edits via two `useRef` stacks
-  (`pushUndo` snapshots the lines array before add/delete/clear).
+  (`pushUndo` snapshots the lines array before add/delete/clear). Layer
+  mutations (`addLayer`, `deleteLayer`) are intentionally *not* pushed onto the
+  undo stack — `deleteLayer` reassigns its lines to the general/first layer
+  directly so undo never restores lines onto a layer that no longer exists.
 - **Local component state** handles transient UI: drafts and tool modes in the
   Measure components, processing results and view toggles in `ValueTab`, the
   selected color and sub-tab in `ColorTab`, and drag/pinch state in `GridTab`.
@@ -386,3 +400,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-06-15 | Initial documentation created | PROJECT.md |
 | 2026-06-15 | Removed all "Lovable" branding/tooling; rebranded to "Studio Companion"; deduplicated real-world-length calc into a shared helper; minor `prefer-const` cleanups | index.html, README.md, package.json, package-lock.json, vite.config.ts, playwright.config.ts, playwright-fixture.ts, src/types/project.ts, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/color/ColorTab.tsx, removed bun.lock & bun.lockb |
 | 2026-06-17 | Added structured, critical-only error handling across all logic seams (canvas ops, image loads, localStorage/sessionStorage, color extraction, exports); standardized `[Component] message + error` logging; removed silent catches; no business logic changed. See new "Error Handling Strategy" section. Reduced pre-existing lint errors 4→0. | src/hooks/useProjectStore.tsx, src/components/common/ImageUploader.tsx, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/measure/MeasureTab.tsx, src/components/grid/GridTab.tsx, src/pages/NotFound.tsx, PROJECT.md |
+| 2026-06-17 | Made Measure layers dynamic/user-extensible: a new project now starts with one "General Lines" layer instead of 6 fixed anatomical layers; added `addLayer`/`deleteLayer` store actions (palette-cycling colors, delete reassigns orphaned lines to the general/first layer, last layer protected); add/delete UI in the desktop panel (inline name input) and mobile layers sheet. Existing saved projects load untouched (no migration). Added a mobile "New line color" picker in the Selected/Lines sheet reusing the desktop `lineColor`/`setLineColor` state; extracted the shared `LINE_COLORS`/`LAYER_COLORS` palettes into `types/project.ts`. No changes to calibration, undo/redo, autosave, export, eyedropper, pan/zoom, or other tools. | src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureToolbar.tsx, src/components/measure/MeasureMobile.tsx, PROJECT.md |

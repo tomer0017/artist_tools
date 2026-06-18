@@ -87,13 +87,21 @@ export interface ProjectData {
   savedAt: number;
 }
 
+// Palette that user-created layers cycle through (by index). These are the
+// colors the original fixed anatomical layers used, so existing projects and
+// newly-added layers stay visually consistent.
+export const LAYER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
+
+// Measurement-line color swatches, shared by the desktop toolbar and the mobile
+// line-color picker so both surfaces offer the exact same options.
+export const LINE_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#ffffff', '#94a3b8'];
+
+// A brand-new project starts with a single, generically-named layer (the app is
+// a general proportion tool, not face-specific). NOTE: this default only seeds
+// newProject()/initial state when nothing is persisted — existing saved
+// projects keep whatever layers they stored, untouched, for backward compat.
 export const DEFAULT_LAYERS: Layer[] = [
-  { id: 'general', name: 'General Structure', visible: true, color: '#f59e0b' },
-  { id: 'eyes', name: 'Eyes', visible: true, color: '#3b82f6' },
-  { id: 'nose', name: 'Nose', visible: true, color: '#10b981' },
-  { id: 'mouth', name: 'Mouth', visible: true, color: '#ef4444' },
-  { id: 'jaw', name: 'Jaw / Chin', visible: true, color: '#8b5cf6' },
-  { id: 'hair', name: 'Hair / Outline', visible: true, color: '#ec4899' },
+  { id: 'general', name: 'General Lines', visible: true, color: LAYER_COLORS[0] },
 ];
 
 export const DEFAULT_VALUE_SETTINGS: ValueSettings = {

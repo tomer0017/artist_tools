@@ -8,7 +8,7 @@ import {
 import { useProject } from '@/hooks/useProjectStore';
 import ImageUploader from '@/components/common/ImageUploader';
 import {
-  type Point, type MeasurementLine, genId, distanceBetween, realWorldLength,
+  type Point, type MeasurementLine, genId, distanceBetween, realWorldLength, LINE_COLORS,
 } from '@/types/project';
 
 type Tool = 'pan' | 'edit' | 'add' | 'cal';
@@ -30,8 +30,8 @@ export default function MeasureMobile() {
     image, calibration, setCalibration,
     measurements, addMeasurement, updateMeasurement, deleteMeasurement,
     selectedLineId, setSelectedLineId,
-    layers, activeLayerId, setActiveLayerId, toggleLayerVisibility,
-    lineColor, showMeasurements, toggleMeasurements,
+    layers, activeLayerId, setActiveLayerId, toggleLayerVisibility, addLayer, deleteLayer,
+    lineColor, setLineColor, showMeasurements, toggleMeasurements,
     zoom, setZoom, panOffset, setPanOffset,
     undo, redo, newProject, clearAllLines, exportProjectJSON,
     setImage, setMode,
@@ -54,6 +54,15 @@ export default function MeasureMobile() {
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
   const [tool, setTool] = useState<Tool>(calibration ? 'edit' : 'cal');
   const [focusSelected, setFocusSelected] = useState(true);
+
+  // Inline "add layer" input state for the Layers sheet
+  const [addingLayer, setAddingLayer] = useState(false);
+  const [newLayerName, setNewLayerName] = useState('');
+  const commitNewLayer = () => {
+    if (newLayerName.trim()) addLayer(newLayerName);
+    setNewLayerName('');
+    setAddingLayer(false);
+  };
 
   // Add mode (measure) draft + calibration draft
   const [pendingPoint, setPendingPoint] = useState<Point | null>(null);
@@ -941,14 +950,53 @@ export default function MeasureMobile() {
                     <span className="w-4 h-4 rounded-full" style={{ backgroundColor: layer.color }} />
                     <span className="flex-1 text-sm text-foreground">{layer.name}</span>
                     <span className="text-xs text-muted-foreground">{count}</span>
+                    {layers.length > 1 && (
+                      <button onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
+                        className="h-10 w-10 flex items-center justify-center text-muted-foreground" aria-label="Delete layer">
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
+              {addingLayer ? (
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <input value={newLayerName} onChange={e => setNewLayerName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitNewLayer(); } }}
+                    placeholder="Layer name"
+                    autoFocus
+                    /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
+                    style={{ fontSize: '16px' }}
+                    className="flex-1 min-w-0 h-11 px-3 bg-secondary border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  <button onClick={commitNewLayer} className="h-11 px-4 bg-primary text-primary-foreground rounded-md font-medium">Add</button>
+                  <button onClick={() => { setNewLayerName(''); setAddingLayer(false); }}
+                    className="h-11 w-11 flex items-center justify-center bg-secondary text-muted-foreground rounded-md"><X className="w-4 h-4" /></button>
+                </div>
+              ) : (
+                <button onClick={() => { setNewLayerName(''); setAddingLayer(true); }}
+                  className="flex items-center gap-3 px-3 py-3 rounded-md min-h-[52px] w-full text-sm text-foreground active:bg-secondary/60">
+                  <Plus className="w-5 h-5" /> Add layer
+                </button>
+              )}
             </div>
           )}
 
           {sheet === 'selected' && (
             <div className="space-y-3">
+              {/* New-line color — same active line color as the desktop toolbar
+                  (lineColor/setLineColor). Affects the next line drawn; existing
+                  lines keep their own stored color. */}
+              <div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground px-1 pb-2">New line color</div>
+                <div className="flex flex-wrap gap-2">
+                  {LINE_COLORS.map(c => (
+                    <button key={c} onClick={() => setLineColor(c)}
+                      aria-label={`Use line color ${c}`}
+                      className={`h-10 w-10 rounded-md border-2 transition-all ${lineColor === c ? 'border-foreground scale-105' : 'border-border/40'}`}
+                      style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
               {selectedLine ? (
                 <SelectedLineEditor line={selectedLine} getRealSize={getRealSize}
                   onChange={(u) => updateMeasurement(selectedLine.id, u)}
