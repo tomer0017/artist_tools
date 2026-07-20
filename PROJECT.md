@@ -388,6 +388,40 @@ geometry helpers in `types/project.ts`, and the viewport hooks — none of these
 can throw, so adding try/catch would be noise.
 
 ---
+## Saving images & GIFs (shared "Save to Photos" flow)
+
+Every image/GIF export in the app goes through ONE shared helper so the save
+experience is consistent and iOS-optimised. A browser cannot force a save to the
+Photos library or choose which share targets iOS shows, so the flow opens the
+best native path and guides the user.
+
+- `src/lib/saveMedia.ts` — pure helpers: `mimeForFilename`/`extForMime`,
+  `makeShareFile`, `canShareFile` (wraps `navigator.canShare({files:[file]})`),
+  `shareFile` (calls `navigator.share({files:[file]})` — **file only**, no
+  title/text/url, so iOS surfaces "Save Image"; returns
+  `shared`/`cancelled`/`unsupported`/`error`), `downloadBlob`, `canvasToBlob`,
+  `dataUrlToBlob`, `isIOS`/`isTouchDevice`.
+- `src/components/common/SaveMedia.tsx` — `SaveMediaProvider` (mounted in
+  `App.tsx`) + `useSaveMedia().save({ blob, filename, mime? })`. Renders one
+  preview sheet showing the ACTUAL image/GIF (object URL, revoked on close). On
+  touch/iOS the primary action is **Save to Photos** (native share, file only)
+  with the guidance "In the next screen, choose Save Image."
+  (Hebrew: "במסך הבא יש לבחור שמירת התמונה.") plus a full-screen long-press
+  fallback ("Press and hold the image, then choose Save to Photos." /
+  "יש ללחוץ לחיצה ארוכה על התמונה ואז לבחור שמירה בתמונות."). On desktop the
+  primary is a standard **Save Image / Save GIF** download; **Open Image/GIF**
+  and (where supported) **Share** are secondary. Correct MIME + extension are
+  preserved (image/png, image/jpeg, image/gif).
+
+All export surfaces call `save(...)` instead of ad-hoc anchor downloads: Compare
+Art (`CompareExportSheet`, `useCompareGif`), Grid (`GridTab`), Value (`ValueTab`
+— processed image, palette, study sheet), Measure (`MeasurePanel` desktop PNG,
+`MeasureMobile` PNG — its bespoke share/preview modal was removed in favour of
+the shared sheet). Non-image project JSON export stays a plain download. Color
+has no image export. Tests: `src/lib/saveMedia.test.ts` +
+`src/components/common/SaveMedia.test.tsx`.
+
+---
 ## Compare Art workspace
 
 **Purpose.** Replace the painter's manual "combine painting + reference in a
@@ -518,6 +552,7 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-06-15 | Initial documentation created | PROJECT.md |
 | 2026-06-15 | Removed all "Lovable" branding/tooling; rebranded to "Studio Companion"; deduplicated real-world-length calc into a shared helper; minor `prefer-const` cleanups | index.html, README.md, package.json, package-lock.json, vite.config.ts, playwright.config.ts, playwright-fixture.ts, src/types/project.ts, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/color/ColorTab.tsx, removed bun.lock & bun.lockb |
 | 2026-06-17 | Added structured, critical-only error handling across all logic seams (canvas ops, image loads, localStorage/sessionStorage, color extraction, exports); standardized `[Component] message + error` logging; removed silent catches; no business logic changed. See new "Error Handling Strategy" section. Reduced pre-existing lint errors 4→0. | src/hooks/useProjectStore.tsx, src/components/common/ImageUploader.tsx, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/measure/MeasureTab.tsx, src/components/grid/GridTab.tsx, src/pages/NotFound.tsx, PROJECT.md |
+| 2026-07-20 | iOS Save-to-Photos flow across the app: one shared helper (`src/lib/saveMedia.ts`) + provider/sheet (`src/components/common/SaveMedia.tsx`, mounted in `App.tsx`). On iOS `navigator.share({files:[file]})` (file only, no title/text/url) after `canShare`; guidance to choose "Save Image" (EN+HE) + full-screen long-press fallback; the sheet previews the ACTUAL image/GIF and revokes object URLs. Desktop keeps standard Save Image/Save GIF download. Routed ALL exports through it (Compare Art `CompareExportSheet`/`useCompareGif`, `GridTab`, `ValueTab`, `MeasurePanel`, `MeasureMobile` — removed its bespoke share/preview modal) and updated labels (Save Image/Save GIF/Save to Photos). No external app hardcoded. Tests: saveMedia.test.ts, SaveMedia.test.tsx; e2e updated for the save sheet. | src/lib/saveMedia.ts (new), src/components/common/SaveMedia.tsx (new), src/App.tsx, src/features/compare-art/CompareExportSheet.tsx, src/features/compare-art/useCompareGif.ts, src/components/grid/GridTab.tsx, src/components/value/ValueTab.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/test/setup.ts, e2e/compare-art.spec.ts, PROJECT.md |
 | 2026-07-20 | Compare Art UI/UX polish sprint: (1) **pre-comparison crop** — a touch-first crop screen (pan/pinch, Free-mode resize handles, presets Free/Square/Circle/4:3/3:4/16:9/Original) shown after picking each image and re-editable from the Align sheet; non-destructive (stores original + normalised rect); the whole engine consumes the cropped image with no renderer changes. (2) **2-point alignment magnifier** — a loupe (faithful copy of the Measure magnifier) follows the finger and commits the point on release, not touch-down. (3) **Overlay quick workflow** — an always-visible opacity slider + one-tap "Create Opacity GIF" with inline progress/cancel; Export screen unchanged. New files: CompareCropScreen.tsx, compareArtCrop.ts, compareArtMagnifier.ts, CompareOverlayBar.tsx, useCompareGif.ts. Extended session (artwork/reference Original + Crop) + applyImageCrop store action. Existing tools + Compare rendering/difference/GIF pipeline unchanged. | src/features/compare-art/compareArtTypes.ts, compareArtState.tsx, CompareArt.tsx, CompareUploadStep.tsx, CompareSheets.tsx, CompareCanvas.tsx, compareArtCrop.ts (new), CompareCropScreen.tsx (new), compareArtMagnifier.ts (new), CompareOverlayBar.tsx (new), useCompareGif.ts (new), compareArt.test.ts, compareArtState.test.tsx, e2e/compare-art.spec.ts, PROJECT.md |
 | 2026-07-20 | Added the **Compare Art** workspace (5th tool, Hebrew השוואת ציור): isolated `src/features/compare-art/` feature (own `CompareProvider` + `compare-art-session` localStorage key, undo/redo, autosave). Artwork/reference upload, one canonical resolution-independent scene renderer shared by screen + still + GIF, reference move/scale/rotate/flip/opacity with gesture + precision nudges + fit/fill/match/reset + optional 2-point align, layer lock, non-destructive crop, grid overlay, Overlay/Blink/Split/Difference modes + grayscale, OKLab value/color difference with sensitivity + legend, still/difference/GIF export (opacity-pulse/blink/compare-diff) with progress + cancel. Added `gifenc` dependency; code-split the workspace via `React.lazy`. Additive nav wiring only; existing tools unchanged. Added unit tests (`compareArt.test.ts`, `compareArtState.test.tsx`) and an e2e workflow test (`e2e/compare-art.spec.ts`). | src/types/project.ts, src/components/layout/Header.tsx, src/pages/Index.tsx, src/features/compare-art/* (new), e2e/compare-art.spec.ts (new), package.json, package-lock.json, README.md, PROJECT.md |
 | 2026-06-17 | Made Measure layers dynamic/user-extensible: a new project now starts with one "General Lines" layer instead of 6 fixed anatomical layers; added `addLayer`/`deleteLayer` store actions (palette-cycling colors, delete reassigns orphaned lines to the general/first layer, last layer protected); add/delete UI in the desktop panel (inline name input) and mobile layers sheet. Existing saved projects load untouched (no migration). Added a mobile "New line color" picker in the Selected/Lines sheet reusing the desktop `lineColor`/`setLineColor` state; extracted the shared `LINE_COLORS`/`LAYER_COLORS` palettes into `types/project.ts`. No changes to calibration, undo/redo, autosave, export, eyedropper, pan/zoom, or other tools. | src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureToolbar.tsx, src/components/measure/MeasureMobile.tsx, PROJECT.md |

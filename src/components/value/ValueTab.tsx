@@ -6,6 +6,8 @@ import {
   Sun, Moon, Eye, Palette as PaletteIcon, Brush, Layers,
   SlidersHorizontal, X, Maximize2, Minimize2, Download, Image as ImageIcon,
 } from 'lucide-react';
+import { useSaveMedia } from '@/components/common/SaveMedia';
+import { dataUrlToBlob } from '@/lib/saveMedia';
 
 type Mode = 'grayscale' | 'color' | 'painter';
 type Focus = 'none' | 'shadow' | 'highlight' | 'squint';
@@ -155,6 +157,7 @@ function dominantLabel(fam: HueFamily, band: 'dark' | 'mid' | 'light', hsl: { h:
 
 export default function ValueTab() {
   const { image, valueSettings, setValueSettings } = useProject();
+  const { save } = useSaveMedia();
   const [localImage, setLocalImage] = useState<string | null>(null);
   const [processedUrl, setProcessedUrl] = useState<string | null>(null);
   const [groups, setGroups] = useState<ValueGroup[]>([]);
@@ -492,14 +495,15 @@ export default function ValueTab() {
     return (Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]) as 'warm' | 'cool' | 'neutral';
   }, [groups]);
 
-  const downloadDataUrl = (dataUrl: string, name: string) => {
-    const a = document.createElement('a');
-    a.href = dataUrl; a.download = name; a.click();
+  const saveDataUrl = (dataUrl: string, name: string, mime: string) => {
+    dataUrlToBlob(dataUrl)
+      .then((blob) => save({ blob, filename: name, mime, title: 'Save image' }))
+      .catch((error) => console.error('[ValueTab] Failed to prepare image for saving:', error));
   };
 
   const exportProcessed = () => {
     if (!processedUrl) return;
-    downloadDataUrl(processedUrl, 'value-study.jpg');
+    saveDataUrl(processedUrl, 'value-study.jpg', 'image/jpeg');
   };
 
   const exportPalette = () => {
@@ -522,7 +526,7 @@ export default function ValueTab() {
       ctx.font = '13px Inter, sans-serif';
       ctx.fillText(`${g.pct.toFixed(1)}% • ${brightnessLabel(g.hsl.l)}`, i * sw + 14, swatchH + 50);
     });
-    downloadDataUrl(c.toDataURL('image/png'), 'value-palette.png');
+    saveDataUrl(c.toDataURL('image/png'), 'value-palette.png', 'image/png');
     } catch (error) {
       console.error('[ValueTab] Failed to export value palette:', error);
     }
@@ -599,7 +603,7 @@ export default function ValueTab() {
       ctx.font = 'italic 10px Inter, sans-serif';
       ctx.fillText(d.paintHint.slice(0, 38), pad + i * dsw + 6, yDom + 128);
     });
-    downloadDataUrl(c.toDataURL('image/png'), 'value-study-sheet.png');
+    saveDataUrl(c.toDataURL('image/png'), 'value-study-sheet.png', 'image/png');
     } catch (error) {
       console.error('[ValueTab] Failed to export value study sheet:', error);
     }
@@ -753,19 +757,19 @@ export default function ValueTab() {
         </div>
       </div>
       <div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Export</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Save</p>
         <div className="grid grid-cols-1 gap-1.5">
           <button onClick={exportProcessed}
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-            <Download className="w-3 h-3" />Processed image
+            <Download className="w-3 h-3" />Save processed image
           </button>
           <button onClick={exportPalette}
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-            <Download className="w-3 h-3" />Palette only
+            <Download className="w-3 h-3" />Save palette
           </button>
           <button onClick={exportStudySheet}
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-            <Download className="w-3 h-3" />Study sheet
+            <Download className="w-3 h-3" />Save study sheet
           </button>
         </div>
       </div>

@@ -6,6 +6,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Download, Loader2, X } from 'lucide-react';
+import { useSaveMedia } from '@/components/common/SaveMedia';
+import { canvasToBlob } from '@/lib/saveMedia';
 import { useCompare } from './compareArtState';
 import {
   ANALYSIS_MAX_DIM,
@@ -29,18 +31,6 @@ import {
   buildGifFrameSpecs,
   generateComparisonGif,
 } from './compareArtGif';
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke on the next tick so the download has a chance to start.
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-}
 
 function Seg<T extends string>({
   value,
@@ -74,6 +64,7 @@ function Seg<T extends string>({
 export default function CompareExportSheet() {
   const store = useCompare();
   const { session } = store;
+  const { save } = useSaveMedia();
 
   const artRef = useRef<PreparedImage | null>(null);
   const refRef = useRef<PreparedImage | null>(null);
@@ -144,12 +135,8 @@ export default function CompareExportSheet() {
         frame: kind === 'difference' ? { showDifference: true } : undefined,
       });
       const cropped = applyCrop(canvas, session.crop);
-      await new Promise<void>((resolve) =>
-        cropped.toBlob((blob) => {
-          if (blob) downloadBlob(blob, `compare-${kind}-${Date.now()}.png`);
-          resolve();
-        }, 'image/png'),
-      );
+      const blob = await canvasToBlob(cropped, 'image/png');
+      save({ blob, filename: `compare-${kind}-${Date.now()}.png`, mime: 'image/png' });
     } catch (e) {
       console.error('[CompareExportSheet] still export failed:', e);
       setError('Export failed. The image may be too large.');
@@ -197,7 +184,7 @@ export default function CompareExportSheet() {
       );
       gifHandle.current = handle;
       const blob = await handle.promise;
-      downloadBlob(blob, `compare-${session.gif.animation}-${Date.now()}.gif`);
+      save({ blob, filename: `compare-${session.gif.animation}-${Date.now()}.gif`, mime: 'image/gif' });
     } catch (e) {
       if (e instanceof CancelledError) {
         // user cancelled — no error surfaced
@@ -232,7 +219,7 @@ export default function CompareExportSheet() {
             className="flex items-center justify-center gap-2 rounded-lg bg-secondary px-3 py-3 text-sm font-medium text-foreground active:scale-95 disabled:opacity-50"
           >
             {busy === 'comparison' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Comparison
+            Save comparison
           </button>
           <button
             onClick={() => exportStill('difference')}
@@ -240,7 +227,7 @@ export default function CompareExportSheet() {
             className="flex items-center justify-center gap-2 rounded-lg bg-secondary px-3 py-3 text-sm font-medium text-foreground active:scale-95 disabled:opacity-50"
           >
             {busy === 'difference' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Difference
+            Save difference
           </button>
         </div>
         <p className="text-[11px] text-muted-foreground">PNG · uses the current alignment, crop and grid settings.</p>
@@ -334,7 +321,7 @@ export default function CompareExportSheet() {
             disabled={!!busy}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground active:scale-95 disabled:opacity-50"
           >
-            <Download className="h-4 w-4" /> Export GIF
+            <Download className="h-4 w-4" /> Create GIF
           </button>
         )}
         <p className="text-[11px] text-muted-foreground">

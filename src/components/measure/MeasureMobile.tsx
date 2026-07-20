@@ -3,9 +3,9 @@ import {
   ArrowLeft, Undo2, Redo2, MoreVertical, Hand, MousePointer, Plus, Layers as LayersIcon,
   Ruler, Crosshair, X, Check, Eye, EyeOff, Trash2, Download, FileJson, FilePlus,
   ChevronUp, ArrowUp, ArrowDown, ArrowLeft as ArrLeft, ArrowRight, Focus, Maximize,
-  Share2, ImageDown,
 } from 'lucide-react';
 import { useProject } from '@/hooks/useProjectStore';
+import { useSaveMedia } from '@/components/common/SaveMedia';
 import ImageUploader from '@/components/common/ImageUploader';
 import {
   type Point, type MeasurementLine, genId, distanceBetween, realWorldLength, LINE_COLORS,
@@ -88,15 +88,8 @@ export default function MeasureMobile() {
   const [precisionEndpoint, setPrecisionEndpoint] = useState<'start' | 'end'>('start');
   const [precisionStep, setPrecisionStep] = useState(1);
 
-  // Export PNG preview modal (mobile-friendly UX)
-  const [exportPreview, setExportPreview] = useState<{ dataUrl: string; blob: Blob; filename: string } | null>(null);
-  const [shareState, setShareState] = useState<'idle' | 'sharing' | 'unsupported' | 'error'>('idle');
-
-  useEffect(() => {
-    return () => {
-      // dataUrl-based preview needs no revocation
-    };
-  }, [exportPreview]);
+  // Image export goes through the shared Save-to-Photos flow.
+  const { save } = useSaveMedia();
 
   const selectedLine = measurements.find(m => m.id === selectedLineId) || null;
 
@@ -560,12 +553,7 @@ export default function MeasureMobile() {
 
       const finish = (blob: Blob | null) => {
         if (!blob) return;
-        const filename = 'studio-companion-export.png';
-        // Use a data URL (not a blob: URL) for the <img> so iOS Safari's
-        // long-press "Save Image" works without "No Internet Connection".
-        const dataUrl = c.toDataURL('image/png');
-        setShareState('idle');
-        setExportPreview({ dataUrl, blob, filename });
+        save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: 'Save image' });
       };
       if (c.toBlob) c.toBlob(finish, 'image/png');
       else {
@@ -584,7 +572,7 @@ export default function MeasureMobile() {
       console.error('[MeasureMobile] Failed to load image for PNG export:', e);
     };
     img.src = image;
-  }, [image, measurements, layers, getRealSize, triggerDownload]);
+  }, [image, measurements, layers, getRealSize, save]);
 
   const exportJSON = useCallback(() => {
     setSheet(null);
@@ -595,56 +583,6 @@ export default function MeasureMobile() {
       console.error('[MeasureMobile] Failed to export project JSON:', error);
     }
   }, [exportProjectJSON, triggerDownload]);
-
-  // ---------- Export preview actions ----------
-  const closeExportPreview = useCallback(() => {
-    setExportPreview(null);
-    setShareState('idle');
-  }, []);
-
-  const shareExport = useCallback(async () => {
-    if (!exportPreview) return;
-    try {
-      const file = new File([exportPreview.blob], exportPreview.filename, { type: 'image/png' });
-      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-      if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
-        setShareState('sharing');
-        await nav.share({ files: [file], title: 'Studio Companion export' });
-        setShareState('idle');
-        return;
-      }
-      // Fallback: open the image in a new tab so the user can long-press → Save Image.
-      const w = window.open();
-      if (w) {
-        w.document.title = exportPreview.filename;
-        w.document.body.style.margin = '0';
-        w.document.body.style.background = '#000';
-        const img = w.document.createElement('img');
-        img.src = exportPreview.dataUrl;
-        img.style.width = '100%';
-        img.style.height = 'auto';
-        img.style.display = 'block';
-        w.document.body.appendChild(img);
-        setShareState('idle');
-      } else {
-        setShareState('unsupported');
-      }
-    } catch (err) {
-      // User cancellation is fine; only flag (and log) real errors
-      const name = (err as Error)?.name;
-      if (name === 'AbortError') {
-        setShareState('idle');
-      } else {
-        console.error('[MeasureMobile] Failed to share export:', err);
-        setShareState('error');
-      }
-    }
-  }, [exportPreview]);
-
-  const downloadExport = useCallback(() => {
-    if (!exportPreview) return;
-    triggerDownload(exportPreview.blob, exportPreview.filename);
-  }, [exportPreview, triggerDownload]);
 
   // ---------- Render ----------
   if (!image) {
@@ -915,12 +853,12 @@ export default function MeasureMobile() {
           <ActionBtn onClick={() => selectedLine ? setSheet('precision') : null} icon={<Ruler className="w-5 h-5" />} label="Precision" disabled={!selectedLine} />
           <ActionBtn onClick={() => setSheet('selected')} icon={<ChevronUp className="w-5 h-5" />} label={selectedLine ? 'Selected' : 'Lines'} />
         </div>
-        {/* Primary Export PNG */}
+        {/* Primary Save Image */}
         <div className="px-2 pb-2">
           <button onClick={exportPNG}
             className="w-full h-12 rounded-md bg-primary text-primary-foreground font-medium text-sm flex items-center justify-center gap-2 active:opacity-80">
             <Download className="w-5 h-5" />
-            Export PNG
+            Save Image
           </button>
         </div>
       </div>
@@ -1097,56 +1035,6 @@ export default function MeasureMobile() {
         </Sheet>
       )}
 
-      {exportPreview && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-black/90 backdrop-blur-sm animate-in fade-in">
-          <div className="shrink-0 flex items-center justify-between px-2 h-12 border-b border-white/10">
-            <button onClick={closeExportPreview} className="h-11 w-11 flex items-center justify-center text-white/80 active:bg-white/10 rounded-md" aria-label="Close preview">
-              <X className="w-5 h-5" />
-            </button>
-            <div className="text-sm font-medium text-white">Export preview</div>
-            <div className="w-11" />
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-3">
-            <img
-              src={exportPreview.dataUrl}
-              alt="Export preview — long-press to save on iPhone"
-              className="max-w-full max-h-full object-contain rounded-md shadow-2xl select-none"
-              style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
-              draggable={false}
-            />
-          </div>
-          <div className="shrink-0 px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-white/10 bg-black/40 space-y-2">
-            {shareState === 'unsupported' && (
-              <p className="text-[11px] text-white/70 text-center">
-                Sharing isn't supported here. Long-press the image above to save it, or use Download.
-              </p>
-            )}
-            {shareState === 'error' && (
-              <p className="text-[11px] text-destructive text-center">Couldn't open the share sheet. Try Download.</p>
-            )}
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={shareExport}
-                className="h-12 rounded-md bg-primary text-primary-foreground font-medium text-sm flex flex-col items-center justify-center gap-0.5 active:opacity-80">
-                <Share2 className="w-5 h-5" />
-                <span className="text-[11px]">Share</span>
-              </button>
-              <button onClick={shareExport}
-                className="h-12 rounded-md bg-white/10 text-white font-medium text-sm flex flex-col items-center justify-center gap-0.5 active:bg-white/20">
-                <ImageDown className="w-5 h-5" />
-                <span className="text-[11px]">Save Image</span>
-              </button>
-              <button onClick={downloadExport}
-                className="h-12 rounded-md bg-white/10 text-white font-medium text-sm flex flex-col items-center justify-center gap-0.5 active:bg-white/20">
-                <Download className="w-5 h-5" />
-                <span className="text-[11px]">Download</span>
-              </button>
-            </div>
-            <p className="text-[10px] text-white/50 text-center">
-              On iPhone, tap Save Image to use the share sheet → "Save Image" to add it to Photos.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

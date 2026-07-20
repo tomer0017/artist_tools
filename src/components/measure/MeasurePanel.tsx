@@ -5,6 +5,8 @@ import {
   Trash2, Download, FileJson, FilePlus, Eye, EyeOff,
   ChevronDown, ChevronRight, Pencil, Plus,
 } from 'lucide-react';
+import { useSaveMedia } from '@/components/common/SaveMedia';
+import { canvasToBlob } from '@/lib/saveMedia';
 
 export default function MeasurePanel() {
   const {
@@ -12,6 +14,7 @@ export default function MeasurePanel() {
     layers, activeLayerId, setActiveLayerId, toggleLayerVisibility, addLayer, deleteLayer,
     calibration, clearAllLines, newProject, exportProjectJSON, image,
   } = useProject();
+  const { save } = useSaveMedia();
 
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmNew, setConfirmNew] = useState(false);
@@ -74,16 +77,15 @@ export default function MeasurePanel() {
         ctx.textAlign = 'center';
         ctx.fillText(line.label || getRealSize(line), mx, my - 8);
       });
-      const link = document.createElement('a');
-      link.download = 'studio-companion-export.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      canvasToBlob(canvas, 'image/png')
+        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: 'Save image' }))
+        .catch((error) => console.error('[MeasurePanel] Failed to export annotated PNG:', error));
       } catch (error) {
         console.error('[MeasurePanel] Failed to export annotated PNG:', error);
       }
     };
     img.src = image;
-  }, [image, measurements, getRealSize]);
+  }, [image, measurements, getRealSize, save]);
 
   const handleExportJSON = useCallback(() => {
     try {
@@ -207,7 +209,7 @@ export default function MeasurePanel() {
       <section className="space-y-1.5 pt-2 border-t border-border">
         <button onClick={handleExportPNG}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
-          <Download className="w-3.5 h-3.5" /> Export PNG
+          <Download className="w-3.5 h-3.5" /> Save Image
         </button>
         <button onClick={handleExportJSON}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">

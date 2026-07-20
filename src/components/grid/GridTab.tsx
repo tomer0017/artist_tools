@@ -4,9 +4,12 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
 import { Download, Settings, X, ChevronDown, ChevronUp } from 'lucide-react';
 import type { GridSettings } from '@/types/project';
+import { useSaveMedia } from '@/components/common/SaveMedia';
+import { canvasToBlob } from '@/lib/saveMedia';
 
 export default function GridTab() {
   const { image, gridSettings, setGridSettings } = useProject();
+  const { save } = useSaveMedia();
   const [localImage, setLocalImage] = useState<string | null>(null);
   const [showControls, setShowControls] = useState(() => !image);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number } | null>(null);
@@ -252,10 +255,10 @@ export default function GridTab() {
     const doExport = () => {
       try {
         drawGridOnCtx(ctx, exportW, exportH);
-        const link = document.createElement('a');
-        link.download = `grid-${gs.columns}x${gs.rows}-${gs.canvasWidth}x${gs.canvasHeight}${gs.unit}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+        const filename = `grid-${gs.columns}x${gs.rows}-${gs.canvasWidth}x${gs.canvasHeight}${gs.unit}.png`;
+        canvasToBlob(canvas, 'image/png')
+          .then((blob) => save({ blob, filename, mime: 'image/png', title: 'Save grid' }))
+          .catch((error) => console.error('[GridTab] Failed to export grid PNG:', error));
       } catch (error) {
         console.error('[GridTab] Failed to export grid PNG:', error);
       }
@@ -291,7 +294,7 @@ export default function GridTab() {
     } else {
       doExport();
     }
-  }, [activeImage, aspect, getFitScale, gs]);
+  }, [activeImage, aspect, getFitScale, gs, save]);
 
   const drawGridOnCtx = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
     ctx.strokeStyle = gs.lineColor;
@@ -354,7 +357,7 @@ export default function GridTab() {
                 <button
                   onClick={handleExport}
                   className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-                  title="Export PNG"
+                  title="Save image"
                 >
                   <Download className="w-4 h-4" />
                 </button>
@@ -462,7 +465,7 @@ export default function GridTab() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:opacity-90 active:scale-95 transition-transform"
           >
             <Download className="w-3.5 h-3.5" />
-            Export PNG
+            Save Image
           </button>
         </div>
       )}

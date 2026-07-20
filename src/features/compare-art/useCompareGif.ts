@@ -6,6 +6,7 @@
 // frame specs as the Export sheet — nothing about the encoding pipeline changes.
 
 import { useCallback, useRef, useState } from 'react';
+import { useSaveMedia } from '@/components/common/SaveMedia';
 import { useCompare } from './compareArtState';
 import {
   ANALYSIS_MAX_DIM,
@@ -20,17 +21,6 @@ import {
   generateComparisonGif,
 } from './compareArtGif';
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-}
-
 export interface QuickGifState {
   busy: boolean;
   progress: GifProgress | null;
@@ -42,6 +32,7 @@ export interface QuickGifState {
 export function useCompareGif(): QuickGifState {
   const store = useCompare();
   const { session } = store;
+  const { save } = useSaveMedia();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<GifProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +91,7 @@ export function useCompareGif(): QuickGifState {
         );
         handle.current = h;
         const blob = await h.promise;
-        downloadBlob(blob, `compare-${animation}-${Date.now()}.gif`);
+        save({ blob, filename: `compare-${animation}-${Date.now()}.gif`, mime: 'image/gif' });
       } catch (e) {
         if (!(e instanceof CancelledError)) {
           console.error('[useCompareGif] generation failed:', e);
@@ -112,7 +103,7 @@ export function useCompareGif(): QuickGifState {
         handle.current = null;
       }
     },
-    [session],
+    [session, save],
   );
 
   return { busy, progress, error, generate, cancel };

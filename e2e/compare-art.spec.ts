@@ -86,9 +86,14 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   // Task 3: Overlay mode shows an always-visible opacity slider + one-tap GIF.
   await expect(page.getByRole('slider', { name: 'Reference opacity' })).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/03-overlay-quickbar.png` });
+  await page.getByRole('button', { name: 'Create Opacity GIF' }).click();
+  // The shared Save-to-Photos sheet opens showing the ACTUAL GIF preview.
+  await expect(page.getByRole('button', { name: 'Save GIF' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByAltText('GIF preview')).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/06-save-sheet-gif.png` });
   const [quickGif] = await Promise.all([
-    page.waitForEvent('download', { timeout: 30_000 }),
-    page.getByRole('button', { name: 'Create Opacity GIF' }).click(),
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Save GIF' }).click(),
   ]);
   {
     const stream = await quickGif.createReadStream();
@@ -117,18 +122,21 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   await page.getByRole('button', { name: 'Move right' }).click();
   await page.getByRole('button', { name: 'Close' }).click();
 
-  // Export a still comparison (download).
+  // Export a still comparison → shared save sheet → download.
   await page.getByRole('button', { name: 'Export', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Comparison', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save comparison' }).click();
+  await expect(page.getByRole('button', { name: 'Save Image' })).toBeVisible({ timeout: 15_000 });
   const stillPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Comparison', exact: true }).click();
+  await page.getByRole('button', { name: 'Save Image' }).click();
   const stillDownload = await stillPromise;
   expect(stillDownload.suggestedFilename()).toContain('compare-comparison');
 
-  // Export an animated GIF — the headline deliverable.
+  // Export an animated GIF via the Export sheet → shared save sheet → download.
+  await page.getByRole('button', { name: 'Create GIF' }).click();
+  await expect(page.getByRole('button', { name: 'Save GIF' })).toBeVisible({ timeout: 30_000 });
   const [gifDownload] = await Promise.all([
-    page.waitForEvent('download', { timeout: 30_000 }),
-    page.getByRole('button', { name: 'Export GIF' }).click(),
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Save GIF' }).click(),
   ]);
   const filename = gifDownload.suggestedFilename();
   expect(filename).toContain('.gif');
