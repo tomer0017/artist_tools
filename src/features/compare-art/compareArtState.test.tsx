@@ -108,6 +108,23 @@ describe('compare store', () => {
     expect(result.current.session.artworkLocked).toBe(false);
   });
 
+  it('applyImageCrop stores the cropped image plus original + crop params', () => {
+    const { result } = setup();
+    const crop = { rect: { x: 0.1, y: 0.1, w: 0.5, h: 0.5 }, shape: 'rect' as const, preset: 'square' as const };
+    act(() =>
+      result.current.applyImageCrop('artwork', {
+        cropped: 'data:cropped',
+        meta: { width: 500, height: 500 },
+        original: 'data:original',
+        crop,
+      }),
+    );
+    expect(result.current.session.artwork).toBe('data:cropped');
+    expect(result.current.session.artworkOriginal).toBe('data:original');
+    expect(result.current.session.artworkCrop).toEqual(crop);
+    expect(result.current.hasArtwork).toBe(true);
+  });
+
   it('resetComparison clears everything', () => {
     const { result } = setup();
     act(() => result.current.setArtwork('data:a', meta));

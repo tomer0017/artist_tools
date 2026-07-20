@@ -15,6 +15,8 @@ import { IDENTITY_TRANSFORM } from './compareArtTypes';
 import { colorDelta, perceptualLightness, rgbToOklab } from './compareArtColor';
 import { Buffer, computeDifference } from './compareArtDifference';
 import { OPACITY_PULSE_STOPS, buildGifFrameSpecs } from './compareArtGif';
+import { presetAspect, sanitizeImageCrop } from './compareArtCrop';
+import { FULL_IMAGE_CROP } from './compareArtTypes';
 
 // ── Geometry ──────────────────────────────────────────────────────────────────
 describe('geometry', () => {
@@ -211,5 +213,29 @@ describe('gif frame specs', () => {
     const specs = buildGifFrameSpecs('compare-diff');
     expect(specs.some((s) => s.kind === 'diff')).toBe(true);
     expect(specs[0]).toEqual({ kind: 'only', only: 'artwork' });
+  });
+});
+
+// ── Pre-comparison crop ───────────────────────────────────────────────────────
+describe('image crop', () => {
+  it('maps presets to the expected aspect ratios', () => {
+    expect(presetAspect('square', 100, 200)).toBe(1);
+    expect(presetAspect('circle', 100, 200)).toBe(1);
+    expect(presetAspect('4:3', 100, 200)).toBeCloseTo(4 / 3);
+    expect(presetAspect('3:4', 100, 200)).toBeCloseTo(3 / 4);
+    expect(presetAspect('16:9', 100, 200)).toBeCloseTo(16 / 9);
+    expect(presetAspect('original', 100, 200)).toBeCloseTo(0.5);
+    expect(presetAspect('free', 100, 200)).toBeNull();
+  });
+
+  it('keeps a crop rect inside the image', () => {
+    const c = sanitizeImageCrop({ rect: { x: 0.9, y: 0.9, w: 0.5, h: 0.5 }, shape: 'rect', preset: 'free' });
+    expect(c.rect.x + c.rect.w).toBeLessThanOrEqual(1.0001);
+    expect(c.rect.y + c.rect.h).toBeLessThanOrEqual(1.0001);
+  });
+
+  it('leaves a full-image crop untouched', () => {
+    const c = sanitizeImageCrop(FULL_IMAGE_CROP);
+    expect(c.rect).toEqual({ x: 0, y: 0, w: 1, h: 1 });
   });
 });

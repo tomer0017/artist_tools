@@ -32,9 +32,11 @@ import {
   PreparedImage,
   analyzeSceneDifference,
   prepareImage,
+  renderLayerToCanvas,
   renderSceneToCanvas,
 } from './compareArtCanvas';
 import { useCompare } from './compareArtState';
+import { LOUPE_SIZE, drawLoupe } from './compareArtMagnifier';
 
 interface Props {
   selectedLayer: 'artwork' | 'reference';
@@ -87,6 +89,14 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
   const diffTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const rafId = useRef<number>();
+
+  // 2-point alignment: a magnifier follows the finger and the point is only
+  // committed on release (never on touch-down), so the finger never hides the
+  // target. `anchorLoupe` positions the loupe; `anchorSrc` is the layer being
+  // sampled (artwork for even steps, reference for odd steps).
+  const magRef = useRef<HTMLCanvasElement>(null);
+  const anchorSrc = useRef<HTMLCanvasElement | null>(null);
+  const [anchorLoupe, setAnchorLoupe] = useState<{ screen: Vec2; scene: Vec2 } | null>(null);
 
   // ── Decode images when their source changes ────────────────────────────────
   useEffect(() => {
@@ -391,6 +401,32 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
     };
   }, []);
 
+  // ── 2-point alignment magnifier ────────────────────────────────────────────
+  const anchorPointRef = useRef<Vec2 | null>(null);
+
+  // Rebuild the sampled layer whenever the step (or images/transforms) change:
+  // even steps sample the ARTWORK, odd steps the REFERENCE.
+  useEffect(() => {
+    if (!anchor) {
+      anchorSrc.current = null;
+      return;
+    }
+    const useReference = anchor.step === 1 || anchor.step === 3;
+    const img = useReference ? referencePrep.current?.img : artworkPrep.current?.img;
+    const t = useReference
+      ? liveRef.current ?? session.referenceTransform
+      : liveArt.current ?? session.artworkTransform;
+    anchorSrc.current = img ? renderLayerToCanvas(img, t, sceneSize()) : null;
+  }, [anchor, prepVersion, session.artworkTransform, session.referenceTransform, sceneSize]);
+
+  // Draw the loupe after its canvas mounts / the finger moves.
+  useEffect(() => {
+    if (!anchorLoupe) return;
+    const src = anchorSrc.current;
+    const dst = magRef.current;
+    if (src && dst) drawLoupe(dst, src, anchorLoupe.scene.x, anchorLoupe.scene.y);
+  }, [anchorLoupe]);
+
   // ── Pointer interaction ────────────────────────────────────────────────────
   const canvasPoint = (e: React.PointerEvent): Vec2 => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -422,9 +458,15 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
       const scene = sceneSize();
       const cs = { width: canvas.clientWidth, height: canvas.clientHeight };
 
-      // Anchor placement mode: each tap records a point.
+      // Anchor placement mode: show the magnifier and follow the finger — the
+      // point is only committed on release (never on touch-down), so the finger
+      // never hides the target.
       if (anchor) {
-        onAnchorPoint(canvasToScene(pt, scene, cs));
+        canvas.setPointerCapture(e.pointerId);
+        const scenePt = canvasToScene(pt, scene, cs);
+        anchorPointRef.current = scenePt;
+        setAnchorLoupe({ screen: pt, scene: scenePt });
+        onGestureActivity?.();
         return;
       }
 
@@ -474,6 +516,17 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      // Anchor mode: move the magnifier with the finger; commit happens on up.
+      if (anchor) {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const pt = canvasPoint(e);
+        const cs = { width: canvas.clientWidth, height: canvas.clientHeight };
+        const scenePt = canvasToScene(pt, sceneSize(), cs);
+        anchorPointRef.current = scenePt;
+        setAnchorLoupe({ screen: pt, scene: scenePt });
+        return;
+      }
       const rec = pointers.current.get(e.pointerId);
       if (!rec) return;
       const canvas = canvasRef.current!;
@@ -517,11 +570,25 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
         requestDraw();
       }
     },
-    [session.splitOrientation, sceneSize, store, requestDraw], // eslint-disable-line react-hooks/exhaustive-deps
+    [anchor, session.splitOrientation, sceneSize, store, requestDraw], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const endGesture = useCallback(
     (e: React.PointerEvent) => {
+      // Anchor mode: commit the point ONLY now, on release.
+      if (anchor) {
+        try {
+          canvasRef.current?.releasePointerCapture(e.pointerId);
+        } catch {
+          /* already released */
+        }
+        const p = anchorPointRef.current;
+        anchorPointRef.current = null;
+        setAnchorLoupe(null);
+        if (p) onAnchorPoint(p);
+        return;
+      }
+
       pointers.current.delete(e.pointerId);
       try {
         canvasRef.current?.releasePointerCapture(e.pointerId);
@@ -564,7 +631,7 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
         pinchStart.current = null;
       }
     },
-    [store, selectedLayer, session, requestDraw],
+    [anchor, onAnchorPoint, store, selectedLayer, session, requestDraw],
   );
 
   return (
@@ -582,6 +649,29 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
         onPointerUp={endGesture}
         onPointerCancel={endGesture}
       />
+
+      {/* 2-point alignment magnifier — floats above the finger (matches Measure). */}
+      {anchorLoupe && (
+        <div
+          className="pointer-events-none absolute z-20"
+          style={{
+            left: Math.max(
+              8,
+              Math.min(
+                (containerRef.current?.clientWidth ?? 300) - (LOUPE_SIZE + 8),
+                anchorLoupe.screen.x - LOUPE_SIZE / 2,
+              ),
+            ),
+            top: Math.max(8, anchorLoupe.screen.y - LOUPE_SIZE - 40),
+          }}
+        >
+          <canvas
+            ref={magRef}
+            className="rounded-full shadow-2xl"
+            style={{ width: LOUPE_SIZE, height: LOUPE_SIZE }}
+          />
+        </div>
+      )}
     </div>
   );
 }

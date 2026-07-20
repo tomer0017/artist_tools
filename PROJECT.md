@@ -467,10 +467,37 @@ transform, undo/redo, persistence, mode switching) run under vitest.
 switch → precision nudge → still export → **GIF export** (asserts a valid `GIF`
 download) — via `npx playwright test`.
 
+**UI/UX polish (2026-07-20 sprint).**
+- **Pre-comparison crop** (`CompareCropScreen.tsx` + `compareArtCrop.ts`): after
+  picking an image — and re-editable later from the Align sheet — a full-screen,
+  touch-first cropper lets each image be framed independently (pan/pinch the
+  image behind a frame; Free mode adds resize handles) with presets Free /
+  Square / Circle / 4:3 / 3:4 / 16:9 / Original. It is non-destructive: the
+  confirmed crop stores the original + a normalised rect (`session.artworkCrop`
+  / `referenceCrop`, `*Original`). The engine needs no changes because it renders
+  whatever `session.artwork`/`reference` hold — those now contain the cropped
+  bitmap, so overlay/blink/split/difference/grid/GIF all operate on the crop. A
+  circular crop's transparent corners are treated as no-data by the difference
+  engine automatically.
+- **2-point alignment magnifier** (`compareArtMagnifier.ts`): placing an anchor
+  point now shows a loupe that follows the finger and commits the point on
+  release (not touch-down), so the finger never hides the target. The loupe is a
+  faithful copy of the Measure tool's magnifier (identical 120px circle, 50px
+  sample window, nearest-neighbour zoom, red crosshair, white ring); Measure's
+  file is stable/untouched, so the exact drawing is replicated with the same
+  constants.
+- **Overlay quick workflow** (`CompareOverlayBar.tsx` + `useCompareGif.ts`): in
+  Overlay mode an opacity slider is always visible (no sheet needed) and a
+  prominent "Create Opacity GIF" button runs the default opacity-pulse GIF with
+  the current alignment/crop/grid immediately, with inline progress
+  (Preparing → Rendering → Encoding → Done) and cancel. The Export sheet is
+  unchanged and still holds every advanced option.
+
 **Known limitations.** Undo history is in-memory and resets when leaving the tab
-(settings/images persist). Persisted images are downscaled (~1400px) to fit the
-localStorage budget; exports use the full-res in-memory originals. 2-point
-alignment is a deterministic manual helper (no computer-vision auto-align).
+(settings/images persist). Persisted images (cropped + originals) are downscaled
+(~1400px) to fit the localStorage budget; exports use the full-res in-memory
+copies. 2-point alignment is a deterministic manual helper (no computer-vision
+auto-align).
 
 ---
 ## ⚠️ AGENT INSTRUCTIONS - READ BEFORE EVERY TASK
@@ -491,5 +518,6 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-06-15 | Initial documentation created | PROJECT.md |
 | 2026-06-15 | Removed all "Lovable" branding/tooling; rebranded to "Studio Companion"; deduplicated real-world-length calc into a shared helper; minor `prefer-const` cleanups | index.html, README.md, package.json, package-lock.json, vite.config.ts, playwright.config.ts, playwright-fixture.ts, src/types/project.ts, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/color/ColorTab.tsx, removed bun.lock & bun.lockb |
 | 2026-06-17 | Added structured, critical-only error handling across all logic seams (canvas ops, image loads, localStorage/sessionStorage, color extraction, exports); standardized `[Component] message + error` logging; removed silent catches; no business logic changed. See new "Error Handling Strategy" section. Reduced pre-existing lint errors 4→0. | src/hooks/useProjectStore.tsx, src/components/common/ImageUploader.tsx, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/measure/MeasureTab.tsx, src/components/grid/GridTab.tsx, src/pages/NotFound.tsx, PROJECT.md |
+| 2026-07-20 | Compare Art UI/UX polish sprint: (1) **pre-comparison crop** — a touch-first crop screen (pan/pinch, Free-mode resize handles, presets Free/Square/Circle/4:3/3:4/16:9/Original) shown after picking each image and re-editable from the Align sheet; non-destructive (stores original + normalised rect); the whole engine consumes the cropped image with no renderer changes. (2) **2-point alignment magnifier** — a loupe (faithful copy of the Measure magnifier) follows the finger and commits the point on release, not touch-down. (3) **Overlay quick workflow** — an always-visible opacity slider + one-tap "Create Opacity GIF" with inline progress/cancel; Export screen unchanged. New files: CompareCropScreen.tsx, compareArtCrop.ts, compareArtMagnifier.ts, CompareOverlayBar.tsx, useCompareGif.ts. Extended session (artwork/reference Original + Crop) + applyImageCrop store action. Existing tools + Compare rendering/difference/GIF pipeline unchanged. | src/features/compare-art/compareArtTypes.ts, compareArtState.tsx, CompareArt.tsx, CompareUploadStep.tsx, CompareSheets.tsx, CompareCanvas.tsx, compareArtCrop.ts (new), CompareCropScreen.tsx (new), compareArtMagnifier.ts (new), CompareOverlayBar.tsx (new), useCompareGif.ts (new), compareArt.test.ts, compareArtState.test.tsx, e2e/compare-art.spec.ts, PROJECT.md |
 | 2026-07-20 | Added the **Compare Art** workspace (5th tool, Hebrew השוואת ציור): isolated `src/features/compare-art/` feature (own `CompareProvider` + `compare-art-session` localStorage key, undo/redo, autosave). Artwork/reference upload, one canonical resolution-independent scene renderer shared by screen + still + GIF, reference move/scale/rotate/flip/opacity with gesture + precision nudges + fit/fill/match/reset + optional 2-point align, layer lock, non-destructive crop, grid overlay, Overlay/Blink/Split/Difference modes + grayscale, OKLab value/color difference with sensitivity + legend, still/difference/GIF export (opacity-pulse/blink/compare-diff) with progress + cancel. Added `gifenc` dependency; code-split the workspace via `React.lazy`. Additive nav wiring only; existing tools unchanged. Added unit tests (`compareArt.test.ts`, `compareArtState.test.tsx`) and an e2e workflow test (`e2e/compare-art.spec.ts`). | src/types/project.ts, src/components/layout/Header.tsx, src/pages/Index.tsx, src/features/compare-art/* (new), e2e/compare-art.spec.ts (new), package.json, package-lock.json, README.md, PROJECT.md |
 | 2026-06-17 | Made Measure layers dynamic/user-extensible: a new project now starts with one "General Lines" layer instead of 6 fixed anatomical layers; added `addLayer`/`deleteLayer` store actions (palette-cycling colors, delete reassigns orphaned lines to the general/first layer, last layer protected); add/delete UI in the desktop panel (inline name input) and mobile layers sheet. Existing saved projects load untouched (no migration). Added a mobile "New line color" picker in the Selected/Lines sheet reusing the desktop `lineColor`/`setLineColor` state; extracted the shared `LINE_COLORS`/`LAYER_COLORS` palettes into `types/project.ts`. No changes to calibration, undo/redo, autosave, export, eyedropper, pan/zoom, or other tools. | src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureToolbar.tsx, src/components/measure/MeasureMobile.tsx, PROJECT.md |

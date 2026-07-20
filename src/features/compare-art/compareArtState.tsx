@@ -21,6 +21,7 @@ import {
   DifferenceConfig,
   GifConfig,
   GridConfig,
+  ImageCrop,
   ImageMeta,
   NUDGE,
   NudgeStep,
@@ -81,6 +82,10 @@ interface Store {
 
   setArtwork: (dataUrl: string, meta: ImageMeta) => void;
   setReference: (dataUrl: string, meta: ImageMeta) => void;
+  applyImageCrop: (
+    role: 'artwork' | 'reference',
+    payload: { cropped: string; meta: ImageMeta; original: string; crop: ImageCrop },
+  ) => void;
   removeArtwork: () => void;
   removeReference: () => void;
 
@@ -146,21 +151,26 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
   // originals stay in `session` so rendering and export keep their quality.
   const artworkCompact = useRef<{ src: string; compact: string } | null>(null);
   const referenceCompact = useRef<{ src: string; compact: string } | null>(null);
+  const artworkOriginalCompact = useRef<{ src: string; compact: string } | null>(null);
+  const referenceOriginalCompact = useRef<{ src: string; compact: string } | null>(null);
+
+  const compacted = (
+    src: string | null,
+    ref: React.MutableRefObject<{ src: string; compact: string } | null>,
+  ) => (src && ref.current?.src === src ? ref.current.compact : src);
 
   // ── Autosave (debounced) ──────────────────────────────────────────────────
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      const artwork =
-        session.artwork && artworkCompact.current?.src === session.artwork
-          ? artworkCompact.current.compact
-          : session.artwork;
-      const reference =
-        session.reference && referenceCompact.current?.src === session.reference
-          ? referenceCompact.current.compact
-          : session.reference;
-      saveSession({ ...session, artwork, reference });
+      saveSession({
+        ...session,
+        artwork: compacted(session.artwork, artworkCompact),
+        reference: compacted(session.reference, referenceCompact),
+        artworkOriginal: compacted(session.artworkOriginal, artworkOriginalCompact),
+        referenceOriginal: compacted(session.referenceOriginal, referenceOriginalCompact),
+      });
     }, 400);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -181,28 +191,71 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
     setSession((s) => ({ ...s, ...snap }));
 
   // ── Images ────────────────────────────────────────────────────────────────
+  const compactInto = (
+    dataUrl: string,
+    ref: React.MutableRefObject<{ src: string; compact: string } | null>,
+  ) => {
+    compactForStorage(dataUrl).then((compact) => {
+      ref.current = { src: dataUrl, compact };
+    });
+  };
+
   const setArtwork = useCallback((dataUrl: string, meta: ImageMeta) => {
     setSession((s) => ({ ...s, artwork: dataUrl, artworkMeta: meta }));
     setImagesDropped(false);
     // Compact copy for persistence only (never blocks the UI or lowers quality).
-    compactForStorage(dataUrl).then((compact) => {
-      artworkCompact.current = { src: dataUrl, compact };
-    });
+    compactInto(dataUrl, artworkCompact);
   }, []);
 
   const setReference = useCallback((dataUrl: string, meta: ImageMeta) => {
     setSession((s) => ({ ...s, reference: dataUrl, referenceMeta: meta }));
     setImagesDropped(false);
-    compactForStorage(dataUrl).then((compact) => {
-      referenceCompact.current = { src: dataUrl, compact };
-    });
+    compactInto(dataUrl, referenceCompact);
   }, []);
 
+  /**
+   * Commit a pre-comparison crop. `cropped` is what the engine consumes;
+   * `original` + `crop` are kept so the crop stays re-editable. Applies to the
+   * chosen image only; the comparison pipeline needs no changes because it
+   * already renders whatever `artwork`/`reference` hold.
+   */
+  const applyImageCrop = useCallback(
+    (
+      role: 'artwork' | 'reference',
+      payload: { cropped: string; meta: ImageMeta; original: string; crop: ImageCrop },
+    ) => {
+      const { cropped, meta, original, crop } = payload;
+      setImagesDropped(false);
+      if (role === 'artwork') {
+        setSession((s) => ({
+          ...s,
+          artwork: cropped,
+          artworkMeta: meta,
+          artworkOriginal: original,
+          artworkCrop: crop,
+        }));
+        compactInto(cropped, artworkCompact);
+        compactInto(original, artworkOriginalCompact);
+      } else {
+        setSession((s) => ({
+          ...s,
+          reference: cropped,
+          referenceMeta: meta,
+          referenceOriginal: original,
+          referenceCrop: crop,
+        }));
+        compactInto(cropped, referenceCompact);
+        compactInto(original, referenceOriginalCompact);
+      }
+    },
+    [],
+  );
+
   const removeArtwork = useCallback(() => {
-    setSession((s) => ({ ...s, artwork: null, artworkMeta: null }));
+    setSession((s) => ({ ...s, artwork: null, artworkMeta: null, artworkOriginal: null, artworkCrop: null }));
   }, []);
   const removeReference = useCallback(() => {
-    setSession((s) => ({ ...s, reference: null, referenceMeta: null }));
+    setSession((s) => ({ ...s, reference: null, referenceMeta: null, referenceOriginal: null, referenceCrop: null }));
   }, []);
 
   // ── Transforms (each a single undo step) ───────────────────────────────────
@@ -375,6 +428,7 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
     canRedo: redoStack.current.length > 0,
     setArtwork,
     setReference,
+    applyImageCrop,
     removeArtwork,
     removeReference,
     commitReferenceTransform,

@@ -1,14 +1,17 @@
 // Compare Art — empty / one-image state.
 //
 // Two clearly-labelled slots so it is always obvious which image is the artwork
-// (the painting) and which is the reference. The comparison canvas only opens
-// once BOTH exist; a single loaded image is preserved (autosaved) if the painter
+// (the painting) and which is the reference. Picking an image opens the crop
+// screen first (via onRequestCrop) so the painter can frame the region to
+// compare before the workspace opens. The comparison canvas only opens once
+// BOTH cropped images exist; a single loaded image is preserved if the painter
 // leaves and returns.
 
 import { useState } from 'react';
-import { Camera, ImagePlus, RefreshCw, Check } from 'lucide-react';
+import { Camera, Crop, ImagePlus, RefreshCw, Check } from 'lucide-react';
 import { useCompare } from './compareArtState';
 import { openImagePicker, ImagePickError } from './compareArtImage';
+import { ImageCrop } from './compareArtTypes';
 
 interface SlotProps {
   role: 'artwork' | 'reference';
@@ -16,10 +19,12 @@ interface SlotProps {
   titleHe: string;
   hint: string;
   dataUrl: string | null;
-  onPick: (dataUrl: string, meta: { width: number; height: number; name?: string }) => void;
+  original: string | null;
+  crop: ImageCrop | null;
+  onRequestCrop: (role: 'artwork' | 'reference', original: string, initialCrop?: ImageCrop | null) => void;
 }
 
-function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, onPick }: SlotProps) {
+function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, original, crop, onRequestCrop }: SlotProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -28,7 +33,7 @@ function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, onPick }: SlotProps
     setBusy(true);
     try {
       const res = await openImagePicker(capture);
-      if (res) onPick(res.dataUrl, res.meta);
+      if (res) onRequestCrop(role, res.dataUrl, null);
     } catch (e) {
       setError(e instanceof ImagePickError ? e.message : 'Could not load image.');
     } finally {
@@ -59,18 +64,26 @@ function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, onPick }: SlotProps
       </div>
 
       {dataUrl ? (
-        <div className="relative overflow-hidden rounded-lg bg-black/30">
-          <img
-            src={dataUrl}
-            alt={`${titleEn} thumbnail`}
-            className="mx-auto max-h-40 w-auto object-contain"
-          />
+        <div className="space-y-2">
+          <div className="relative overflow-hidden rounded-lg bg-black/30">
+            <img
+              src={dataUrl}
+              alt={`${titleEn} thumbnail`}
+              className="mx-auto max-h-40 w-auto object-contain"
+            />
+            <button
+              onClick={() => pick(false)}
+              disabled={busy}
+              className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-card/95 px-2.5 py-1.5 text-[11px] font-medium text-foreground shadow active:scale-95"
+            >
+              <RefreshCw className="h-3 w-3" /> Replace
+            </button>
+          </div>
           <button
-            onClick={() => pick(false)}
-            disabled={busy}
-            className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-card/95 px-2.5 py-1.5 text-[11px] font-medium text-foreground shadow active:scale-95"
+            onClick={() => onRequestCrop(role, original ?? dataUrl, crop)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95"
           >
-            <RefreshCw className="h-3 w-3" /> Replace
+            <Crop className="h-3.5 w-3.5" /> Edit crop
           </button>
         </div>
       ) : (
@@ -100,7 +113,11 @@ function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, onPick }: SlotProps
   );
 }
 
-export default function CompareUploadStep() {
+interface Props {
+  onRequestCrop: (role: 'artwork' | 'reference', original: string, initialCrop?: ImageCrop | null) => void;
+}
+
+export default function CompareUploadStep({ onRequestCrop }: Props) {
   const store = useCompare();
   const { session } = store;
 
@@ -116,6 +133,9 @@ export default function CompareUploadStep() {
         <p className="mt-0.5 text-xs text-muted-foreground" dir="rtl">
           השוואת ציור — יישרו את הרפרנס מעל הציור כדי להשוות פרופורציות, ערכים וצבע.
         </p>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Tip: crop each image to the region you want to compare (an eye, the nose, a hand).
+        </p>
 
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <UploadSlot
@@ -124,7 +144,9 @@ export default function CompareUploadStep() {
             titleHe="הציור שלי"
             hint="A photo of your current physical painting."
             dataUrl={session.artwork}
-            onPick={(url, meta) => store.setArtwork(url, meta)}
+            original={session.artworkOriginal}
+            crop={session.artworkCrop}
+            onRequestCrop={onRequestCrop}
           />
           <UploadSlot
             role="reference"
@@ -132,7 +154,9 @@ export default function CompareUploadStep() {
             titleHe="רפרנס"
             hint="The original reference image."
             dataUrl={session.reference}
-            onPick={(url, meta) => store.setReference(url, meta)}
+            original={session.referenceOriginal}
+            crop={session.referenceCrop}
+            onRequestCrop={onRequestCrop}
           />
         </div>
 

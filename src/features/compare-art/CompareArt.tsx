@@ -19,10 +19,12 @@ import {
   X,
 } from 'lucide-react';
 import { CompareProvider, useCompare } from './compareArtState';
-import { NudgeStep } from './compareArtTypes';
+import { ImageCrop, NudgeStep } from './compareArtTypes';
 import CompareUploadStep from './CompareUploadStep';
 import CompareCanvas, { AnchorState, computeAnchorTransform } from './CompareCanvas';
+import CompareCropScreen from './CompareCropScreen';
 import CompareBottomSheet from './CompareBottomSheet';
+import CompareOverlayBar from './CompareOverlayBar';
 import { AlignSheet, GridSheet, ModeSheet, OpacitySheet } from './CompareSheets';
 import CompareExportSheet from './CompareExportSheet';
 import { Vec2 } from './compareArtGeometry';
@@ -46,9 +48,32 @@ function Workspace() {
   const [anchor, setAnchor] = useState<AnchorState | null>(null);
   const [cropActive, setCropActive] = useState(false);
   const [showStatus, setShowStatus] = useState(true);
+  const [cropReq, setCropReq] = useState<
+    { role: 'artwork' | 'reference'; original: string; initialCrop: ImageCrop | null } | null
+  >(null);
+
+  const requestCrop = (role: 'artwork' | 'reference', original: string, initialCrop?: ImageCrop | null) => {
+    setCropReq({ role, original, initialCrop: initialCrop ?? null });
+  };
+
+  // The pre-comparison crop screen takes over the whole workspace when active.
+  if (cropReq) {
+    return (
+      <CompareCropScreen
+        role={cropReq.role}
+        image={cropReq.original}
+        initialCrop={cropReq.initialCrop}
+        onCancel={() => setCropReq(null)}
+        onConfirm={(result) => {
+          store.applyImageCrop(cropReq.role, result);
+          setCropReq(null);
+        }}
+      />
+    );
+  }
 
   if (!store.bothLoaded) {
-    return <CompareUploadStep />;
+    return <CompareUploadStep onRequestCrop={requestCrop} />;
   }
 
   // ── 2-point (anchor) alignment flow ────────────────────────────────────────
@@ -180,6 +205,9 @@ function Workspace() {
         </div>
       )}
 
+      {/* Overlay quick controls — always-visible opacity + one-tap GIF */}
+      {session.mode === 'overlay' && <CompareOverlayBar />}
+
       {/* Bottom action bar */}
       <div className="flex items-stretch justify-around gap-1 border-t border-border px-1 py-1 toolbar-surface">
         <BarButton icon={<Layers className="h-5 w-5" />} label="Mode" active={sheet === 'mode'} onClick={() => openSheet('mode')} />
@@ -213,6 +241,15 @@ function Workspace() {
           }}
           cropActive={cropActive}
           onToggleCrop={() => setCropActive((v) => !v)}
+          onRecrop={(role) => {
+            setSheet(null);
+            const original =
+              role === 'artwork'
+                ? session.artworkOriginal ?? session.artwork!
+                : session.referenceOriginal ?? session.reference!;
+            const crop = role === 'artwork' ? session.artworkCrop : session.referenceCrop;
+            requestCrop(role, original, crop);
+          }}
         />
       </CompareBottomSheet>
       <CompareBottomSheet open={sheet === 'opacity'} title="Reference opacity" onClose={() => setSheet(null)}>

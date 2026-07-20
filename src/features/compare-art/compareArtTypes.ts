@@ -28,6 +28,30 @@ export type GifAnimation = 'opacity-pulse' | 'blink' | 'compare-diff';
 export type GifSpeed = 'slow' | 'normal' | 'fast';
 export type GifSize = 'small' | 'standard' | 'high';
 
+/** Aspect/shape presets offered on the pre-comparison crop screen. */
+export type CropPreset = 'free' | 'square' | 'circle' | '4:3' | '3:4' | '16:9' | 'original';
+
+/**
+ * A non-destructive, re-editable crop applied to a *source* image BEFORE it
+ * enters the comparison. The rect is normalised to the original image (0..1).
+ * `shape: 'circle'` masks the output to a circle (transparent corners), which
+ * the difference engine treats as no-data automatically.
+ */
+export interface ImageCrop {
+  rect: { x: number; y: number; w: number; h: number };
+  shape: 'rect' | 'circle';
+  preset: CropPreset;
+}
+
+export const FULL_IMAGE_CROP: ImageCrop = {
+  rect: { x: 0, y: 0, w: 1, h: 1 },
+  shape: 'rect',
+  preset: 'free',
+};
+
+/** Longest-side cap for a cropped source image handed to the engine. */
+export const CROP_OUTPUT_MAX_DIM = 2000;
+
 /**
  * A 2D affine transform for an image, stored resolution-independently.
  * - tx, ty: translation of the image centre away from the scene centre,
@@ -129,10 +153,16 @@ export interface ImageMeta {
  */
 export interface CompareSession {
   version: number;
+  /** The cropped images the comparison engine actually consumes. */
   artwork: string | null;
   reference: string | null;
   artworkMeta: ImageMeta | null;
   referenceMeta: ImageMeta | null;
+  /** Uncropped originals + crop params, kept so the crop is re-editable. */
+  artworkOriginal: string | null;
+  referenceOriginal: string | null;
+  artworkCrop: ImageCrop | null;
+  referenceCrop: ImageCrop | null;
   artworkTransform: Transform;
   referenceTransform: Transform;
   artworkLocked: boolean;
@@ -159,6 +189,10 @@ export function defaultSession(): CompareSession {
     reference: null,
     artworkMeta: null,
     referenceMeta: null,
+    artworkOriginal: null,
+    referenceOriginal: null,
+    artworkCrop: null,
+    referenceCrop: null,
     artworkTransform: { ...IDENTITY_TRANSFORM },
     referenceTransform: { ...IDENTITY_TRANSFORM },
     artworkLocked: true,

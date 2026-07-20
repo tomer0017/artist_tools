@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import zlib from 'node:zlib';
 
+const SHOTS =
+  '/private/tmp/claude-501/-Users-tomercohen-Downloads-Art-Studio-Companion/79b68966-60c8-421f-9325-8bccc54a0a49/scratchpad';
+
 // ── Minimal PNG encoder (avoids a fixture dependency) ────────────────────────
 function crc32(buf: Buffer): number {
   let c = ~0;
@@ -54,24 +57,54 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   await page.getByRole('button', { name: 'Compare' }).click();
   await expect(page.getByText('Compare proportions, values, and colors')).toBeVisible();
 
-  // Add artwork.
-  const chooseButtons = page.getByRole('button', { name: 'Choose' });
+  // Add artwork → the crop screen opens first; confirm it.
   const [artChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
-    chooseButtons.first().click(),
+    page.getByRole('button', { name: 'Choose' }).first().click(),
   ]);
   await artChooser.setFiles(artwork);
+  await expect(page.getByRole('button', { name: 'Confirm crop' })).toBeEnabled();
+  await page.screenshot({ path: `${SHOTS}/01-crop-screen.png` });
+  // Exercise a crop preset (Square) before confirming.
+  await page.getByRole('button', { name: 'Square', exact: true }).click();
+  await page.screenshot({ path: `${SHOTS}/02-crop-square.png` });
+  await page.getByRole('button', { name: 'Confirm crop' }).click();
 
-  // Add reference.
+  // Add reference → crop screen again; confirm.
   const [refChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.getByRole('button', { name: 'Choose' }).first().click(),
   ]);
   await refChooser.setFiles(reference);
+  await expect(page.getByRole('button', { name: 'Confirm crop' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Confirm crop' }).click();
 
   // The comparison canvas + bottom bar should now be visible.
   await expect(page.getByRole('button', { name: 'Export' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Align' })).toBeVisible();
+
+  // Task 3: Overlay mode shows an always-visible opacity slider + one-tap GIF.
+  await expect(page.getByRole('slider', { name: 'Reference opacity' })).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/03-overlay-quickbar.png` });
+  const [quickGif] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30_000 }),
+    page.getByRole('button', { name: 'Create Opacity GIF' }).click(),
+  ]);
+  {
+    const stream = await quickGif.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(c as Buffer);
+    const bytes = Buffer.concat(chunks);
+    expect(bytes.subarray(0, 3).toString('ascii')).toBe('GIF');
+    expect(bytes.length).toBeGreaterThan(100);
+  }
+
+  // Task 2: 2-point align opens a guided prompt (magnifier interaction).
+  await page.getByRole('button', { name: 'Align' }).click();
+  await page.getByRole('button', { name: '2-point align' }).click();
+  await expect(page.getByText('Tap point A on your ARTWORK')).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/04-two-point-align.png` });
+  await page.getByRole('button', { name: 'Cancel alignment' }).click();
 
   // Switch modes.
   await page.getByRole('button', { name: 'Mode' }).click();
@@ -106,4 +139,9 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   // Valid GIF header + non-trivial size.
   expect(gifBytes.subarray(0, 3).toString('ascii')).toBe('GIF');
   expect(gifBytes.length).toBeGreaterThan(100);
+
+  // Mobile-viewport evidence of the difference view + bottom bar.
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: `${SHOTS}/05-mobile-difference.png` });
 });

@@ -267,6 +267,7 @@ interface AlignProps {
   onStartAnchor: () => void;
   cropActive: boolean;
   onToggleCrop: () => void;
+  onRecrop: (role: 'artwork' | 'reference') => void;
 }
 
 export function AlignSheet({
@@ -277,6 +278,7 @@ export function AlignSheet({
   onStartAnchor,
   cropActive,
   onToggleCrop,
+  onRecrop,
 }: AlignProps) {
   const store = useCompare();
   const { session } = store;
@@ -284,6 +286,24 @@ export function AlignSheet({
 
   return (
     <div className="space-y-4">
+      {/* Re-crop each source image (region to compare) */}
+      <Field label="Re-crop source image">
+        <div className="flex gap-2">
+          <button
+            onClick={() => onRecrop('artwork')}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95"
+          >
+            <Crop className="h-3.5 w-3.5" /> Artwork
+          </button>
+          <button
+            onClick={() => onRecrop('reference')}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95"
+          >
+            <Crop className="h-3.5 w-3.5" /> Reference
+          </button>
+        </div>
+      </Field>
+
       {/* Layer selector */}
       <Field label="Adjust layer">
         <div className="flex gap-2">
