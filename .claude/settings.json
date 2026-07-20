@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 15 npm ping)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node -e \"import\\('gifenc'\\).then\\(m => console.log\\('exports:', Object.keys\\(m\\)\\)\\)\")",
+      "Bash(node -e \"import\\('gifenc'\\).then\\(m => console.log\\('default keys:', Object.keys\\(m.default\\)\\)\\)\")",
+      "Bash(node --input-type=module -e \"import { GIFEncoder, quantize, applyPalette } from 'gifenc'; console.log\\(typeof GIFEncoder, typeof quantize, typeof applyPalette\\)\")",
+      "Bash(node -e \"const p=require\\('./node_modules/gifenc/package.json'\\); console.log\\(JSON.stringify\\({main:p.main,module:p.module,exports:p.exports},null,1\\)\\)\")"
+    ]
+  }
+}
