@@ -1,5 +1,5 @@
 import { useProject } from '@/hooks/useProjectStore';
-import { Ruler, Palette, Sun, Grid3X3 } from 'lucide-react';
+import { Ruler, Palette, Sun, Grid3X3, Layers2 } from 'lucide-react';
 import type { TabId } from '@/types/project';
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
@@ -7,6 +7,7 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'value', label: 'Value', icon: <Sun className="w-4 h-4" /> },
   { id: 'color', label: 'Color', icon: <Palette className="w-4 h-4" /> },
   { id: 'grid', label: 'Grid', icon: <Grid3X3 className="w-4 h-4" /> },
+  { id: 'compare', label: 'Compare', icon: <Layers2 className="w-4 h-4" /> },
 ];
 
 export default function Header() {

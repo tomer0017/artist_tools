@@ -3,8 +3,9 @@
 ## Project Purpose
 
 Studio Companion is a browser-based toolkit for painters and other traditional
-artists. The user uploads a reference photo once and then works through four
-focused tools that share that image and a single saved project:
+artists. The user uploads a reference photo once and then works through five
+focused tools that share that image and a single saved project (Compare Art is
+the exception — it manages its own two images and an isolated saved session):
 
 - **Measure** — calibrate the photo against a known real-world length and
   measure proportions across it, organised into user-managed layers (a new
@@ -16,6 +17,11 @@ focused tools that share that image and a single saved project:
   skin-tone mixes, and an eyedropper for sampling the image.
 - **Grid** — overlay a proportional grid for grid-method drawing and export a
   print-ready PNG.
+- **Compare** (Hebrew: השוואת ציור) — align a photo of the current painting
+  against its reference and inspect proportion / value / color differences, then
+  export a still, a difference image, or an animated GIF. This workspace is
+  fully isolated (own provider + `localStorage` key) and is documented in its
+  own section, "Compare Art workspace", below.
 
 Everything runs client-side. The active project (image, measurements, layers,
 sampled colors, value/grid settings) is auto-saved to `localStorage`, so a
@@ -29,7 +35,7 @@ refresh restores the last session. The app is deployed to GitHub Pages under
 ├── index.html                  App shell + meta tags
 ├── vite.config.ts              Vite config (base "/artist_tools/", port 8080, @ alias)
 ├── tailwind.config.ts          Tailwind theme (HSL CSS-variable design tokens)
-├── playwright.config.ts        Standard @playwright/test config (no e2e specs yet)
+├── playwright.config.ts        @playwright/test config; e2e/ holds the Compare Art workflow spec
 ├── PROJECT.md                  ← this file
 └── src/
     ├── main.tsx                React root; renders <App />
@@ -382,6 +388,91 @@ geometry helpers in `types/project.ts`, and the viewport hooks — none of these
 can throw, so adding try/catch would be noise.
 
 ---
+## Compare Art workspace
+
+**Purpose.** Replace the painter's manual "combine painting + reference in a
+photo editor" process. The painter adds a photo of their current painting
+(**Artwork** / הציור שלי) and the original **Reference** (רפרנס), aligns the
+reference over the artwork, and inspects where proportions, values and colors
+diverge — then exports an animated GIF that reveals the mismatch.
+
+**Isolation.** Everything lives in `src/features/compare-art/` behind its own
+React context (`CompareProvider`/`useCompare`) and its own `localStorage` key
+(`compare-art-session`). It shares nothing mutable with `useProjectStore`, so
+Measure/Value/Color/Grid are untouched. It is added to navigation additively:
+`TabId` gains `'compare'` (`src/types/project.ts`), a tab in `Header.tsx`, and a
+lazy-loaded render branch in `Index.tsx` (code-split so gifenc never weighs down
+the initial load of the other tools).
+
+**Files.**
+- `compareArtTypes.ts` — session shape, defaults, tuning constants (nudge steps,
+  sensitivity params, GIF speed/size tables, difference colors).
+- `compareArtGeometry.ts` — **pure** transform math. Scene space = a rect with
+  the artwork's aspect ratio; the reference `Transform` is stored *normalised*
+  (translation in scene-width units, scale as a multiplier on the contain-fit,
+  rotation in radians, flipH). This resolution-independence is what makes the
+  on-screen preview and the exported GIF pixel-identical. Includes pinch/rotate
+  pivot math, 2-point alignment solve, fit/fill/match-bounds, crop.
+- `compareArtColor.ts` — **pure** OKLab conversion + painter-friendly delta
+  (lightness / chroma / warm-cool).
+- `compareArtDifference.ts` — **pure** difference map: quiet where images match,
+  colored where they diverge; treats transparent (out-of-bounds) pixels as
+  no-data; sensitivity presets Subtle/Balanced/Strong.
+- `compareArtCanvas.ts` — the **one canonical scene renderer**
+  (`renderSceneToCanvas`) used by the screen, still export, difference export and
+  every GIF frame. Also `prepareImage` (EXIF-correct, size-capped decode via
+  `createImageBitmap`), `analyzeSceneDifference`, `applyCrop`.
+- `compareArtGif.ts` — pure `buildGifFrameSpecs` (opacity-pulse 0→100→0, blink,
+  compare-diff) + `generateComparisonGif` (renders each spec through the shared
+  renderer, quantises with **gifenc**, yields to the event loop between frames,
+  reports progress, supports cancel).
+- `compareArtStorage.ts` — load/save; downscales a *persistence-only* copy of
+  each image and, on quota overflow, saves settings-only and flags re-selection
+  (never corrupts the session). Full-res originals stay in memory for export.
+- `compareArtState.tsx` — the store: session state, isolated undo/redo (one
+  history step committed per finished gesture / slider / nudge), debounced
+  autosave.
+- `CompareArt.tsx` (workspace chrome), `CompareCanvas.tsx` (imperative
+  RAF-driven canvas + pointer gestures; live transform in a ref, committed once
+  per gesture — no React re-render per pointer move), `CompareUploadStep.tsx`,
+  `CompareBottomSheet.tsx`, `CompareSheets.tsx`, `CompareExportSheet.tsx`,
+  `compareArtImage.ts`.
+
+**Canvas strategy.** Editing chrome (handles, guides, split bar, crop rect) is
+painted only onto the on-screen canvas, never through `renderSceneToCanvas`, so
+exports are chrome-free. Difference maps are computed at a small analysis
+resolution (`ANALYSIS_MAX_DIM`) and debounced; interactive drags render a fast
+preview and re-analyse only after the gesture settles.
+
+**Difference method.** Aligned artwork/reference are rendered to two buffers in
+identical scene geometry, converted to OKLab, and compared: *value* mode maps
+lighter/darker (amber/blue); *color* mode adds warm/cool (red/cyan). A threshold
+suppresses camera noise. This reveals mismatches — it does not interpret
+artistic intent. Proportion inspection depends on accurate manual alignment, and
+color comparison depends on the lighting/white-balance of the artwork photo
+(both stated in-app).
+
+**GIF method.** Client-side only, via gifenc (MIT). The default "opacity pulse"
+transitions the aligned reference 0%→100%→0% over the fixed artwork; because
+frames are opacity-only over one shared transform, the reference geometry cannot
+drift between frames. Encoding is chunked with `await`/`setTimeout(0)` yields and
+a cancel token, so the UI never freezes.
+
+**Dependencies added.** `gifenc@^1.0.3` (browser ESM, no backend).
+
+**Tests.** `compareArt.test.ts` (geometry, OKLab, difference, GIF specs) and
+`compareArtState.test.tsx` (store: load/independent images, default lock, commit
+transform, undo/redo, persistence, mode switching) run under vitest.
+`e2e/compare-art.spec.ts` drives the real workflow in Chromium — upload → mode
+switch → precision nudge → still export → **GIF export** (asserts a valid `GIF`
+download) — via `npx playwright test`.
+
+**Known limitations.** Undo history is in-memory and resets when leaving the tab
+(settings/images persist). Persisted images are downscaled (~1400px) to fit the
+localStorage budget; exports use the full-res in-memory originals. 2-point
+alignment is a deterministic manual helper (no computer-vision auto-align).
+
+---
 ## ⚠️ AGENT INSTRUCTIONS - READ BEFORE EVERY TASK
 
 - Before starting any task, read this file completely.
@@ -400,4 +491,5 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-06-15 | Initial documentation created | PROJECT.md |
 | 2026-06-15 | Removed all "Lovable" branding/tooling; rebranded to "Studio Companion"; deduplicated real-world-length calc into a shared helper; minor `prefer-const` cleanups | index.html, README.md, package.json, package-lock.json, vite.config.ts, playwright.config.ts, playwright-fixture.ts, src/types/project.ts, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/color/ColorTab.tsx, removed bun.lock & bun.lockb |
 | 2026-06-17 | Added structured, critical-only error handling across all logic seams (canvas ops, image loads, localStorage/sessionStorage, color extraction, exports); standardized `[Component] message + error` logging; removed silent catches; no business logic changed. See new "Error Handling Strategy" section. Reduced pre-existing lint errors 4→0. | src/hooks/useProjectStore.tsx, src/components/common/ImageUploader.tsx, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/measure/MeasureCanvas.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureMobile.tsx, src/components/measure/MeasureTab.tsx, src/components/grid/GridTab.tsx, src/pages/NotFound.tsx, PROJECT.md |
+| 2026-07-20 | Added the **Compare Art** workspace (5th tool, Hebrew השוואת ציור): isolated `src/features/compare-art/` feature (own `CompareProvider` + `compare-art-session` localStorage key, undo/redo, autosave). Artwork/reference upload, one canonical resolution-independent scene renderer shared by screen + still + GIF, reference move/scale/rotate/flip/opacity with gesture + precision nudges + fit/fill/match/reset + optional 2-point align, layer lock, non-destructive crop, grid overlay, Overlay/Blink/Split/Difference modes + grayscale, OKLab value/color difference with sensitivity + legend, still/difference/GIF export (opacity-pulse/blink/compare-diff) with progress + cancel. Added `gifenc` dependency; code-split the workspace via `React.lazy`. Additive nav wiring only; existing tools unchanged. Added unit tests (`compareArt.test.ts`, `compareArtState.test.tsx`) and an e2e workflow test (`e2e/compare-art.spec.ts`). | src/types/project.ts, src/components/layout/Header.tsx, src/pages/Index.tsx, src/features/compare-art/* (new), e2e/compare-art.spec.ts (new), package.json, package-lock.json, README.md, PROJECT.md |
 | 2026-06-17 | Made Measure layers dynamic/user-extensible: a new project now starts with one "General Lines" layer instead of 6 fixed anatomical layers; added `addLayer`/`deleteLayer` store actions (palette-cycling colors, delete reassigns orphaned lines to the general/first layer, last layer protected); add/delete UI in the desktop panel (inline name input) and mobile layers sheet. Existing saved projects load untouched (no migration). Added a mobile "New line color" picker in the Selected/Lines sheet reusing the desktop `lineColor`/`setLineColor` state; extracted the shared `LINE_COLORS`/`LAYER_COLORS` palettes into `types/project.ts`. No changes to calibration, undo/redo, autosave, export, eyedropper, pan/zoom, or other tools. | src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureToolbar.tsx, src/components/measure/MeasureMobile.tsx, PROJECT.md |

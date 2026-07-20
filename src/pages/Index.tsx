@@ -1,10 +1,14 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import { ProjectProvider, useProject } from '@/hooks/useProjectStore';
 import MeasureTab from '@/components/measure/MeasureTab';
 import ValueTab from '@/components/value/ValueTab';
 import ColorTab from '@/components/color/ColorTab';
 import GridTab from '@/components/grid/GridTab';
+
+// Compare Art (with its gifenc dependency) is code-split so it never weighs down
+// the initial load of the other workspaces.
+const CompareArt = lazy(() => import('@/features/compare-art/CompareArt'));
 
 function Workspace() {
   const { activeTab } = useProject();
@@ -43,6 +47,17 @@ function Workspace() {
         {activeTab === 'value' && <ValueTab />}
         {activeTab === 'color' && <ColorTab />}
         {activeTab === 'grid' && <GridTab />}
+        {activeTab === 'compare' && (
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Loading Compare…
+              </div>
+            }
+          >
+            <CompareArt />
+          </Suspense>
+        )}
       </main>
     </div>
   );

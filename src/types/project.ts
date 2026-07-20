@@ -45,7 +45,7 @@ export interface SampledColor {
 }
 
 export type InteractionMode = 'idle' | 'crop' | 'calibrate' | 'measure' | 'select' | 'eyedropper' | 'pan';
-export type TabId = 'measure' | 'value' | 'color' | 'grid';
+export type TabId = 'measure' | 'value' | 'color' | 'grid' | 'compare';
 
 export interface GridSettings {
   canvasWidth: number;

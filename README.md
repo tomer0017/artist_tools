@@ -1,7 +1,7 @@
 # Studio Companion
 
 A browser-based toolkit for painters and other traditional artists. Upload a
-reference photo and use four focused tools to plan and execute a piece:
+reference photo and use five focused tools to plan and execute a piece:
 
 - **Measure** — calibrate against a real-world reference line, then measure
   proportions across the image in centimetres or inches, organised into layers.
@@ -11,9 +11,13 @@ reference photo and use four focused tools to plan and execute a piece:
   recipes, skin-tone mixes, and an eyedropper to pick colors from the image.
 - **Grid** — overlay a proportional grid on the image for grid-method drawing
   and export it as a print-ready PNG.
+- **Compare** (השוואת ציור) — align a photo of your painting against its
+  reference, then inspect proportion, value and color differences (overlay,
+  blink, split, difference and grayscale modes) and export a still comparison,
+  a difference image, or an animated GIF that reveals the mismatch.
 
 Everything runs client-side; the active project is auto-saved to the browser's
-`localStorage`.
+`localStorage`. The Compare workspace keeps its own isolated session.
 
 ## Getting started
 
@@ -22,6 +26,7 @@ npm install      # install dependencies
 npm run dev      # start the dev server on http://localhost:8080
 npm run build    # production build
 npm run test     # run the unit tests (vitest)
+npx playwright test   # run the end-to-end Compare Art workflow test (chromium)
 ```
 
 ## Tech stack
