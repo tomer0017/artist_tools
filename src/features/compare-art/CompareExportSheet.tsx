@@ -129,6 +129,7 @@ export default function CompareExportSheet() {
         referenceHidden: session.referenceHidden,
         splitOrientation: session.splitOrientation,
         splitPosition: session.splitPosition,
+        splitSwapped: session.splitSwapped,
         grid: session.grid,
         includeGrid,
         differenceOverlay: overlay,

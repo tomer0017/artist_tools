@@ -44,6 +44,15 @@ interface Props {
   anchor: AnchorState | null;
   onAnchorPoint: (scenesPoint: Vec2) => void;
   onGestureActivity?: () => void;
+  /** Fired when all fingers lift (used to restore auto-collapsed chrome). */
+  onGestureEnd?: () => void;
+  /**
+   * Locked-comparison zoom. When true the two images behave as ONE locked scene:
+   * pinch/pan move the whole composited comparison together (a camera on the
+   * final blit) and the alignment is never touched. This is purely a view
+   * transform — it never changes any stored geometry.
+   */
+  viewLocked?: boolean;
 }
 
 export interface AnchorState {
@@ -59,12 +68,20 @@ interface PointerRec {
   canvas: Vec2;
 }
 
-export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, onGestureActivity }: Props) {
+export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, onGestureActivity, onGestureEnd, viewLocked = false }: Props) {
   const store = useCompare();
   const { session } = store;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Locked-comparison camera (view transform only — never mutates geometry).
+  // screen = view.s * base + (view.tx, view.ty), where `base` is the normal
+  // (unzoomed) blit position. Identity when not locked, so the default render
+  // path is byte-identical.
+  const viewRef = useRef({ s: 1, tx: 0, ty: 0 });
+  const camPan = useRef<{ start: Vec2; startTx: number; startTy: number } | null>(null);
+  const camPinch = useRef<{ startDist: number; startS: number; pivotWorld: Vec2 } | null>(null);
 
   // Prepared (decoded, size-capped) drawables, keyed by their source data URL.
   const artworkPrep = useRef<{ url: string; img: PreparedImage } | null>(null);
@@ -220,6 +237,7 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
       referenceHidden: session.referenceHidden,
       splitOrientation: session.splitOrientation,
       splitPosition: session.splitPosition,
+      splitSwapped: session.splitSwapped,
       grid: session.grid,
       includeGrid: true,
       differenceOverlay: diffOverlay.current,
@@ -227,20 +245,27 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
       background: '#0f0f11',
     });
 
-    // Blit scene → display with letterbox.
+    // Blit scene → display with letterbox, then apply the locked-comparison
+    // camera (identity unless view-locked). Zooming the composited result keeps
+    // both images perfectly aligned by construction.
     const map = sceneToCanvasMapping(scene, { width: cw, height: ch });
+    const v = viewRef.current;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(
       sceneCanvas,
-      map.originX,
-      map.originY,
-      scene.width * map.scale,
-      scene.height * map.scale,
+      map.originX * v.s + v.tx,
+      map.originY * v.s + v.ty,
+      scene.width * map.scale * v.s,
+      scene.height * map.scale * v.s,
     );
 
     // ── Editing chrome (display only) ────────────────────────────────────────
-    drawChrome(ctx, scene, { width: cw, height: ch }, map, refT, artT);
-  }, [session, sceneSize, prepVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Hidden while view-locked: there is no alignment editing in that mode, and
+    // the chrome is drawn in un-cameraed coordinates.
+    if (!viewLocked) {
+      drawChrome(ctx, scene, { width: cw, height: ch }, map, refT, artT);
+    }
+  }, [session, sceneSize, prepVersion, viewLocked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drawChrome = useCallback(
     (
@@ -368,6 +393,15 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
     requestDraw();
   }, [requestDraw, prepVersion]);
 
+  // Reset the camera to identity whenever lock mode is entered or left, so the
+  // normal alignment gestures always operate in un-cameraed coordinates.
+  useEffect(() => {
+    viewRef.current = { s: 1, tx: 0, ty: 0 };
+    camPan.current = null;
+    camPinch.current = null;
+    requestDraw();
+  }, [viewLocked, requestDraw]);
+
   // Recompute difference when inputs settle.
   useEffect(() => {
     scheduleDifference();
@@ -458,6 +492,28 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
       const scene = sceneSize();
       const cs = { width: canvas.clientWidth, height: canvas.clientHeight };
 
+      // Locked-comparison camera: every gesture pans/zooms the whole scene.
+      if (viewLocked) {
+        canvas.setPointerCapture(e.pointerId);
+        pointers.current.set(e.pointerId, { id: e.pointerId, canvas: pt });
+        onGestureActivity?.();
+        const v = viewRef.current;
+        if (pointers.current.size === 1) {
+          camPan.current = { start: pt, startTx: v.tx, startTy: v.ty };
+          camPinch.current = null;
+        } else if (pointers.current.size === 2) {
+          const [p1, p2] = [...pointers.current.values()];
+          const mid = midpoint(p1.canvas, p2.canvas);
+          camPinch.current = {
+            startDist: distance(p1.canvas, p2.canvas),
+            startS: v.s,
+            pivotWorld: { x: (mid.x - v.tx) / v.s, y: (mid.y - v.ty) / v.s },
+          };
+          camPan.current = null;
+        }
+        return;
+      }
+
       // Anchor placement mode: show the magnifier and follow the finger — the
       // point is only committed on release (never on touch-down), so the finger
       // never hides the target.
@@ -511,11 +567,37 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
         dragStart.current = null;
       }
     },
-    [anchor, onAnchorPoint, session.mode, sceneSize, onGestureActivity, requestDraw], // eslint-disable-line react-hooks/exhaustive-deps
+    [anchor, onAnchorPoint, session.mode, sceneSize, onGestureActivity, requestDraw, viewLocked], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      // Locked-comparison camera: pan (1 finger) / pinch-zoom (2 fingers).
+      if (viewLocked) {
+        const rec = pointers.current.get(e.pointerId);
+        if (!rec) return;
+        rec.canvas = canvasPoint(e);
+        const v = viewRef.current;
+        if (pointers.current.size >= 2 && camPinch.current) {
+          const [p1, p2] = [...pointers.current.values()];
+          const mid = midpoint(p1.canvas, p2.canvas);
+          const dist = distance(p1.canvas, p2.canvas);
+          const factor = dist / (camPinch.current.startDist || 1);
+          const s = Math.max(1, Math.min(8, camPinch.current.startS * factor));
+          const pw = camPinch.current.pivotWorld;
+          v.s = s;
+          v.tx = mid.x - s * pw.x;
+          v.ty = mid.y - s * pw.y;
+          requestDraw();
+        } else if (camPan.current) {
+          const pt = rec.canvas;
+          v.tx = camPan.current.startTx + (pt.x - camPan.current.start.x);
+          v.ty = camPan.current.startTy + (pt.y - camPan.current.start.y);
+          requestDraw();
+        }
+        return;
+      }
+
       // Anchor mode: move the magnifier with the finger; commit happens on up.
       if (anchor) {
         const canvas = canvasRef.current;
@@ -570,11 +652,33 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
         requestDraw();
       }
     },
-    [anchor, session.splitOrientation, sceneSize, store, requestDraw], // eslint-disable-line react-hooks/exhaustive-deps
+    [anchor, session.splitOrientation, sceneSize, store, requestDraw, viewLocked], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const endGesture = useCallback(
     (e: React.PointerEvent) => {
+      // Locked-comparison camera: no geometry to commit, just release.
+      if (viewLocked) {
+        pointers.current.delete(e.pointerId);
+        try {
+          canvasRef.current?.releasePointerCapture(e.pointerId);
+        } catch {
+          /* already released */
+        }
+        if (pointers.current.size === 0) {
+          camPan.current = null;
+          camPinch.current = null;
+          onGestureEnd?.();
+        } else if (pointers.current.size === 1) {
+          // A finger lifted mid-pinch — keep panning from the remaining finger.
+          const [p1] = [...pointers.current.values()];
+          const v = viewRef.current;
+          camPan.current = { start: p1.canvas, startTx: v.tx, startTy: v.ty };
+          camPinch.current = null;
+        }
+        return;
+      }
+
       // Anchor mode: commit the point ONLY now, on release.
       if (anchor) {
         try {
@@ -621,6 +725,7 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
         pinchStart.current = null;
         dragStart.current = null;
         gestureSnap.current = null;
+        onGestureEnd?.();
       } else if (pointers.current.size === 1) {
         // Second finger lifted mid-pinch — re-anchor the remaining drag so the
         // reference doesn't jump.
@@ -631,7 +736,7 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
         pinchStart.current = null;
       }
     },
-    [anchor, onAnchorPoint, store, selectedLayer, session, requestDraw],
+    [anchor, onAnchorPoint, store, selectedLayer, session, requestDraw, viewLocked, onGestureEnd],
   );
 
   return (

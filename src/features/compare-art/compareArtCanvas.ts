@@ -103,6 +103,8 @@ export interface SceneInputs {
   referenceHidden: boolean;
   splitOrientation: 'horizontal' | 'vertical';
   splitPosition: number;
+  /** Split mode only: swap which image is on each side. Default false. */
+  splitSwapped?: boolean;
   grid: GridConfig;
   includeGrid: boolean;
   /** Pre-computed difference overlay (RGBA) plus the size it was computed at. */
@@ -211,6 +213,7 @@ export function renderSceneToCanvas(inputs: SceneInputs): HTMLCanvasElement {
     referenceHidden,
     splitOrientation,
     splitPosition,
+    splitSwapped = false,
     grid,
     includeGrid,
     differenceOverlay,
@@ -236,9 +239,19 @@ export function renderSceneToCanvas(inputs: SceneInputs): HTMLCanvasElement {
   } else if (frame?.only === 'reference') {
     if (reference) drawLayer(ctx, reference, referenceTransform, scene, grayscale, 1);
   } else if (mode === 'split') {
-    // Artwork on the left/top, reference on the right/bottom.
-    if (artwork) drawLayer(ctx, artwork, artworkTransform, scene, grayscale, 1);
-    if (showReference) {
+    // Base fills the scene; the other image is clipped to the split region.
+    // By default the artwork is the base (left/top) and the reference fills the
+    // region (right/bottom). `splitSwapped` swaps only which image is on each
+    // side — geometry, split position and everything else are unchanged.
+    const baseImg = splitSwapped ? reference : artwork;
+    const baseT = splitSwapped ? referenceTransform : artworkTransform;
+    const baseVisible = splitSwapped ? !referenceHidden : true;
+    const regionImg = splitSwapped ? artwork : reference;
+    const regionT = splitSwapped ? artworkTransform : referenceTransform;
+    const regionVisible = splitSwapped ? true : !referenceHidden;
+
+    if (baseImg && baseVisible) drawLayer(ctx, baseImg, baseT, scene, grayscale, 1);
+    if (regionImg && regionVisible) {
       ctx.save();
       if (splitOrientation === 'horizontal') {
         const x = splitPosition * scene.width;
@@ -250,7 +263,7 @@ export function renderSceneToCanvas(inputs: SceneInputs): HTMLCanvasElement {
         ctx.rect(0, y, scene.width, scene.height - y);
       }
       ctx.clip();
-      drawLayer(ctx, reference!, referenceTransform, scene, grayscale, 1);
+      drawLayer(ctx, regionImg, regionT, scene, grayscale, 1);
       ctx.restore();
     }
   } else {

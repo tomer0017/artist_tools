@@ -64,7 +64,8 @@ function Seg<T extends string>({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      {/* Strong contrast so section titles stay legible over the blurred sheet. */}
+      <label className="block text-[11px] font-semibold uppercase tracking-wider text-foreground/90">
         {label}
       </label>
       {children}
@@ -286,6 +287,21 @@ export function AlignSheet({
 
   return (
     <div className="space-y-4">
+      {/* Smart Align — the single strongest alignment tool, promoted to the top
+          so painters actually discover it. Plain-language name + one-line how-to. */}
+      <button
+        onClick={onStartAnchor}
+        className="flex w-full items-center gap-3 rounded-xl bg-primary px-3 py-3 text-left text-primary-foreground shadow-sm active:scale-[0.99]"
+      >
+        <Target className="h-5 w-5 shrink-0" />
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">Smart Align</span>
+          <span className="block text-[11px] leading-snug opacity-90">
+            Select two matching points on your artwork and on the reference.
+          </span>
+        </span>
+      </button>
+
       {/* Re-crop each source image (region to compare) */}
       <Field label="Re-crop source image">
         <div className="flex gap-2">
@@ -387,21 +403,14 @@ export function AlignSheet({
         </div>
       </Field>
 
-      {/* Actions */}
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={store.flipReference}
-          className="flex items-center justify-center gap-2 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95"
-        >
-          <FlipHorizontal2 className="h-4 w-4" /> Flip
-        </button>
-        <button
-          onClick={onStartAnchor}
-          className="flex items-center justify-center gap-2 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95"
-        >
-          <Target className="h-4 w-4" /> 2-point align
-        </button>
-      </div>
+      {/* Actions — mirror the reference horizontally. (Smart Align is promoted
+          to the top of this sheet.) */}
+      <button
+        onClick={store.flipReference}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95"
+      >
+        <FlipHorizontal2 className="h-4 w-4" /> Flip reference
+      </button>
 
       <button
         onClick={onToggleCrop}

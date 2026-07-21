@@ -7,18 +7,22 @@
 
 import { useState } from 'react';
 import {
+  Camera,
   Contrast,
   Download,
+  FlipHorizontal2,
+  ImagePlus,
   Info,
   Layers,
+  Lock,
   Move,
   Redo2,
-  RefreshCw,
   SlidersHorizontal,
   Undo2,
   X,
 } from 'lucide-react';
 import { CompareProvider, useCompare } from './compareArtState';
+import { openImagePicker } from './compareArtImage';
 import { ImageCrop, NudgeStep } from './compareArtTypes';
 import CompareUploadStep from './CompareUploadStep';
 import CompareCanvas, { AnchorState, computeAnchorTransform } from './CompareCanvas';
@@ -48,9 +52,48 @@ function Workspace() {
   const [anchor, setAnchor] = useState<AnchorState | null>(null);
   const [cropActive, setCropActive] = useState(false);
   const [showStatus, setShowStatus] = useState(true);
+  // Locked-comparison zoom: pinch/pan move both images together (a view-only
+  // camera in the canvas), alignment untouched.
+  const [viewLocked, setViewLocked] = useState(false);
+  // "Update Artwork" picker menu + in-flight flag.
+  const [updateMenu, setUpdateMenu] = useState(false);
+  const [updatingArt, setUpdatingArt] = useState(false);
+  // Auto-collapse the Align sheet while the painter is dragging on the canvas.
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  // Brief fade when swapping split sides.
+  const [flipFlash, setFlipFlash] = useState(false);
   const [cropReq, setCropReq] = useState<
     { role: 'artwork' | 'reference'; original: string; initialCrop: ImageCrop | null } | null
   >(null);
+
+  // Replace ONLY the painting (camera or library). Everything else — reference,
+  // crop, alignment, zoom, mode, opacity, split, grid — is preserved because
+  // setArtwork touches only the artwork image + its meta.
+  const updateArtwork = async (capture: boolean) => {
+    setUpdateMenu(false);
+    setUpdatingArt(true);
+    try {
+      const res = await openImagePicker(capture);
+      if (res) store.setArtwork(res.dataUrl, res.meta);
+    } catch (e) {
+      console.error('[CompareArt] Update artwork failed:', e);
+    } finally {
+      setUpdatingArt(false);
+    }
+  };
+
+  const newComparison = () => {
+    if (confirm('Start a new comparison? This clears both images and alignment.')) {
+      store.resetComparison();
+      setSheet(null);
+    }
+  };
+
+  const doFlipSides = () => {
+    store.toggleSplitSwapped();
+    setFlipFlash(true);
+    window.setTimeout(() => setFlipFlash(false), 180);
+  };
 
   const requestCrop = (role: 'artwork' | 'reference', original: string, initialCrop?: ImageCrop | null) => {
     setCropReq({ role, original, initialCrop: initialCrop ?? null });
@@ -109,8 +152,19 @@ function Workspace() {
 
   const openSheet = (s: Sheet) => {
     setCropActive(false);
+    setSheetCollapsed(false);
     setSheet((cur) => (cur === s ? null : s));
   };
+
+  // The bottom-bar slot that changes with the active comparison mode.
+  const contextControl =
+    session.mode === 'split'
+      ? { icon: <FlipHorizontal2 className="h-5 w-5" />, label: 'Flip Sides', active: false, onClick: doFlipSides }
+      : session.mode === 'difference'
+        ? { icon: <Contrast className="h-5 w-5" />, label: 'Difference', active: sheet === 'mode', onClick: () => openSheet('mode') }
+        : session.mode === 'blink'
+          ? { icon: <Contrast className="h-5 w-5" />, label: 'Blink', active: sheet === 'mode', onClick: () => openSheet('mode') }
+          : { icon: <Contrast className="h-5 w-5" />, label: 'Opacity', active: sheet === 'opacity', onClick: () => openSheet('opacity') };
 
   return (
     <div className="relative flex flex-1 flex-col min-h-0">
@@ -138,34 +192,55 @@ function Workspace() {
         </div>
 
         <span className="text-xs font-medium text-muted-foreground">
-          {MODE_LABELS[session.mode]} · {Math.round(session.opacity * 100)}%
+          {MODE_LABELS[session.mode]}
+          {session.mode === 'overlay' && ` · ${Math.round(session.opacity * 100)}%`}
         </span>
 
-        <div className="flex items-center gap-1">
+        <div className="relative flex items-center gap-1">
+          {/* Painter-oriented: update the painting after more time at the easel. */}
           <button
-            onClick={() => {
-              store.removeReference();
-              setSheet(null);
-            }}
-            className="btn-tool"
-            aria-label="Replace images"
-            title="Replace images"
+            onClick={() => setUpdateMenu((v) => !v)}
+            disabled={updatingArt}
+            aria-haspopup="menu"
+            aria-expanded={updateMenu}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground active:scale-95 disabled:opacity-50"
           >
-            <RefreshCw className="h-4 w-4" />
+            <Camera className="h-4 w-4" />
+            Update Artwork
           </button>
           <button
-            onClick={() => {
-              if (confirm('Start a new comparison? This clears both images and alignment.')) {
-                store.resetComparison();
-                setSheet(null);
-              }
-            }}
+            onClick={newComparison}
             className="btn-tool"
             aria-label="New comparison"
             title="New comparison"
           >
             <X className="h-4 w-4" />
           </button>
+
+          {updateMenu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setUpdateMenu(false)} />
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-40 mt-1 w-44 overflow-hidden rounded-lg border border-border bg-card shadow-xl"
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => updateArtwork(true)}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground active:bg-secondary"
+                >
+                  <Camera className="h-4 w-4" /> Camera
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => updateArtwork(false)}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground active:bg-secondary"
+                >
+                  <ImagePlus className="h-4 w-4" /> Photo Library
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -174,11 +249,45 @@ function Workspace() {
         selectedLayer={session.artworkLocked ? 'reference' : selectedLayer}
         anchor={anchor}
         onAnchorPoint={handleAnchorPoint}
-        onGestureActivity={() => setShowStatus(false)}
+        viewLocked={viewLocked}
+        onGestureActivity={() => {
+          setShowStatus(false);
+          if (sheet === 'align') setSheetCollapsed(true);
+        }}
+        onGestureEnd={() => setSheetCollapsed(false)}
       />
 
+      {/* Brief fade when swapping split sides. */}
+      <div
+        className={`pointer-events-none absolute inset-0 z-10 bg-background transition-opacity duration-150 ${
+          flipFlash ? 'opacity-40' : 'opacity-0'
+        }`}
+      />
+
+      {/* Locked-comparison zoom toggle. Once aligned, lock to treat both images
+          as one scene and pinch/pan into details together. */}
+      {!anchor && (
+        <button
+          onClick={() => setViewLocked((v) => !v)}
+          aria-pressed={viewLocked}
+          title={
+            viewLocked
+              ? 'Locked — pinch to zoom both together. Tap to unlock.'
+              : 'Lock alignment, then pinch to zoom both together'
+          }
+          className={`absolute right-3 top-14 z-20 flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium shadow-lg backdrop-blur-sm active:scale-95 ${
+            viewLocked
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-border bg-card/95 text-foreground'
+          }`}
+        >
+          <Lock className="h-4 w-4" />
+          {viewLocked ? 'Locked' : 'Lock & zoom'}
+        </button>
+      )}
+
       {/* Alignment status (prominent, non-blocking) */}
-      {showStatus && !anchor && (
+      {showStatus && !anchor && !viewLocked && (
         <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center px-3">
           <div className="pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border border-border bg-card/95 px-3 py-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur-sm">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
@@ -212,7 +321,7 @@ function Workspace() {
       <div className="flex items-stretch justify-around gap-1 border-t border-border px-1 py-1 toolbar-surface">
         <BarButton icon={<Layers className="h-5 w-5" />} label="Mode" active={sheet === 'mode'} onClick={() => openSheet('mode')} />
         <BarButton icon={<Move className="h-5 w-5" />} label="Align" active={sheet === 'align'} onClick={() => openSheet('align')} />
-        <BarButton icon={<Contrast className="h-5 w-5" />} label="Opacity" active={sheet === 'opacity'} onClick={() => openSheet('opacity')} />
+        <BarButton icon={contextControl.icon} label={contextControl.label} active={contextControl.active} onClick={contextControl.onClick} />
         <BarButton icon={<SlidersHorizontal className="h-5 w-5" />} label="Grid" active={sheet === 'grid'} onClick={() => openSheet('grid')} />
         <BarButton icon={<Download className="h-5 w-5" />} label="Export" active={sheet === 'export'} onClick={() => openSheet('export')} />
       </div>
@@ -225,9 +334,12 @@ function Workspace() {
         open={sheet === 'align'}
         title="Align reference"
         subtitle="Drag on the canvas, or nudge precisely here."
+        collapsed={sheet === 'align' && sheetCollapsed}
+        maxVh={56}
         onClose={() => {
           setSheet(null);
           setCropActive(false);
+          setSheetCollapsed(false);
         }}
       >
         <AlignSheet
@@ -236,6 +348,7 @@ function Workspace() {
           nudgeStep={nudgeStep}
           setNudgeStep={setNudgeStep}
           onStartAnchor={() => {
+            setViewLocked(false);
             setAnchor({ step: 0 });
             setSheet(null);
           }}

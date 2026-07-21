@@ -52,6 +52,7 @@ interface HistorySnapshot {
   opacity: number;
   mode: CompareMode;
   grayscale: boolean;
+  splitSwapped: boolean;
   grid: GridConfig;
   difference: DifferenceConfig;
 }
@@ -66,6 +67,7 @@ function snapshotOf(s: CompareSession): HistorySnapshot {
     opacity: s.opacity,
     mode: s.mode,
     grayscale: s.grayscale,
+    splitSwapped: s.splitSwapped,
     grid: { ...s.grid },
     difference: { ...s.difference },
   };
@@ -109,6 +111,7 @@ interface Store {
   toggleReferenceHidden: () => void;
   setSplit: (pos: number) => void;
   setSplitOrientation: (o: 'horizontal' | 'vertical') => void;
+  toggleSplitSwapped: () => void;
   setBlinkSpeed: (s: CompareSession['blinkSpeed']) => void;
 
   /** Update crop without recording history (during a drag). */
@@ -362,6 +365,10 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
     (o: 'horizontal' | 'vertical') => setSession((s) => ({ ...s, splitOrientation: o })),
     [],
   );
+  const toggleSplitSwapped = useCallback(() => {
+    pushHistory();
+    setSession((s) => ({ ...s, splitSwapped: !s.splitSwapped }));
+  }, [pushHistory]);
   const setBlinkSpeed = useCallback(
     (sp: CompareSession['blinkSpeed']) => setSession((s) => ({ ...s, blinkSpeed: sp })),
     [],
@@ -447,6 +454,7 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
     toggleReferenceHidden,
     setSplit,
     setSplitOrientation,
+    toggleSplitSwapped,
     setBlinkSpeed,
     setCropLive,
     setCrop,

@@ -174,6 +174,8 @@ export interface CompareSession {
   blinkSpeed: BlinkSpeed;
   splitOrientation: SplitOrientation;
   splitPosition: number; // 0..1
+  /** Split mode only: swap which image appears on each side (artwork ↔ reference). */
+  splitSwapped: boolean;
   grid: GridConfig;
   difference: DifferenceConfig;
   gif: GifConfig;
@@ -204,6 +206,7 @@ export function defaultSession(): CompareSession {
     blinkSpeed: 'normal',
     splitOrientation: 'horizontal',
     splitPosition: 0.5,
+    splitSwapped: false,
     grid: { ...DEFAULT_GRID },
     difference: { ...DEFAULT_DIFFERENCE },
     gif: { ...DEFAULT_GIF },
