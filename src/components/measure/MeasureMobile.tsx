@@ -408,7 +408,11 @@ export default function MeasureMobile() {
     const size = parseFloat(calSize);
     if (isNaN(size) || size <= 0 || calPoints.length < 2) return;
     setCalibration({ start: calPoints[0], end: calPoints[1], realWorldSize: size, unit: calUnit });
-    setCalPoints([]); setCalInputVisible(false); setCalSize(''); setTool('edit');
+    setCalPoints([]); setCalInputVisible(false); setCalSize('');
+    // Guided workflow: once the reference is defined, drop the user straight
+    // into Add mode so they can start placing measurement lines immediately
+    // (no manual "Add" tap required).
+    setTool('add'); setPendingPoint(null);
     restorePreCalView();
   };
 
@@ -619,9 +623,34 @@ export default function MeasureMobile() {
   const visibleLayerIds = new Set(layers.filter(l => l.visible).map(l => l.id));
   const renderedLines = measurements.filter(m => m.visible && visibleLayerIds.has(m.layerId));
 
+  // The whole reference-setup step (drawing the line, confirming the draft, and
+  // typing the real-world length) runs while `tool === 'cal'`. During this
+  // guided step we strip the interface down to only the controls that matter,
+  // so a first-time painter is never distracted by unrelated tools.
+  const referenceMode = tool === 'cal';
+  // The narrowest step: keyboard is open to type the length. Only the numeric
+  // input, unit selector, Set and Cancel remain — everything else is hidden.
+  const enteringLength = calInputVisible;
+  const canCancelReference = calibration != null || calPoints.length > 0 || calDraftReady || calInputVisible;
+
   return (
     <div className="relative flex-1 flex flex-col min-h-0 bg-[hsl(var(--canvas-bg))]">
-      {/* Top bar */}
+      {/* Top bar — replaced by a focused reference header during the guided
+          reference-setup step. */}
+      {referenceMode ? (
+        <div className="shrink-0 z-30 flex items-center justify-between px-3 h-12 border-b border-border bg-card/95 backdrop-blur-sm">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Crosshair className="w-4 h-4 text-primary" />
+            {enteringLength ? 'Enter reference length' : 'Set reference'}
+          </div>
+          {canCancelReference && (
+            <button onClick={cancelCal}
+              className="h-10 px-3 flex items-center gap-1.5 rounded-md text-sm text-muted-foreground active:bg-secondary" aria-label="Cancel reference">
+              <X className="w-4 h-4" /> Cancel
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="shrink-0 z-30 flex items-center justify-between px-2 h-12 border-b border-border bg-card/95 backdrop-blur-sm">
         <button onClick={() => { if (confirm('Start a new project?')) newProject(); }}
           className="h-11 w-11 flex items-center justify-center rounded-md text-muted-foreground active:bg-secondary" aria-label="New project">
@@ -642,6 +671,7 @@ export default function MeasureMobile() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Canvas */}
       <div
@@ -746,15 +776,19 @@ export default function MeasureMobile() {
           </svg>
         </div>
 
-        {/* Tool indicator */}
-        <div className="absolute top-2 left-2 px-2 py-1 text-[11px] rounded bg-card/80 text-muted-foreground backdrop-blur-sm">
-          {tool === 'pan' && 'Pan / Zoom'}
-          {tool === 'edit' && (selectedLine ? 'Editing selected' : 'Tap a line to edit')}
-          {tool === 'add' && (pendingPoint ? 'Tap to set end point' : 'Tap to set start point')}
-          {tool === 'cal' && (calPoints.length === 0 ? 'Tap 2 points for reference' : calPoints.length === 1 ? 'Tap second point' : 'Confirm reference')}
-        </div>
+        {/* Tool indicator — hidden while typing the reference length so the
+            canvas stays clean and focused on that single step. */}
+        {!enteringLength && (
+          <div className="absolute top-2 left-2 px-2 py-1 text-[11px] rounded bg-card/80 text-muted-foreground backdrop-blur-sm">
+            {tool === 'pan' && 'Pan / Zoom'}
+            {tool === 'edit' && (selectedLine ? 'Editing selected' : 'Tap a line to edit')}
+            {tool === 'add' && (pendingPoint ? 'Tap to set end point' : 'Tap to set start point')}
+            {tool === 'cal' && (calPoints.length === 0 ? 'Tap 2 points for reference' : calPoints.length === 1 ? 'Tap second point' : 'Confirm reference')}
+          </div>
+        )}
 
-        {/* Fit + focus toggles */}
+        {/* Fit + focus toggles — hidden while typing the reference length. */}
+        {!enteringLength && (
         <div className="absolute top-2 right-2 flex flex-col gap-2">
           <button onClick={fitImage} aria-label="Fit"
             className="h-10 w-10 rounded-full bg-card/90 border border-border text-foreground flex items-center justify-center shadow active:scale-95">
@@ -765,6 +799,7 @@ export default function MeasureMobile() {
             <Focus className="w-4 h-4" />
           </button>
         </div>
+        )}
 
         {/* Magnifier */}
         {drag?.kind === 'endpoint' && (
@@ -777,7 +812,7 @@ export default function MeasureMobile() {
 
         {/* Calibration draft / input */}
         {calDraftReady && !calInputVisible && (
-          <div className="absolute bottom-20 inset-x-3 z-30 flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-3 shadow-xl">
+          <div className="absolute bottom-4 inset-x-3 z-30 flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-3 shadow-xl">
             <span className="flex-1 text-xs text-muted-foreground">Reference line placed.</span>
             <button onClick={confirmCalDraft} className="flex items-center gap-1.5 h-10 px-3 text-sm bg-primary text-primary-foreground rounded-md font-medium">
               <Check className="w-4 h-4" /> Confirm
@@ -789,7 +824,7 @@ export default function MeasureMobile() {
         )}
         {calInputVisible && (
           <div className="absolute bottom-0 inset-x-0 z-40 bg-card border-t border-border p-3 space-y-2 pb-[env(safe-area-inset-bottom)]">
-            <p className="text-xs text-muted-foreground">Enter real-world size of the reference line:</p>
+            <p className="text-sm font-medium text-foreground">Real-world size of the reference line</p>
             <div className="flex items-center gap-2">
               <input ref={calInputRef} type="number" inputMode="decimal" value={calSize} onChange={e => setCalSize(e.target.value)}
                 placeholder="e.g. 50"
@@ -837,7 +872,9 @@ export default function MeasureMobile() {
         )}
       </div>
 
-      {/* Bottom action bar */}
+      {/* Bottom action bar — fully hidden during the guided reference-setup
+          step so only reference controls are visible. */}
+      {!referenceMode && (
       <div className="shrink-0 z-30 border-t border-border bg-card/95 backdrop-blur-sm">
         {/* Mode toggle row */}
         <div className="flex items-center gap-1 px-2 pt-2">
@@ -862,6 +899,7 @@ export default function MeasureMobile() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Bottom sheets */}
       {sheet && (
