@@ -32,7 +32,7 @@ export interface ValueSettings {
   posterize: number;
   contrast: number;
   brightness: number;
-  mode?: 'grayscale' | 'color' | 'painter';
+  mode?: 'grayscale' | 'color' | 'painter' | 'sketch';
   levels?: number;
   focus?: 'none' | 'shadow' | 'highlight' | 'squint';
 }
@@ -110,7 +110,9 @@ export const DEFAULT_VALUE_SETTINGS: ValueSettings = {
   contrast: 100,
   brightness: 100,
   mode: 'color',
-  levels: 5,
+  // 9 value groups is the painter-friendly default (general painting precision);
+  // users can still drop to 3/5/7 for composition/block-in or push to 11/13.
+  levels: 9,
   focus: 'none',
 };
 

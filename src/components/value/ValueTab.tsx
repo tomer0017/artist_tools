@@ -5,11 +5,12 @@ import ImageUploader from '@/components/common/ImageUploader';
 import {
   Sun, Moon, Eye, Palette as PaletteIcon, Brush, Layers,
   SlidersHorizontal, X, Maximize2, Minimize2, Download, Image as ImageIcon,
+  Contrast, PencilLine,
 } from 'lucide-react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { dataUrlToBlob } from '@/lib/saveMedia';
 
-type Mode = 'grayscale' | 'color' | 'painter';
+type Mode = 'grayscale' | 'color' | 'painter' | 'sketch';
 type Focus = 'none' | 'shadow' | 'highlight' | 'squint';
 type PaletteView = 'dominant' | 'value' | 'mix';
 type HueFamily =
@@ -178,7 +179,7 @@ export default function ValueTab() {
 
   // Migrate legacy fields into the unified mode/levels model on first load
   const mode: Mode = (valueSettings.mode as Mode) || (valueSettings.grayscale ? 'grayscale' : 'color');
-  const levels: number = valueSettings.levels ?? (valueSettings.posterize > 0 ? valueSettings.posterize : 5);
+  const levels: number = valueSettings.levels ?? (valueSettings.posterize > 0 ? valueSettings.posterize : 9);
   const focus: Focus = (valueSettings.focus as Focus) || 'none';
   const contrast = valueSettings.contrast;
   const brightness = valueSettings.brightness;
@@ -206,7 +207,8 @@ export default function ValueTab() {
       const ctx = canvas.getContext('2d')!;
 
       // Pre-blur reduces noisy speckle so palette quantization yields clean masses.
-      const blur = focus === 'squint' ? 5 : mode === 'painter' ? 2.5 : mode === 'color' ? 1.2 : 0;
+      // Sketch gets a light blur so texture/noise don't become spurious edges.
+      const blur = focus === 'squint' ? 5 : mode === 'painter' ? 2.5 : mode === 'sketch' ? 1.4 : mode === 'color' ? 1.2 : 0;
       // NOTE: iOS Safari historically ignores ctx.filter for contrast()/brightness(),
       // so applying them via CSS filter silently no-ops on iPhone. Apply them
       // manually below to guarantee identical behavior across desktop and mobile.
@@ -386,6 +388,50 @@ export default function ValueTab() {
         return 1;
       };
 
+      if (mode === 'sketch') {
+        // === Sketch mode: clean construction line drawing ===
+        // A Sobel edge pass over the (blurred, contrast/brightness-adjusted)
+        // luminance. Because every line is derived directly from the source
+        // gradients, composition / proportion / placement are preserved exactly —
+        // nothing is invented. An adaptive threshold (mean + k·std) keeps only the
+        // strong contours and major internal boundaries, dropping texture/noise so
+        // the result reads as a first construction drawing, not a pencil filter.
+        const lum = new Float32Array(total);
+        for (let p = 0, i = 0; p < total; p++, i += 4) {
+          lum[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        }
+        const mag = new Float32Array(total);
+        let sum = 0, sumSq = 0, cnt = 0;
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const o = y * w + x;
+            const tl = lum[o - w - 1], tc = lum[o - w], tr = lum[o - w + 1];
+            const ml = lum[o - 1], mr = lum[o + 1];
+            const bl = lum[o + w - 1], bc = lum[o + w], br = lum[o + w + 1];
+            const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl);
+            const gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
+            const m = Math.sqrt(gx * gx + gy * gy);
+            mag[o] = m; sum += m; sumSq += m * m; cnt++;
+          }
+        }
+        const mean = cnt ? sum / cnt : 0;
+        const variance = cnt ? Math.max(0, sumSq / cnt - mean * mean) : 0;
+        const std = Math.sqrt(variance);
+        const thresh = mean + 0.55 * std;
+        const band = Math.max(6, std * 0.6);
+        for (let p = 0, i = 0; p < total; p++, i += 4) {
+          // Smoothstep across [thresh-band, thresh+band] → soft-but-clean edges.
+          let t = (mag[p] - (thresh - band)) / (2 * band);
+          if (t < 0) t = 0; else if (t > 1) t = 1;
+          t = t * t * (3 - 2 * t);
+          const v = 255 * (1 - t); // white paper, dark construction lines
+          data[i] = v; data[i + 1] = v; data[i + 2] = v;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        setProcessedUrl(canvas.toDataURL('image/jpeg', 0.9));
+        // Fall through below to build the value/dominant palettes (still useful
+        // reference while drawing), then skip the palette-quantization loop.
+      } else {
       const usePalette = (mode === 'color' || mode === 'painter') && paletteRGB.length > 0;
       for (let i = 0, p = 0; i < data.length; i += 4, p++) {
         const bi = binAssign[p];
@@ -458,6 +504,7 @@ export default function ValueTab() {
 
       ctx.putImageData(imageData, 0, 0);
       setProcessedUrl(canvas.toDataURL('image/jpeg', 0.9));
+      }
 
       // Build groups
       const newGroups: ValueGroup[] = [];
@@ -623,16 +670,28 @@ export default function ValueTab() {
   }
 
   // === Reusable subcomponents ===
-  const ModeButtons = (
-    <div className="grid grid-cols-3 gap-1.5">
-      {([
-        { id: 'color' as Mode, label: 'Color', icon: <PaletteIcon className="w-3.5 h-3.5" /> },
-        { id: 'grayscale' as Mode, label: 'Gray', icon: <Moon className="w-3.5 h-3.5" /> },
-        { id: 'painter' as Mode, label: 'Painter', icon: <Brush className="w-3.5 h-3.5" /> },
-      ]).map(m => (
-        <button key={m.id} onClick={() => updateMode(m.id)}
-          className={`flex flex-col items-center gap-1 px-2 py-2 rounded-md text-[11px] font-medium transition-colors ${
-            mode === m.id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+
+  // The three study modes answer three different questions:
+  //   Color  → which colors should I mix?
+  //   Values → where are the lights and shadows?
+  //   Sketch → where should I draw?
+  // Painter is treated as a color-rendering variant, so it highlights "Color".
+  const studyModes = ([
+    { id: 'color' as Mode, label: 'Color', icon: <PaletteIcon className="w-3.5 h-3.5" /> },
+    { id: 'grayscale' as Mode, label: 'Values', icon: <Contrast className="w-3.5 h-3.5" /> },
+    { id: 'sketch' as Mode, label: 'Sketch', icon: <PencilLine className="w-3.5 h-3.5" /> },
+  ]);
+  const studyModeActive = (id: Mode) =>
+    id === 'color' ? (mode === 'color' || mode === 'painter') : mode === id;
+  // Floating quick-switch placed directly on the image so switching between
+  // study stages while painting never requires opening the controls sheet.
+  const StudyModeSwitcher = (
+    <div className="inline-flex rounded-full border border-border bg-card/90 backdrop-blur-sm p-0.5 shadow-lg">
+      {studyModes.map(m => (
+        <button key={m.id}
+          onClick={() => updateMode(m.id === 'color' && mode === 'painter' ? 'painter' : m.id)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
+            studyModeActive(m.id) ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
           }`}>
           {m.icon}{m.label}
         </button>
@@ -640,16 +699,41 @@ export default function ValueTab() {
     </div>
   );
 
+  // Painter stays inside the sheet — it's an advanced rendering variant, not
+  // switched frequently while painting. Toggling flips between color and painter.
+  const PainterToggle = (
+    <button onClick={() => updateMode(mode === 'painter' ? 'color' : 'painter')}
+      className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-medium transition-colors ${
+        mode === 'painter' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+      }`}>
+      <Brush className="w-3.5 h-3.5" />
+      Painter mode {mode === 'painter' ? 'on' : 'off'}
+    </button>
+  );
+
   const LevelButtons = (
-    <div className="flex gap-1.5">
-      {[3, 5, 7, 9].map(l => (
-        <button key={l} onClick={() => updateLevels(l)}
-          className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
-            levels === l ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-          }`}>
-          {l}
-        </button>
-      ))}
+    <div>
+      <div className="flex gap-1">
+        {[3, 5, 7, 9, 11, 13].map(l => (
+          <button key={l} onClick={() => updateLevels(l)}
+            title={l === 9 ? 'Recommended default' : undefined}
+            className={`relative flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
+              levels === l
+                ? 'bg-primary text-primary-foreground'
+                : l === 9
+                  ? 'bg-secondary text-secondary-foreground ring-1 ring-primary/50 hover:bg-secondary/80'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+            }`}>
+            {l}
+            {l === 9 && (
+              <span className="absolute -top-1 -right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+            )}
+          </button>
+        ))}
+      </div>
+      <p className="text-[9px] text-muted-foreground mt-1">
+        9 = recommended default · 3 block-in → 13 max separation
+      </p>
     </div>
   );
 
@@ -727,8 +811,11 @@ export default function ValueTab() {
   const ControlsBlock = (
     <div className="space-y-4">
       <div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Mode</p>
-        {ModeButtons}
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Study mode</p>
+        <p className="text-[10px] text-muted-foreground mb-1.5">
+          Switch Color · Values · Sketch from the toolbar on the image.
+        </p>
+        {PainterToggle}
       </div>
       <div>
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Value groups</p>
@@ -919,6 +1006,9 @@ export default function ValueTab() {
         processedUrl && <img src={processedUrl} alt="Value study"
           className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
       )}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
+        {StudyModeSwitcher}
+      </div>
       <button onClick={() => setFullscreen(v => !v)}
         className="absolute top-2 right-2 btn-tool bg-card/90 backdrop-blur-sm border border-border"
         title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
@@ -931,6 +1021,11 @@ export default function ValueTab() {
   if (isMobile) {
     return (
       <div className="relative flex-1 flex flex-col min-h-0 canvas-area">
+        {mobileView !== 'palette' && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
+            {StudyModeSwitcher}
+          </div>
+        )}
         <div className="flex-1 min-h-0 overflow-hidden flex items-center justify-center">
           {mobileView === 'original' && <img src={activeImage} alt="Original" className="max-h-full max-w-full object-contain" />}
           {mobileView === 'processed' && processedUrl && <img src={processedUrl} alt="Processed" className="max-h-full max-w-full object-contain" />}
