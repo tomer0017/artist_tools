@@ -166,7 +166,6 @@ export default function ValueTab() {
   const [paletteView, setPaletteView] = useState<PaletteView>('dominant');
   const [isolatedIdx, setIsolatedIdx] = useState<number | null>(null);
   const [showMobileControls, setShowMobileControls] = useState(false);
-  const [activeSlider, setActiveSlider] = useState<null | 'contrast' | 'brightness'>(null);
   const [mobileView, setMobileView] = useState<'processed' | 'original' | 'palette'>('processed');
   const [compareSlider, setCompareSlider] = useState(50);
   const [showCompare, setShowCompare] = useState(false);
@@ -183,6 +182,7 @@ export default function ValueTab() {
   const focus: Focus = (valueSettings.focus as Focus) || 'none';
   const contrast = valueSettings.contrast;
   const brightness = valueSettings.brightness;
+  const sketchDetail = valueSettings.sketchDetail ?? 50;
 
   const updateMode = (m: Mode) => setValueSettings({ mode: m, grayscale: m === 'grayscale' });
   const updateLevels = (l: number) => setValueSettings({ levels: l, posterize: l });
@@ -207,8 +207,12 @@ export default function ValueTab() {
       const ctx = canvas.getContext('2d')!;
 
       // Pre-blur reduces noisy speckle so palette quantization yields clean masses.
-      // Sketch gets a light blur so texture/noise don't become spurious edges.
-      const blur = focus === 'squint' ? 5 : mode === 'painter' ? 2.5 : mode === 'sketch' ? 1.4 : mode === 'color' ? 1.2 : 0;
+      // Sketch gets a stronger, detail-dependent blur so fabric/fur/wall texture
+      // and photographic noise don't survive as spurious edges. Toward "Simple"
+      // we blur more (only major boundaries remain); toward "Detailed" we blur
+      // less (finer secondary contours are allowed through).
+      const sketchBlur = 1.0 + (1 - sketchDetail / 100) * 1.8; // detailed→1.0, simple→2.8
+      const blur = focus === 'squint' ? 5 : mode === 'painter' ? 2.5 : mode === 'sketch' ? sketchBlur : mode === 'color' ? 1.2 : 0;
       // NOTE: iOS Safari historically ignores ctx.filter for contrast()/brightness(),
       // so applying them via CSS filter silently no-ops on iPhone. Apply them
       // manually below to guarantee identical behavior across desktop and mobile.
@@ -417,13 +421,30 @@ export default function ValueTab() {
         const mean = cnt ? sum / cnt : 0;
         const variance = cnt ? Math.max(0, sumSq / cnt - mean * mean) : 0;
         const std = Math.sqrt(variance);
-        const thresh = mean + 0.55 * std;
+        // Adaptive threshold: mean + k·std. "Simple" raises k so only the
+        // strongest silhouettes / object boundaries survive; "Detailed" lowers
+        // k so more internal + secondary contours are kept. Painter never sees
+        // k — only the Sketch Detail slider.
+        const detail = sketchDetail / 100; // 0 (simple) .. 1 (detailed)
+        const kThresh = 1.15 - detail * 1.0; // simple→1.15, detailed→0.15
+        const thresh = mean + kThresh * std;
         const band = Math.max(6, std * 0.6);
+        const lower = thresh - band;
+        const span = 2 * band;
+        // Absolute floor: gradients this weak are texture/noise, never a
+        // construction line. Eased down as detail rises so fine edges can pass.
+        const hardFloor = mean * (0.9 - detail * 0.55);
         for (let p = 0, i = 0; p < total; p++, i += 4) {
-          // Smoothstep across [thresh-band, thresh+band] → soft-but-clean edges.
-          let t = (mag[p] - (thresh - band)) / (2 * band);
-          if (t < 0) t = 0; else if (t > 1) t = 1;
-          t = t * t * (3 - 2 * t);
+          const mp = mag[p];
+          let t: number;
+          if (mp < hardFloor) {
+            t = 0; // suppress texture/noise outright
+          } else {
+            // Smoothstep across [thresh-band, thresh+band] → soft-but-clean edges.
+            t = (mp - lower) / span;
+            if (t < 0) t = 0; else if (t > 1) t = 1;
+            t = t * t * (3 - 2 * t);
+          }
           const v = 255 * (1 - t); // white paper, dark construction lines
           data[i] = v; data[i + 1] = v; data[i + 2] = v;
         }
@@ -531,7 +552,7 @@ export default function ValueTab() {
       }
     };
     img.src = activeImage;
-  }, [activeImage, mode, levels, focus, contrast, brightness, isolatedIdx]);
+  }, [activeImage, mode, levels, focus, contrast, brightness, sketchDetail, isolatedIdx]);
 
   useEffect(() => { processImage(); }, [processImage]);
 
@@ -755,59 +776,61 @@ export default function ValueTab() {
     </div>
   );
 
-  const sliderActivate = (which: 'contrast' | 'brightness') => {
-    if (isMobile) setActiveSlider(which);
-  };
-  const sliderRelease = () => {
-    if (isMobile) setActiveSlider(null);
-  };
-  const Sliders = (
-    <div className="space-y-3">
-      <div>
-        <label className="text-[11px] text-muted-foreground font-medium block mb-1">Contrast {contrast}%</label>
-        <input type="range" min={50} max={200} value={contrast}
-          onChange={(e) => setValueSettings({ contrast: Number(e.target.value) })}
-          onPointerDown={() => sliderActivate('contrast')}
-          onPointerUp={sliderRelease}
-          onPointerCancel={sliderRelease}
-          onTouchEnd={sliderRelease}
-          className="w-full accent-primary" />
-      </div>
-      <div>
-        <label className="text-[11px] text-muted-foreground font-medium block mb-1">Brightness {brightness}%</label>
-        <input type="range" min={50} max={200} value={brightness}
-          onChange={(e) => setValueSettings({ brightness: Number(e.target.value) })}
-          onPointerDown={() => sliderActivate('brightness')}
-          onPointerUp={sliderRelease}
-          onPointerCancel={sliderRelease}
-          onTouchEnd={sliderRelease}
-          className="w-full accent-primary" />
-      </div>
+  const sketchDetailLabel =
+    sketchDetail < 34 ? 'Simple' : sketchDetail > 66 ? 'Detailed' : 'Balanced';
+
+  // Inline controls that live *permanently below the image* — the sliders a
+  // painter reaches for constantly while studying, so they never require
+  // opening a menu. Context-aware: Color / Values expose Contrast + Brightness
+  // (visibility), while Sketch swaps in a single painter-facing "Sketch detail"
+  // control that speaks to the artistic result rather than edge thresholds.
+  const InlineImageControls = (
+    <div className="w-full px-3 py-2.5 border-t border-border toolbar-surface shrink-0">
+      {mode === 'sketch' ? (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[11px] text-muted-foreground font-medium">Sketch detail</label>
+            <span className="text-[10px] font-semibold text-foreground">{sketchDetailLabel}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-muted-foreground shrink-0 w-10 text-right">Simple</span>
+            <input type="range" min={0} max={100} value={sketchDetail}
+              onChange={(e) => setValueSettings({ sketchDetail: Number(e.target.value) })}
+              className="flex-1 accent-primary" aria-label="Sketch detail" />
+            <span className="text-[9px] text-muted-foreground shrink-0 w-10">Detailed</span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-6">
+          <div className="flex-1 min-w-0">
+            <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between mb-1">
+              <span>Contrast</span><span className="tabular-nums">{contrast}%</span>
+            </label>
+            <input type="range" min={50} max={200} value={contrast}
+              onChange={(e) => setValueSettings({ contrast: Number(e.target.value) })}
+              className="w-full accent-primary" aria-label="Contrast" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between mb-1">
+              <span>Brightness</span><span className="tabular-nums">{brightness}%</span>
+            </label>
+            <input type="range" min={50} max={200} value={brightness}
+              onChange={(e) => setValueSettings({ brightness: Number(e.target.value) })}
+              className="w-full accent-primary" aria-label="Brightness" />
+          </div>
+        </div>
+      )}
     </div>
   );
 
-  // Minimal slider strip shown on mobile while actively dragging — keeps the
-  // image visible behind it so the user can evaluate the effect in real time.
-  const MobileSliderFocusBar = activeSlider && (
-    <div className="absolute inset-x-0 bottom-0 z-40 px-4 py-3 bg-card/95 backdrop-blur border-t border-border shadow-2xl">
-      <label className="text-[11px] text-muted-foreground font-medium block mb-1 capitalize">
-        {activeSlider} {activeSlider === 'contrast' ? contrast : brightness}%
-      </label>
-      <input type="range" min={50} max={200}
-        value={activeSlider === 'contrast' ? contrast : brightness}
-        onChange={(e) => setValueSettings(
-          activeSlider === 'contrast'
-            ? { contrast: Number(e.target.value) }
-            : { brightness: Number(e.target.value) }
-        )}
-        onPointerUp={sliderRelease}
-        onPointerCancel={sliderRelease}
-        onTouchEnd={sliderRelease}
-        autoFocus
-        className="w-full accent-primary" />
-    </div>
-  );
-
+  // Only expose controls meaningful for the active study mode:
+  //   • Painter is a color-rendering variant → shown only in the Color family.
+  //   • Focus (shadows / lights / squint) has no effect on the Sketch pass →
+  //     hidden in Sketch so the sheet never offers a dead control.
+  //   • Contrast / Brightness (or Sketch detail) live inline below the image,
+  //     not in this sheet.
+  const isColorFamily = mode === 'color' || mode === 'painter';
+  const isSketch = mode === 'sketch';
   const ControlsBlock = (
     <div className="space-y-4">
       <div>
@@ -815,17 +838,23 @@ export default function ValueTab() {
         <p className="text-[10px] text-muted-foreground mb-1.5">
           Switch Color · Values · Sketch from the toolbar on the image.
         </p>
-        {PainterToggle}
+        {isColorFamily && PainterToggle}
+        {isSketch && (
+          <p className="text-[10px] text-muted-foreground">
+            Tune the drawing with <span className="font-medium text-foreground">Sketch detail</span> below the image.
+          </p>
+        )}
       </div>
       <div>
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Value groups</p>
         {LevelButtons}
       </div>
-      <div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Focus</p>
-        {FocusButtons}
-      </div>
-      <div>{Sliders}</div>
+      {!isSketch && (
+        <div>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Focus</p>
+          {FocusButtons}
+        </div>
+      )}
       <div>
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Compare</p>
         <div className="flex gap-1.5">
@@ -1045,6 +1074,9 @@ export default function ValueTab() {
           )}
         </div>
 
+        {/* Always-accessible controls directly below the image (context-aware) */}
+        {mobileView !== 'palette' && InlineImageControls}
+
         {/* Top: distribution strip always visible (compact) when not on palette view */}
         {mobileView !== 'palette' && groups.length > 0 && (
           <div className="px-3 py-2 border-t border-border toolbar-surface">
@@ -1067,9 +1099,7 @@ export default function ValueTab() {
         </div>
 
         {showMobileControls && (
-          <div className={`absolute inset-x-0 bottom-0 z-30 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-border bg-card shadow-2xl transition-opacity ${
-            activeSlider ? 'opacity-0 pointer-events-none' : 'opacity-100'
-          }`}>
+          <div className="absolute inset-x-0 bottom-0 z-30 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-3 sticky top-0 bg-card">
               <p className="text-sm font-semibold">Value controls</p>
               <button onClick={() => setShowMobileControls(false)}
@@ -1080,8 +1110,6 @@ export default function ValueTab() {
             <div className="p-4">{ControlsBlock}</div>
           </div>
         )}
-
-        {MobileSliderFocusBar}
 
         <canvas ref={canvasRef} className="hidden" />
       </div>
@@ -1102,6 +1130,9 @@ export default function ValueTab() {
         <div className="flex-[7] canvas-area flex items-center justify-center min-h-0 overflow-hidden">
           {ProcessedImage}
         </div>
+
+        {/* Always-accessible visibility controls, permanently below the image */}
+        {InlineImageControls}
 
         {/* Compact palette analysis — fixed footprint, internal scroll */}
         <div className="flex-[3] min-h-[180px] max-h-[34vh] border-t border-border panel-surface px-3 py-2 flex flex-col gap-2 overflow-hidden">

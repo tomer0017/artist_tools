@@ -35,6 +35,10 @@ export interface ValueSettings {
   mode?: 'grayscale' | 'color' | 'painter' | 'sketch';
   levels?: number;
   focus?: 'none' | 'shadow' | 'highlight' | 'squint';
+  // Sketch mode only: 0 = simple (few strong contours) → 100 = detailed
+  // (more secondary edges). A painter-facing control that hides the underlying
+  // edge threshold / blur tuning. Default 50 = balanced construction drawing.
+  sketchDetail?: number;
 }
 
 export interface SampledColor {
@@ -114,6 +118,7 @@ export const DEFAULT_VALUE_SETTINGS: ValueSettings = {
   // users can still drop to 3/5/7 for composition/block-in or push to 11/13.
   levels: 9,
   focus: 'none',
+  sketchDetail: 50,
 };
 
 export const genId = () => Math.random().toString(36).slice(2, 10);
