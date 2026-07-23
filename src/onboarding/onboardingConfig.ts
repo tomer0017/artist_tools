@@ -7,32 +7,11 @@ import type { OnboardingConfig, ToolId } from './onboardingTypes';
 // every step answers one thing in at most two lines.
 
 export const ONBOARDING: Partial<Record<ToolId, OnboardingConfig>> = {
-  measure: {
-    id: 'measure',
-    title: 'Proportion Measure',
-    tagline: 'Measure real proportions and angles on your reference so your drawing stays accurate.',
-    preview: [
-      { variant: 'original', label: 'Reference' },
-      { variant: 'measure', label: 'Measured' },
-    ],
-    steps: [
-      {
-        target: 'measure-canvas',
-        title: 'Set a reference length',
-        body: 'Draw a calibration line, then enter its real size to scale every measurement.',
-      },
-      {
-        target: 'measure-tools',
-        title: 'Measure & compare',
-        body: 'Add lines to read lengths, angles and ratios across the subject.',
-      },
-      {
-        title: 'Collect colors too',
-        body: 'Use the eyedropper to sample colors and send them straight to the Color tab.',
-      },
-    ],
-  },
-
+  // NOTE: Measure intentionally has NO entry here. It uses a dedicated,
+  // workflow-driven onboarding (a single illustrated intro + an on-canvas
+  // helper + a success card) instead of the generic preview + spotlight tour —
+  // see src/components/measure/onboarding/. Its Help replay is handled by
+  // MeasureHelpButton, not the generic HelpButton.
   value: {
     id: 'value',
     title: 'Value Study',

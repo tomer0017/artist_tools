@@ -687,7 +687,7 @@ export default function MeasureCanvas({ containerRef }: Props) {
       {/* Mode indicator (desktop / non-drawing states) */}
       {!(isMobile && isActiveDrawing) && !calInputVisible && !calDraftReady && (
         <div className="absolute bottom-3 left-3 text-xs text-muted-foreground bg-card/80 px-2 py-1 rounded">
-          {mode === 'calibrate' && (calPoints.length === 0 ? 'Click two points to set reference line' : calPoints.length === 1 ? 'Click second point' : '')}
+          {mode === 'calibrate' && (calPoints.length === 0 ? 'Draw a line over something whose real size you know' : calPoints.length === 1 ? 'Click the second point' : '')}
           {mode === 'measure' && (pendingPoint ? 'Click to complete measurement' : 'Click to start measuring')}
           {mode === 'eyedropper' && 'Click to sample a color'}
           {mode === 'select' && 'Click a line to select, drag endpoints to adjust'}

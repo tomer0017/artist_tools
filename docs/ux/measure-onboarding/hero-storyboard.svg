@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 264" width="360" height="264" role="img"
+  aria-label="Tap two points across something whose real size you know to draw a reference line, enter its real length, and every measurement becomes accurate.">
+  <!-- Standalone design mockup of MeasureWorkflowArt. In-app the amber/foreground
+       colours come from the theme's --primary / --foreground tokens; here they are
+       inlined so the file renders on its own. -->
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3d3d40"/><stop offset="1" stop-color="#28282b"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9cbcd0"/><stop offset="1" stop-color="#dbe2e6"/>
+    </linearGradient>
+    <clipPath id="pic"><rect x="118" y="86" width="150" height="104" rx="2"/></clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="360" height="264" fill="url(#wall)"/>
+  <ellipse cx="120" cy="150" rx="210" ry="170" fill="#ffffff" opacity="0.05"/>
+
+  <rect x="112" y="82" width="164" height="118" rx="6" fill="#000000" opacity="0.38"/>
+  <rect x="106" y="74" width="164" height="118" rx="6" fill="#6b4626"/>
+  <rect x="112" y="80" width="152" height="106" rx="3" fill="#8a5c33"/>
+  <rect x="118" y="86" width="140" height="94" fill="#233038"/>
+  <g clip-path="url(#pic)">
+    <rect x="118" y="86" width="140" height="58" fill="url(#sky)"/>
+    <rect x="118" y="150" width="140" height="30" fill="#415b64"/>
+    <polygon points="118,152 156,104 194,152" fill="#7c8a92"/>
+    <polygon points="142,152 146,110 156,104 170,124 160,152" fill="#65727a"/>
+    <polygon points="168,152 214,92 260,152" fill="#8b98a0"/>
+    <polygon points="204,110 214,92 226,114 216,118 208,116" fill="#eef2f4"/>
+    <polygon points="149,116 156,104 165,120 157,123" fill="#eef2f4"/>
+    <polygon points="180,152 187,134 194,152" fill="#2f4b3a"/>
+    <polygon points="190,152 197,130 204,152" fill="#274332"/>
+    <polygon points="236,152 243,132 250,152" fill="#2f4b3a"/>
+    <rect x="118" y="150" width="140" height="30" fill="#000000" opacity="0.08"/>
+    <rect x="182" y="150" width="5" height="26" fill="#eef2f4" opacity="0.16"/>
+  </g>
+
+  <!-- Reference line across the KNOWN canvas width -->
+  <line x1="118" y1="134" x2="258" y2="134" stroke="#f59e0b" stroke-width="4" stroke-linecap="round"/>
+  <g>
+    <rect x="160" y="112" width="56" height="22" rx="11" fill="#f59e0b"/>
+    <text x="188" y="127" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#191a1c">80 cm</text>
+  </g>
+  <circle cx="118" cy="134" r="7" fill="#1b1b1d" stroke="#f59e0b" stroke-width="4"/>
+  <circle cx="258" cy="134" r="7" fill="#1b1b1d" stroke="#f59e0b" stroke-width="4"/>
+
+  <!-- The payoff: another line now reads a true size automatically -->
+  <g>
+    <line x1="214" y1="92" x2="214" y2="150" stroke="#e7e3da" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+    <circle cx="214" cy="92" r="3.6" fill="#e7e3da"/><circle cx="214" cy="150" r="3.6" fill="#e7e3da"/>
+    <rect x="224" y="108" width="46" height="20" rx="10" fill="#e7e3da"/>
+    <text x="247" y="122" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#18181b">33 cm</text>
+  </g>
+
+  <g font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#e7e3da">
+    <text x="16" y="40">Tap one end…</text>
+    <text x="344" y="40" text-anchor="end">…then the other</text>
+  </g>
+  <g fill="none" stroke="#f59e0b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 50 C 38 84, 66 108, 112 128"/><polyline points="104,120 113,130 116,117"/>
+    <path d="M320 50 C 322 84, 296 110, 262 128"/><polyline points="256,117 261,130 270,121"/>
+  </g>
+  <text x="180" y="236" text-anchor="middle" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#78787f">Enter its real size once — every line then measures true.</text>
+</svg>

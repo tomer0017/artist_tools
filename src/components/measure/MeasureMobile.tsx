@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, Undo2, Redo2, MoreVertical, Hand, MousePointer, Plus, Layers as LayersIcon,
   Ruler, X, Check, Eye, EyeOff, Trash2, Download, FileJson, FilePlus,
-  Maximize, Lightbulb, Frame, RectangleHorizontal,
+  Maximize,
 } from 'lucide-react';
 import { useProject } from '@/hooks/useProjectStore';
-import { useOnboarding, hasSeenOnboarding, markOnboardingSeen } from '@/onboarding';
+import { MeasureIntroModal, MeasureScaleSuccess, useMeasureIntro, useScaleSuccess } from './onboarding';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import ImageUploader from '@/components/common/ImageUploader';
 import {
@@ -16,11 +16,6 @@ type Tool = 'pan' | 'edit' | 'add' | 'cal';
 
 const ENDPOINT_HIT_PX = 32; // touch hit radius in screen px
 const LINE_HIT_PX = 18;
-
-// First-time "Set Measurement Scale" tutorial. Persisted through the shared
-// onboarding storage (same prefix/reset path) so it shows once and is cleared
-// whenever onboarding is reset — without replacing the general onboarding tour.
-const SCALE_INTRO_ID = 'measure-scale-intro';
 
 function distToSegment(p: Point, a: Point, b: Point) {
   const dx = b.x - a.x, dy = b.y - a.y;
@@ -44,9 +39,11 @@ export default function MeasureMobile() {
     isImageLoading, imageLoadError, setImageLoaded, setImageLoadError, clearImageLoadError, beginImageUpload,
   } = useProject();
 
-  // Only used to avoid stacking the scale tutorial on top of the general
-  // onboarding tour — this tutorial does not replace that system.
-  const { isOpen: onboardingOpen } = useOnboarding();
+  // Redesigned onboarding: a single illustrated Step-1 modal (auto-shown once,
+  // replayable from Help) and a Step-3 success card when the scale is first set.
+  // The canvas itself carries Step 2 (the on-image "Draw a line…" helper).
+  const { open: introOpen, openIntro, close: closeIntro } = useMeasureIntro();
+  const { open: scaleSuccessOpen, sizeLabel: scaleSuccessLabel, dismiss: dismissScaleSuccess } = useScaleSuccess();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -90,14 +87,6 @@ export default function MeasureMobile() {
   // Floating default-line-color picker popover (opened from the color swatch
   // in the floating action column).
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-
-  // Guided "Set Measurement Scale" flow:
-  //  - scaleIntroVisible: the illustrated first-time tutorial shown *before*
-  //    drawing, so the user understands why they draw one calibration line.
-  //  - scaleSuccessVisible: the transient "✓ scale configured" confirmation.
-  const [scaleIntroVisible, setScaleIntroVisible] = useState(false);
-  const [scaleSuccessVisible, setScaleSuccessVisible] = useState(false);
-  const [dontShowScaleIntro, setDontShowScaleIntro] = useState(true);
 
   // Height of the visible viewport above the soft keyboard, tracked only while
   // the reference-length dialog is open so it can stay vertically centered in
@@ -446,45 +435,28 @@ export default function MeasureMobile() {
     setCalibration({ start: calPoints[0], end: calPoints[1], realWorldSize: size, unit: calUnit });
     setCalPoints([]); setCalInputVisible(false); setCalSize('');
     // Guided workflow: once the scale is defined, drop the user straight into
-    // Add mode so they can start placing measurement lines immediately.
+    // Add mode so they can start placing measurement lines immediately. The
+    // Step-3 success card is driven by useScaleSuccess (calibration null→set).
     setTool('add'); setPendingPoint(null);
     restorePreCalView();
-    // Task 3 · Step 4 — confirm success in plain language, then auto-dismiss.
-    setScaleSuccessVisible(true);
-    window.setTimeout(() => setScaleSuccessVisible(false), 2600);
   };
 
-  // Open the illustrated scale tutorial (explains what/why *before* drawing).
+  // Open the illustrated intro modal (explains what/why *before* drawing).
   const startScaleSetup = () => {
     setSheet(null);
     setCalPoints([]);
     setCalDraftReady(false);
     setCalInputVisible(false);
-    setScaleIntroVisible(true);
+    openIntro();
   };
-  // Dismiss the tutorial. Honors "Don't show this again" (persisted), and
-  // optionally drops the user straight into drawing the calibration line.
-  const closeScaleIntro = useCallback((beginDrawing: boolean) => {
-    if (dontShowScaleIntro) markOnboardingSeen(SCALE_INTRO_ID);
-    setScaleIntroVisible(false);
-    if (beginDrawing) {
-      setTool('cal');
-      setCalPoints([]);
-      setCalDraftReady(false);
-    }
-  }, [dontShowScaleIntro]);
-
-  // First-time trigger: the very first time the user is on the Measure tool with
-  // an image but no measurement scale, auto-open the tutorial — once, ever
-  // (unless onboarding is reset). Never stacks on the general onboarding tour.
-  const scaleIntroAutoShownRef = useRef(false);
-  useEffect(() => {
-    if (scaleIntroAutoShownRef.current) return;
-    if (!image || calibration || onboardingOpen) return;
-    if (hasSeenOnboarding(SCALE_INTRO_ID)) return;
-    scaleIntroAutoShownRef.current = true;
-    setScaleIntroVisible(true);
-  }, [image, calibration, onboardingOpen]);
+  // Primary CTA of the intro: mark it seen and drop straight into drawing the
+  // reference line.
+  const beginReferenceLine = useCallback(() => {
+    closeIntro();
+    setTool('cal');
+    setCalPoints([]);
+    setCalDraftReady(false);
+  }, [closeIntro]);
 
   // Recalculate canvas bounds on iOS visual viewport changes (keyboard show/hide,
   // orientation, dynamic browser chrome). Does not change zoom/pan unless needed.
@@ -1170,75 +1142,12 @@ export default function MeasureMobile() {
         </Sheet>
       )}
 
-      {/* First-time scale tutorial — an illustration-led explainer shown before
-          the user is ever asked to draw. The picture carries the explanation;
-          the copy only supports it. Auto-shows once, then remembers. */}
-      {scaleIntroVisible && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center px-5 py-6">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => closeScaleIntro(false)} />
-          <div className="relative w-full max-w-sm max-h-full overflow-y-auto bg-card border border-border rounded-3xl shadow-2xl animate-slide-up">
-            <div className="p-5 sm:p-6 space-y-5">
-              {/* Header */}
-              <div className="text-center space-y-2">
-                <div className="mx-auto h-11 w-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-                  <Ruler className="w-6 h-6" />
-                </div>
-                <h3 className="text-xl font-bold text-foreground">Set Measurement Scale</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  To measure anything accurately, we first need one real-world distance.
-                </p>
-              </div>
+      {/* Step 1 — illustration-led intro. Auto-shows once, replayable from Help.
+          "Draw my reference line" drops the painter straight into drawing. */}
+      <MeasureIntroModal open={introOpen} onStart={beginReferenceLine} onClose={closeIntro} />
 
-              {/* Illustration — the primary explanation */}
-              <ScaleTutorialArt />
-
-              {/* Supporting hint */}
-              <div className="rounded-2xl border border-border bg-secondary/30 p-3.5">
-                <div className="flex items-start gap-2.5">
-                  <Lightbulb className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                  <div className="space-y-2.5">
-                    <p className="text-sm text-foreground">Choose something whose real size you already know, like:</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      <ScaleHintChip icon={<RectangleHorizontal className="w-4 h-4" />} label="Canvas size" />
-                      <ScaleHintChip icon={<Frame className="w-4 h-4" />} label="Picture frame" />
-                      <ScaleHintChip icon={<Ruler className="w-4 h-4" />} label="Ruler" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between gap-3 pt-1">
-                <button onClick={() => setDontShowScaleIntro(v => !v)}
-                  className="flex items-center gap-2 text-sm text-muted-foreground active:text-foreground"
-                  aria-pressed={dontShowScaleIntro}>
-                  <span className={`h-5 w-5 rounded-md border flex items-center justify-center transition-colors ${dontShowScaleIntro ? 'bg-primary border-primary text-primary-foreground' : 'border-border'}`}>
-                    {dontShowScaleIntro && <Check className="w-3.5 h-3.5" />}
-                  </span>
-                  Don't show again
-                </button>
-                <button onClick={() => closeScaleIntro(true)}
-                  className="h-12 px-7 rounded-xl bg-primary text-primary-foreground font-semibold active:opacity-80">
-                  Got it
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Task 3 · Step 4 — transient success confirmation after the scale is set. */}
-      {scaleSuccessVisible && (
-        <div className="fixed inset-x-0 top-16 z-[70] flex justify-center px-6 pointer-events-none">
-          <div className="flex items-start gap-2.5 max-w-sm bg-card border border-border rounded-xl shadow-2xl px-4 py-3 animate-slide-up">
-            <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-            <div>
-              <div className="text-sm font-semibold text-foreground">Measurement scale configured</div>
-              <div className="text-xs text-muted-foreground">All measurements now use this scale.</div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Step 3 — celebratory confirmation the first time a scale is set. */}
+      <MeasureScaleSuccess open={scaleSuccessOpen} sizeLabel={scaleSuccessLabel} onDone={dismissScaleSuccess} />
 
     </div>
   );
@@ -1281,86 +1190,6 @@ function SheetItem({ onClick, icon, label, danger }: { onClick: () => void; icon
       className={`w-full flex items-center gap-3 px-3 py-3 rounded-md min-h-[48px] text-sm active:bg-secondary ${danger ? 'text-destructive' : 'text-foreground'}`}>
       {icon}<span>{label}</span>
     </button>
-  );
-}
-
-// A single "known-size object" suggestion chip for the scale tutorial hint.
-function ScaleHintChip({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-      <span className="text-primary">{icon}</span>{label}
-    </span>
-  );
-}
-
-// Illustration for the first-time scale tutorial: a framed painting on a wall
-// with two tap points and the dashed calibration line drawn between them. Pure
-// SVG so it stays crisp at any size and ships no image assets. Annotation uses
-// the theme's primary/foreground tokens so it adapts to light & dark.
-function ScaleTutorialArt() {
-  return (
-    <div className="rounded-2xl overflow-hidden border border-border bg-black/20">
-      <svg viewBox="0 0 320 240" className="w-full block" role="img"
-        aria-label="Draw a line between two points across an object whose real size you know, such as the picture frame.">
-        <defs>
-          <linearGradient id="stw-wall" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#3d3d40" />
-            <stop offset="1" stopColor="#28282b" />
-          </linearGradient>
-          <linearGradient id="stw-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#93b3c8" />
-            <stop offset="1" stopColor="#d2dade" />
-          </linearGradient>
-          <clipPath id="stw-pic"><rect x="100" y="98" width="112" height="76" /></clipPath>
-        </defs>
-
-        {/* Wall + soft light wash from the upper-left */}
-        <rect x="0" y="0" width="320" height="240" fill="url(#stw-wall)" />
-        <ellipse cx="86" cy="150" rx="170" ry="140" fill="#ffffff" opacity="0.05" />
-
-        {/* Framed painting (drop shadow, wooden frame, picture) */}
-        <rect x="92" y="93" width="140" height="100" rx="5" fill="#000000" opacity="0.4" />
-        <rect x="86" y="86" width="140" height="100" rx="5" fill="#6b4626" />
-        <rect x="92" y="92" width="128" height="88" rx="3" fill="#8a5c33" />
-        <rect x="100" y="98" width="112" height="76" fill="#233038" />
-        <g clipPath="url(#stw-pic)">
-          <rect x="100" y="98" width="112" height="46" fill="url(#stw-sky)" />
-          <rect x="100" y="150" width="112" height="24" fill="#415b64" />
-          {/* Mountains + snow caps */}
-          <polygon points="100,152 130,116 160,152" fill="#7c8a92" />
-          <polygon points="120,152 122,120 130,116 140,130 132,152" fill="#65727a" />
-          <polygon points="138,152 176,104 214,152" fill="#8b98a0" />
-          <polygon points="168,120 176,104 186,122 178,126 172,124" fill="#eef2f4" />
-          <polygon points="124,124 130,116 137,127 131,130" fill="#eef2f4" />
-          {/* Treeline + reflection hint */}
-          <polygon points="150,152 156,138 162,152" fill="#2f4b3a" />
-          <polygon points="158,152 164,134 170,152" fill="#274332" />
-          <polygon points="196,152 202,136 208,152" fill="#2f4b3a" />
-          <rect x="100" y="150" width="112" height="24" fill="#000000" opacity="0.08" />
-          <rect x="150" y="150" width="4" height="20" fill="#eef2f4" opacity="0.18" />
-        </g>
-
-        {/* Calibration overlay — the point of the whole illustration */}
-        <line x1="70" y1="138" x2="250" y2="138" stroke="hsl(var(--primary))" strokeWidth="3"
-          strokeDasharray="7 8" strokeLinecap="round" />
-        {[70, 250].map(cx => (
-          <g key={cx}>
-            <circle cx={cx} cy="138" r="9.5" fill="#1b1b1d" stroke="hsl(var(--primary))" strokeWidth="4" />
-            <circle cx={cx} cy="138" r="3.4" fill="#ffffff" />
-          </g>
-        ))}
-
-        {/* Guidance labels + arrows */}
-        <text x="12" y="36" fontSize="12" fontWeight="600" fill="hsl(var(--foreground))">1. Tap the first point</text>
-        <text x="308" y="36" fontSize="12" fontWeight="600" textAnchor="end" fill="hsl(var(--foreground))">2. Tap the second point</text>
-        <g fill="none" stroke="hsl(var(--primary))" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M56 46 C 54 82, 62 104, 70 124" />
-          <polyline points="63,115 70,126 77,116" />
-          <path d="M264 46 C 266 82, 258 104, 250 124" />
-          <polyline points="243,116 250,126 257,115" />
-        </g>
-      </svg>
-    </div>
   );
 }
 

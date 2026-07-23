@@ -6,6 +6,7 @@ import MeasureCanvas from './MeasureCanvas';
 import MeasureToolbar from './MeasureToolbar';
 import MeasurePanel from './MeasurePanel';
 import MeasureMobile from './MeasureMobile';
+import { MeasureDesktopOnboarding } from './onboarding';
 import { Maximize, SlidersHorizontal, X } from 'lucide-react';
 
 export default function MeasureTab() {
@@ -116,6 +117,8 @@ export default function MeasureTab() {
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
+      {/* Redesigned onboarding: Step-1 intro + Step-3 success (desktop path). */}
+      <MeasureDesktopOnboarding />
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Toolbar — hide on mobile during active drawing */}
         {!isMobile && !isActiveDrawing && <MeasureToolbar onResetView={resetView} />}

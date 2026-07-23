@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 620" width="420" height="620" role="img"
+  aria-label="Mockup of the Measure onboarding Step 1 modal.">
+  <!-- Full-card mockup of MeasureIntroModal (Step 1). Colours inlined from theme. -->
+  <rect x="0" y="0" width="420" height="620" fill="#0f0f11"/>
+  <!-- Card -->
+  <rect x="26" y="26" width="368" height="568" rx="24" fill="#201f22" stroke="#34343a"/>
+  <!-- close -->
+  <circle cx="366" cy="60" r="15" fill="#2a2a2e"/>
+  <path d="M361 55 l10 10 M371 55 l-10 10" stroke="#9a9aa2" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Hero storyboard (scaled) -->
+  <g transform="translate(54,58) scale(0.86)">
+    <rect x="0" y="0" width="360" height="264" rx="16" fill="#000000" opacity="0.25"/>
+    <use href="#mini"/>
+  </g>
+
+  <!-- Copy -->
+  <text x="210" y="380" text-anchor="middle" font-family="Inter, sans-serif" font-size="21" font-weight="700" fill="#e7e3da">Start with one thing you can measure</text>
+  <text x="210" y="406" text-anchor="middle" font-family="Inter, sans-serif" font-size="13.5" fill="#9a9aa2">Draw a line across something whose real size you</text>
+  <text x="210" y="424" text-anchor="middle" font-family="Inter, sans-serif" font-size="13.5" fill="#9a9aa2">already know. That's all it takes to be accurate.</text>
+
+  <!-- Chips -->
+  <g font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#9a9aa2">
+    <g><rect x="96" y="446" width="62" height="26" rx="13" fill="#26262b" stroke="#34343a"/><text x="127" y="463" text-anchor="middle">Canvas</text></g>
+    <g><rect x="166" y="446" width="54" height="26" rx="13" fill="#26262b" stroke="#34343a"/><text x="193" y="463" text-anchor="middle">Frame</text></g>
+    <g><rect x="228" y="446" width="52" height="26" rx="13" fill="#26262b" stroke="#34343a"/><text x="254" y="463" text-anchor="middle">Ruler</text></g>
+    <g><rect x="288" y="446" width="50" height="26" rx="13" fill="#26262b" stroke="#34343a"/><text x="313" y="463" text-anchor="middle">Book</text></g>
+  </g>
+
+  <!-- Primary CTA -->
+  <rect x="54" y="496" width="312" height="48" rx="12" fill="#f59e0b"/>
+  <text x="210" y="525" text-anchor="middle" font-family="Inter, sans-serif" font-size="15.5" font-weight="700" fill="#191a1c">Draw my reference line</text>
+  <!-- Secondary -->
+  <text x="210" y="568" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#78787f">Skip for now</text>
+
+  <!-- reusable mini storyboard -->
+  <defs>
+    <g id="mini">
+      <rect x="0" y="0" width="360" height="264" fill="#2f2f33"/>
+      <rect x="112" y="82" width="164" height="118" rx="6" fill="#000" opacity="0.38"/>
+      <rect x="106" y="74" width="164" height="118" rx="6" fill="#6b4626"/>
+      <rect x="118" y="86" width="140" height="94" fill="#233038"/>
+      <polygon points="118,180 168,110 218,180" fill="#7c8a92"/>
+      <polygon points="168,180 214,96 260,180" fill="#8b98a0"/>
+      <line x1="118" y1="134" x2="258" y2="134" stroke="#f59e0b" stroke-width="4" stroke-linecap="round"/>
+      <rect x="160" y="112" width="56" height="22" rx="11" fill="#f59e0b"/>
+      <text x="188" y="127" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#191a1c">80 cm</text>
+      <circle cx="118" cy="134" r="7" fill="#1b1b1d" stroke="#f59e0b" stroke-width="4"/>
+      <circle cx="258" cy="134" r="7" fill="#1b1b1d" stroke="#f59e0b" stroke-width="4"/>
+      <g font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#e7e3da">
+        <text x="16" y="40">Tap one end…</text><text x="344" y="40" text-anchor="end">…then the other</text>
+      </g>
+    </g>
+  </defs>
+</svg>
