@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, Undo2, Redo2, MoreVertical, Hand, MousePointer, Plus, Layers as LayersIcon,
-  Ruler, Crosshair, X, Check, Eye, EyeOff, Trash2, Download, FileJson, FilePlus,
-  Focus, Maximize,
+  Ruler, X, Check, Eye, EyeOff, Trash2, Download, FileJson, FilePlus,
+  Maximize,
 } from 'lucide-react';
 import { useProject } from '@/hooks/useProjectStore';
 import { useSaveMedia } from '@/components/common/SaveMedia';
@@ -53,7 +53,6 @@ export default function MeasureMobile() {
 
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
   const [tool, setTool] = useState<Tool>(calibration ? 'edit' : 'cal');
-  const [focusSelected, setFocusSelected] = useState(true);
 
   // Inline "add layer" input state for the Layers sheet
   const [addingLayer, setAddingLayer] = useState(false);
@@ -81,6 +80,12 @@ export default function MeasureMobile() {
   // Floating default-line-color picker popover (opened from the color swatch
   // in the floating action column).
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+
+  // Guided "Set Measurement Scale" flow (Task 3):
+  //  - scaleIntroVisible: the plain-language explainer shown *before* drawing.
+  //  - scaleSuccessVisible: the transient "✓ scale configured" confirmation.
+  const [scaleIntroVisible, setScaleIntroVisible] = useState(false);
+  const [scaleSuccessVisible, setScaleSuccessVisible] = useState(false);
 
   // Height of the visible viewport above the soft keyboard, tracked only while
   // the reference-length dialog is open so it can stay vertically centered in
@@ -165,31 +170,36 @@ export default function MeasureMobile() {
     if (!containerRef.current) return null;
     const r = containerRef.current.getBoundingClientRect();
     const sx = clientX - r.left, sy = clientY - r.top;
-    // Only consider visible & in visible layers
+    // Only consider visible & in visible layers. Every visible line stays
+    // selectable and editable regardless of the Eye (presentation) state.
     const visLayerIds = new Set(layers.filter(l => l.visible).map(l => l.id));
     const candidates = measurements.filter(m => m.visible && visLayerIds.has(m.layerId));
-    // In focus mode, only the selected line's *endpoints* are draggable (so
-    // editing one line never accidentally grabs a neighbour's endpoint)…
-    const endpointList = focusSelected && selectedLineId
-      ? candidates.filter(m => m.id === selectedLineId)
-      : candidates;
-    const orderedEndpoints = [...endpointList].sort((a, b) => (a.id === selectedLineId ? -1 : b.id === selectedLineId ? 1 : 0));
-    for (const m of orderedEndpoints) {
+    // Selected line gets priority so its endpoints are easiest to grab.
+    const ordered = [...candidates].sort((a, b) => (a.id === selectedLineId ? -1 : b.id === selectedLineId ? 1 : 0));
+    for (const m of ordered) {
       const a = { x: m.start.x * zoom + panOffset.x, y: m.start.y * zoom + panOffset.y };
       const b = { x: m.end.x * zoom + panOffset.x, y: m.end.y * zoom + panOffset.y };
       if (Math.hypot(sx - a.x, sy - a.y) <= ENDPOINT_HIT_PX) return { type: 'endpoint' as const, lineId: m.id, endpoint: 'start' as const };
       if (Math.hypot(sx - b.x, sy - b.y) <= ENDPOINT_HIT_PX) return { type: 'endpoint' as const, lineId: m.id, endpoint: 'end' as const };
     }
-    // …but tapping any visible line body selects it, so the artist can switch
-    // between lines directly on the canvas (the old "all lines" list is gone).
-    const orderedLines = [...candidates].sort((a, b) => (a.id === selectedLineId ? -1 : b.id === selectedLineId ? 1 : 0));
-    for (const m of orderedLines) {
+    for (const m of ordered) {
       const a = { x: m.start.x * zoom + panOffset.x, y: m.start.y * zoom + panOffset.y };
       const b = { x: m.end.x * zoom + panOffset.x, y: m.end.y * zoom + panOffset.y };
       if (distToSegment({ x: sx, y: sy }, a, b) <= LINE_HIT_PX) return { type: 'line' as const, lineId: m.id };
     }
     return null;
-  }, [measurements, layers, focusSelected, selectedLineId, zoom, panOffset]);
+  }, [measurements, layers, selectedLineId, zoom, panOffset]);
+
+  // ---------- Canvas UI guard (Task 2) ----------
+  // Floating controls live inside the same element that owns the canvas touch
+  // handlers, so their touch events bubble up and would otherwise be treated as
+  // canvas taps (e.g. picking a color would drop a measurement point). Any
+  // floating control marked with `data-canvas-ui` fully consumes the touch:
+  // the canvas handlers bail out when the gesture started on such an element.
+  const isCanvasUiTouch = useCallback((e: React.TouchEvent) => {
+    const target = e.target as HTMLElement | null;
+    return !!target?.closest?.('[data-canvas-ui]');
+  }, []);
 
   // ---------- Magnifier ----------
   const drawMagnifier = useCallback((imgX: number, imgY: number) => {
@@ -237,6 +247,7 @@ export default function MeasureMobile() {
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (calInputVisible) return;
+    if (isCanvasUiTouch(e)) return; // touch began on a floating control — ignore
     if (e.touches.length === 2) {
       e.preventDefault();
       const t0 = e.touches[0], t1 = e.touches[1];
@@ -272,7 +283,7 @@ export default function MeasureMobile() {
         return;
       }
     }
-  }, [tool, calInputVisible, panOffset, zoom, screenToImage, hitTest, drawMagnifier, measurements, setSelectedLineId]);
+  }, [tool, calInputVisible, panOffset, zoom, screenToImage, hitTest, drawMagnifier, measurements, setSelectedLineId, isCanvasUiTouch]);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (!drag) return;
@@ -315,6 +326,8 @@ export default function MeasureMobile() {
   }, [drag, screenToImage, updateMeasurement, drawMagnifier, setPanOffset, setZoom]);
 
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
+    // Touch began on a floating control (Task 2): consume it, never draw.
+    if (isCanvasUiTouch(e)) { setDrag(null); return; }
     const wasDrag = drag;
     setDrag(null);
 
@@ -349,10 +362,10 @@ export default function MeasureMobile() {
     }
     if (tool === 'edit') {
       const hit = hitTest(ct.clientX, ct.clientY);
-      if (hit) setSelectedLineId(hit.lineId);
-      else if (!focusSelected) setSelectedLineId(null);
+      // Tap a line to select it; tap empty canvas to deselect.
+      setSelectedLineId(hit ? hit.lineId : null);
     }
-  }, [drag, tool, calPoints, pendingPoint, lineColor, activeLayerId, addMeasurement, screenToImage, hitTest, focusSelected, setSelectedLineId]);
+  }, [drag, tool, calPoints, pendingPoint, lineColor, activeLayerId, addMeasurement, screenToImage, hitTest, isCanvasUiTouch, setSelectedLineId]);
 
   // ---------- Calibration confirm ----------
   // Dismiss any active soft keyboard, then refit the canvas once the iOS
@@ -420,11 +433,31 @@ export default function MeasureMobile() {
     if (isNaN(size) || size <= 0 || calPoints.length < 2) return;
     setCalibration({ start: calPoints[0], end: calPoints[1], realWorldSize: size, unit: calUnit });
     setCalPoints([]); setCalInputVisible(false); setCalSize('');
-    // Guided workflow: once the reference is defined, drop the user straight
-    // into Add mode so they can start placing measurement lines immediately
-    // (no manual "Add" tap required).
+    // Guided workflow: once the scale is defined, drop the user straight into
+    // Add mode so they can start placing measurement lines immediately.
     setTool('add'); setPendingPoint(null);
     restorePreCalView();
+    // Task 3 · Step 4 — confirm success in plain language, then auto-dismiss.
+    setScaleSuccessVisible(true);
+    window.setTimeout(() => setScaleSuccessVisible(false), 2600);
+  };
+
+  // Task 3 · Step 1 → start the guided scale flow with the plain-language
+  // explainer (what a measurement scale is and why it's needed) *before* the
+  // user is asked to draw anything.
+  const startScaleSetup = () => {
+    setSheet(null);
+    setCalPoints([]);
+    setCalDraftReady(false);
+    setCalInputVisible(false);
+    setScaleIntroVisible(true);
+  };
+  // Explainer dismissed → now let the user draw the reference line.
+  const beginScaleDrawing = () => {
+    setScaleIntroVisible(false);
+    setTool('cal');
+    setCalPoints([]);
+    setCalDraftReady(false);
   };
 
   // Recalculate canvas bounds on iOS visual viewport changes (keyboard show/hide,
@@ -676,12 +709,12 @@ export default function MeasureMobile() {
       {referenceMode ? (
         <div className="shrink-0 z-30 flex items-center justify-between px-3 h-12 border-b border-border bg-card/95 backdrop-blur-sm">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Crosshair className="w-4 h-4 text-primary" />
-            {enteringLength ? 'Enter reference length' : 'Set reference'}
+            <Ruler className="w-4 h-4 text-primary" />
+            {enteringLength ? 'Enter real-world length' : 'Set measurement scale'}
           </div>
           {canCancelReference && (
             <button onClick={cancelCal}
-              className="h-10 px-3 flex items-center gap-1.5 rounded-md text-sm text-muted-foreground active:bg-secondary" aria-label="Cancel reference">
+              className="h-10 px-3 flex items-center gap-1.5 rounded-md text-sm text-muted-foreground active:bg-secondary" aria-label="Cancel scale setup">
               <X className="w-4 h-4" /> Cancel
             </button>
           )}
@@ -743,12 +776,15 @@ export default function MeasureMobile() {
             {tool === 'add' && pendingPoint && (
               <circle cx={pendingPoint.x} cy={pendingPoint.y} r={6 / zoom} fill={lineColor} />
             )}
-            {/* Lines */}
+            {/* Lines — the Eye button drives the whole presentation (Task 1).
+                Eye open: full-opacity lines + labels. Eye closed: lines fade so
+                the artwork reads clearly, yet stay editable/selectable. The
+                selected line always stays full-opacity so it's easy to edit. */}
             {renderedLines.map(line => {
               const isSelected = line.id === selectedLineId;
-              const dim = focusSelected && selectedLineId && !isSelected;
+              const faded = !showMeasurements && !isSelected;
               return (
-                <g key={line.id} opacity={dim ? 0.25 : 1}>
+                <g key={line.id} opacity={faded ? 0.3 : 1}>
                   <line x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
                     stroke={line.color} strokeWidth={(isSelected ? 3.5 : 2) / zoom} />
                   {isSelected && (
@@ -760,9 +796,11 @@ export default function MeasureMobile() {
                 </g>
               );
             })}
-            {/* Labels — anchored near each line's start, with anti-overlap offset */}
+            {/* Labels — shown only when the Eye is open (Task 1). When closed,
+                every label is hidden so the focus is purely on the artwork; the
+                selected line's size is still readable in the on-canvas pill. */}
             {(() => {
-              if (!showMeasurements && !selectedLineId) return null;
+              if (!showMeasurements) return null;
               // Compute desired anchor for each visible line (near start, offset perpendicular to the line)
               const anchorOffsetPx = 14; // screen px from start point
               const placed: { x: number; y: number; h: number }[] = [];
@@ -784,9 +822,6 @@ export default function MeasureMobile() {
               items.sort((a, b) => (a.line.id === selectedLineId ? 1 : b.line.id === selectedLineId ? -1 : 0));
               return items.map(({ line, lx, ly }) => {
                 const isSelected = line.id === selectedLineId;
-                const dim = focusSelected && selectedLineId && !isSelected;
-                if (!isSelected && !showMeasurements) return null;
-                if (!isSelected && focusSelected && selectedLineId) return null;
                 const fontSize = (isSelected ? 15 : 11) / zoom;
                 const lineH = fontSize * 1.2;
                 // Anti-overlap: nudge down if too close to an already placed label
@@ -801,7 +836,6 @@ export default function MeasureMobile() {
                 const text = line.label ? `${line.label} · ${getRealSize(line)}` : getRealSize(line);
                 return (
                   <text key={`lbl-${line.id}`} x={lx} y={ly} textAnchor="start"
-                    opacity={dim ? 0.35 : 1}
                     fill={line.color} fontSize={fontSize} fontWeight={isSelected ? 700 : 500}
                     style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.7)', strokeWidth: (isSelected ? 3.5 : 2.5) / zoom }}>
                     {text}
@@ -815,11 +849,13 @@ export default function MeasureMobile() {
         {/* Tool indicator — hidden while typing the reference length so the
             canvas stays clean and focused on that single step. */}
         {!enteringLength && (
-          <div className="absolute top-2 left-2 px-2 py-1 text-[11px] rounded bg-card/80 text-muted-foreground backdrop-blur-sm">
+          <div data-canvas-ui className="absolute top-2 left-2 max-w-[70%] px-2 py-1 text-[11px] rounded bg-card/80 text-muted-foreground backdrop-blur-sm">
             {tool === 'pan' && 'Pan / Zoom'}
             {tool === 'edit' && (selectedLine ? 'Editing selected' : 'Tap a line to edit')}
-            {tool === 'add' && (pendingPoint ? 'Tap to set end point' : 'Tap to set start point')}
-            {tool === 'cal' && (calPoints.length === 0 ? 'Tap 2 points for reference' : calPoints.length === 1 ? 'Tap second point' : 'Confirm reference')}
+            {tool === 'add' && (pendingPoint ? 'Tap to set the end point' : 'Tap to set the start point')}
+            {tool === 'cal' && (calPoints.length === 0 ? 'Draw a line over something whose real size you know'
+              : calPoints.length === 1 ? 'Tap the second point'
+              : 'Check the line, then confirm below')}
           </div>
         )}
 
@@ -828,23 +864,22 @@ export default function MeasureMobile() {
             has to open a bottom sheet. Hidden while typing the reference length
             so that step stays fully focused. */}
         {!enteringLength && (
-        <div className="absolute top-2 right-2 z-20 flex flex-col gap-2">
+        <div data-canvas-ui className="absolute top-2 right-2 z-20 flex flex-col gap-2">
           {/* Fullscreen / fit-to-view */}
           <ColBtn onClick={fitImage} label="Fit to screen">
             <Maximize className="w-4 h-4" />
-          </ColBtn>
-          {/* Focus selected — dims everything but the active line */}
-          <ColBtn onClick={() => setFocusSelected(v => !v)} active={focusSelected} label="Focus selected line">
-            <Focus className="w-4 h-4" />
           </ColBtn>
 
           {/* The rest of the column is measurement-editing chrome; during the
               guided reference-setup step we hide it to keep things calm. */}
           {!referenceMode && (
             <>
-              {/* Show / hide measurement labels (Task 1) */}
+              {/* Presentation mode (Task 1) — the single Eye button. Open =
+                  working with measurements (labels + full-opacity lines).
+                  Closed = focusing on the artwork (labels hidden, lines faded).
+                  Editing is unaffected in both states. */}
               <ColBtn onClick={toggleMeasurements} active={showMeasurements}
-                label={showMeasurements ? 'Hide labels' : 'Show labels'}>
+                label={showMeasurements ? 'Focus on artwork (hide measurements)' : 'Show measurements'}>
                 {showMeasurements ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               </ColBtn>
 
@@ -866,8 +901,9 @@ export default function MeasureMobile() {
                 <Hand className="w-4 h-4" />
               </ColBtn>
 
-              {/* Scale / reference — defines the measurement scale (Task 7) */}
-              <ColBtn onClick={() => setSheet('reference')} highlight={!calibration}
+              {/* Measurement scale — no scale yet → launch the guided setup;
+                  otherwise open the scale panel to review/replace it. */}
+              <ColBtn onClick={() => (calibration ? setSheet('reference') : startScaleSetup())} highlight={!calibration}
                 label={calibration ? 'Edit measurement scale' : 'Set measurement scale'}>
                 <Ruler className="w-4 h-4" />
               </ColBtn>
@@ -879,7 +915,7 @@ export default function MeasureMobile() {
         {/* Default-line-color picker popover (Task 2) — a compact floating
             panel anchored beside the color swatch, not a bottom sheet. */}
         {colorPickerOpen && !enteringLength && !referenceMode && (
-          <>
+          <div data-canvas-ui>
             <div className="absolute inset-0 z-20" onClick={() => setColorPickerOpen(false)} />
             <div className="absolute top-2 right-14 z-30 w-[184px] p-2.5 rounded-2xl bg-card border border-border shadow-2xl">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 pb-2">Default line color</div>
@@ -892,7 +928,7 @@ export default function MeasureMobile() {
                 ))}
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* Magnifier */}
@@ -904,14 +940,15 @@ export default function MeasureMobile() {
           </div>
         )}
 
-        {/* Calibration draft / input */}
+        {/* Calibration draft (Task 3 · Step 3) — explains what happens next in
+            plain language instead of a generic "Confirm reference". */}
         {calDraftReady && !calInputVisible && (
-          <div className="absolute bottom-4 inset-x-3 z-30 flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-3 shadow-xl">
-            <span className="flex-1 text-xs text-muted-foreground">Reference line placed.</span>
+          <div data-canvas-ui className="absolute bottom-4 inset-x-3 z-30 flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-3 shadow-xl">
+            <span className="flex-1 text-xs text-foreground">Great! Next, enter the real length of this line.</span>
             <button onClick={confirmCalDraft} className="flex items-center gap-1.5 h-10 px-3 text-sm bg-primary text-primary-foreground rounded-md font-medium">
-              <Check className="w-4 h-4" /> Confirm
+              <Check className="w-4 h-4" /> Continue
             </button>
-            <button onClick={cancelCal} className="h-10 w-10 flex items-center justify-center bg-secondary text-muted-foreground rounded-md">
+            <button onClick={cancelCal} aria-label="Cancel" className="h-10 w-10 flex items-center justify-center bg-secondary text-muted-foreground rounded-md">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -922,6 +959,7 @@ export default function MeasureMobile() {
             being pinned to a screen edge. */}
         {calInputVisible && (
           <div
+            data-canvas-ui
             className="fixed inset-x-0 z-[60] flex items-center justify-center px-6"
             style={{
               top: kbViewport?.top ?? 0,
@@ -933,9 +971,9 @@ export default function MeasureMobile() {
             <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-4 space-y-3 animate-slide-up">
               <div className="text-center space-y-1">
                 <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <Ruler className="w-4 h-4 text-primary" /> Reference length
+                  <Ruler className="w-4 h-4 text-primary" /> Real-world length
                 </div>
-                <p className="text-xs text-muted-foreground">This defines the measurement scale. Enter the real-world size of the line you drew.</p>
+                <p className="text-xs text-muted-foreground">How long is the line you just drew? For example, if it spans your canvas width, enter <span className="text-foreground font-medium">80&nbsp;cm</span>.</p>
               </div>
               <div className="flex items-center gap-2">
                 <input ref={calInputRef} type="number" inputMode="decimal" value={calSize} onChange={e => setCalSize(e.target.value)}
@@ -960,7 +998,7 @@ export default function MeasureMobile() {
 
         {/* Add mode cancel */}
         {tool === 'add' && pendingPoint && (
-          <button onClick={() => setPendingPoint(null)}
+          <button data-canvas-ui onClick={() => setPendingPoint(null)}
             className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 h-10 px-4 text-xs bg-card border border-border rounded-full text-muted-foreground shadow">
             Cancel point
           </button>
@@ -976,7 +1014,7 @@ export default function MeasureMobile() {
 
         {/* Loading overlay */}
         {isImageLoading && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div data-canvas-ui className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
             <p className="mt-3 text-sm font-medium text-foreground">Loading image...</p>
           </div>
@@ -984,7 +1022,7 @@ export default function MeasureMobile() {
 
         {/* Error overlay */}
         {imageLoadError && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-sm">
+          <div data-canvas-ui className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-sm">
             <p className="text-sm text-destructive font-medium mb-2">Failed to load image</p>
             <p className="text-xs text-muted-foreground mb-4 text-center px-6">{imageLoadError}</p>
             <button onClick={() => { clearImageLoadError(); setImage(null); }}
@@ -1005,7 +1043,7 @@ export default function MeasureMobile() {
         <div className="flex items-center gap-1 px-2 pt-2">
           <ModeToggle onClick={() => setSheet('layers')} icon={<LayersIcon className="w-4 h-4" />} label="Layers" />
           <ModeToggle active={tool === 'edit'} onClick={() => setTool('edit')} icon={<MousePointer className="w-4 h-4" />} label="Edit" />
-          <ModeToggle active={tool === 'add'} onClick={() => { if (!calibration) { setSheet('reference'); return; } setTool('add'); setPendingPoint(null); }}
+          <ModeToggle active={tool === 'add'} onClick={() => { if (!calibration) { startScaleSetup(); return; } setTool('add'); setPendingPoint(null); }}
             icon={<Plus className="w-4 h-4" />} label="Add" />
         </div>
         {/* Primary Save Image */}
@@ -1075,20 +1113,20 @@ export default function MeasureMobile() {
 
           {sheet === 'reference' && (
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">The reference line defines the measurement scale — draw it across a part of the artwork whose real-world size you know.</p>
+              <p className="text-xs text-muted-foreground">Your measurement scale converts distances on the artwork into real-world sizes.</p>
               {calibration ? (
                 <div className="rounded-md border border-border p-3 bg-secondary/30">
                   <div className="text-xs text-muted-foreground">Current scale</div>
                   <div className="text-lg font-semibold text-foreground">{calibration.realWorldSize} {calibration.unit}</div>
+                  <div className="text-xs text-muted-foreground">across the reference line you drew</div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No scale set yet. Measurements show real-world sizes only once a reference is defined.</p>
+                <p className="text-sm text-muted-foreground">No scale set yet. Measurements show real-world sizes only once a scale is defined.</p>
               )}
-              <button onClick={() => { setTool('cal'); setCalPoints([]); setCalDraftReady(false); setSheet(null); }}
+              <button onClick={startScaleSetup}
                 className="w-full h-12 rounded-md bg-primary text-primary-foreground font-medium">
-                {calibration ? 'Replace reference line' : 'Draw reference line'}
+                {calibration ? 'Set a new scale' : 'Set measurement scale'}
               </button>
-              <p className="text-xs text-muted-foreground">Tap two points on the canvas, then enter the real-world size in cm or inches.</p>
             </div>
           )}
 
@@ -1104,6 +1142,48 @@ export default function MeasureMobile() {
             </div>
           )}
         </Sheet>
+      )}
+
+      {/* Task 3 · Step 1 — plain-language explainer shown before any drawing,
+          so a first-time user understands *why* they're setting a scale. */}
+      {scaleIntroVisible && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setScaleIntroVisible(false)} />
+          <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-5 space-y-4 animate-slide-up">
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                <Ruler className="w-5 h-5" />
+              </span>
+              <h3 className="text-base font-semibold text-foreground">Set Measurement Scale</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              To measure your artwork accurately, first choose an object whose real size you already know.
+            </p>
+            <ul className="text-sm text-foreground space-y-1.5">
+              <li className="flex items-center gap-2"><span className="text-primary">•</span> canvas width</li>
+              <li className="flex items-center gap-2"><span className="text-primary">•</span> frame height</li>
+              <li className="flex items-center gap-2"><span className="text-primary">•</span> a ruler</li>
+              <li className="flex items-center gap-2"><span className="text-primary">•</span> a printed reference</li>
+            </ul>
+            <button onClick={beginScaleDrawing}
+              className="w-full h-12 rounded-md bg-primary text-primary-foreground font-medium">
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Task 3 · Step 4 — transient success confirmation after the scale is set. */}
+      {scaleSuccessVisible && (
+        <div className="fixed inset-x-0 top-16 z-[70] flex justify-center px-6 pointer-events-none">
+          <div className="flex items-start gap-2.5 max-w-sm bg-card border border-border rounded-xl shadow-2xl px-4 py-3 animate-slide-up">
+            <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-semibold text-foreground">Measurement scale configured</div>
+              <div className="text-xs text-muted-foreground">All measurements now use this scale.</div>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
@@ -1175,7 +1255,7 @@ function InlineLabelEditor({ line, getRealSize, onChange }:
   const [label, setLabel] = useState(line.label);
   // `key={line.id}` on the mount site keeps this in sync when selection changes.
   return (
-    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 max-w-[calc(100%-6rem)] bg-card/95 border border-border rounded-full pl-3 pr-2 py-1.5 shadow-lg backdrop-blur-sm">
+    <div data-canvas-ui className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 max-w-[calc(100%-6rem)] bg-card/95 border border-border rounded-full pl-3 pr-2 py-1.5 shadow-lg backdrop-blur-sm">
       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: line.color }} />
       <span className="text-sm font-semibold text-foreground whitespace-nowrap">{getRealSize(line)}</span>
       <span className="w-px self-stretch bg-border" />
