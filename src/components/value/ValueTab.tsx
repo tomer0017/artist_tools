@@ -707,7 +707,7 @@ export default function ValueTab() {
   // Floating quick-switch placed directly on the image so switching between
   // study stages while painting never requires opening the controls sheet.
   const StudyModeSwitcher = (
-    <div className="inline-flex rounded-full border border-border bg-card/90 backdrop-blur-sm p-0.5 shadow-lg">
+    <div data-onboarding="value-modes" className="inline-flex rounded-full border border-border bg-card/90 backdrop-blur-sm p-0.5 shadow-lg">
       {studyModes.map(m => (
         <button key={m.id}
           onClick={() => updateMode(m.id === 'color' && mode === 'painter' ? 'painter' : m.id)}
@@ -733,7 +733,7 @@ export default function ValueTab() {
   );
 
   const LevelButtons = (
-    <div>
+    <div data-onboarding="value-levels">
       <div className="flex gap-1">
         {[3, 5, 7, 9, 11, 13].map(l => (
           <button key={l} onClick={() => updateLevels(l)}
@@ -785,7 +785,7 @@ export default function ValueTab() {
   // (visibility), while Sketch swaps in a single painter-facing "Sketch detail"
   // control that speaks to the artistic result rather than edge thresholds.
   const InlineImageControls = (
-    <div className="w-full px-3 py-2.5 border-t border-border toolbar-surface shrink-0">
+    <div data-onboarding="value-inline" className="w-full px-3 py-2.5 border-t border-border toolbar-surface shrink-0">
       {mode === 'sketch' ? (
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -872,7 +872,7 @@ export default function ValueTab() {
             }`}>Off</button>
         </div>
       </div>
-      <div>
+      <div data-onboarding="value-save">
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Save</p>
         <div className="grid grid-cols-1 gap-1.5">
           <button onClick={exportProcessed}

@@ -203,6 +203,7 @@ function Workspace() {
             disabled={updatingArt}
             aria-haspopup="menu"
             aria-expanded={updateMenu}
+            data-onboarding="compare-update"
             className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground active:scale-95 disabled:opacity-50"
           >
             <Camera className="h-4 w-4" />
@@ -318,7 +319,7 @@ function Workspace() {
       {session.mode === 'overlay' && <CompareOverlayBar />}
 
       {/* Bottom action bar */}
-      <div className="flex items-stretch justify-around gap-1 border-t border-border px-1 py-1 toolbar-surface">
+      <div data-onboarding="compare-bar" className="flex items-stretch justify-around gap-1 border-t border-border px-1 py-1 toolbar-surface">
         <BarButton icon={<Layers className="h-5 w-5" />} label="Mode" active={sheet === 'mode'} onClick={() => openSheet('mode')} />
         <BarButton icon={<Move className="h-5 w-5" />} label="Align" active={sheet === 'align'} onClick={() => openSheet('align')} />
         <BarButton icon={contextControl.icon} label={contextControl.label} active={contextControl.active} onClick={contextControl.onClick} />

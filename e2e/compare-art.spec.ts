@@ -46,6 +46,18 @@ const artwork = { name: 'artwork.png', mimeType: 'image/png', buffer: makePng(20
 const reference = { name: 'reference.png', mimeType: 'image/png', buffer: makePng(200, 160, [90, 120, 200]) };
 
 test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
+  // Isolate this workflow test from the first-run guided onboarding, which
+  // otherwise auto-shows its preview over the Compare tab. (Onboarding has its
+  // own dedicated spec in e2e/onboarding.spec.ts.)
+  await page.addInitScript(() => {
+    try {
+      ['measure', 'value', 'color', 'grid', 'compare'].forEach((id) =>
+        localStorage.setItem('studio-onboarding-' + id, 'done'),
+      );
+    } catch {
+      /* ignore */
+    }
+  });
   page.on('pageerror', (e) => console.log('PAGEERROR:', e.message));
   page.on('console', (m) => console.log('CONSOLE.' + m.type() + ':', m.text()));
   await page.goto('/artist_tools/');
@@ -106,7 +118,8 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
 
   // Task 2: 2-point align opens a guided prompt (magnifier interaction).
   await page.getByRole('button', { name: 'Align' }).click();
-  await page.getByRole('button', { name: '2-point align' }).click();
+  // "Smart Align" is the shipped name for the promoted 2-point align tool.
+  await page.getByRole('button', { name: 'Smart Align' }).click();
   await expect(page.getByText('Tap point A on your ARTWORK')).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/04-two-point-align.png` });
   await page.getByRole('button', { name: 'Cancel alignment' }).click();

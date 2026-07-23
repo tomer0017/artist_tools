@@ -24,7 +24,7 @@ export default function MeasureToolbar({ onResetView, mobile = false }: Props) {
     : 'w-px h-5 lg:w-5 lg:h-px bg-border';
 
   return (
-    <div className={mobile
+    <div data-onboarding="measure-tools" className={mobile
       ? 'flex flex-wrap items-center gap-1.5 p-3 toolbar-surface border-b border-border shrink-0'
       : 'flex flex-row lg:flex-col items-center gap-1 p-1.5 toolbar-surface border-r border-border lg:w-11 shrink-0 overflow-x-auto lg:overflow-x-visible'}>
       <ImageUploader

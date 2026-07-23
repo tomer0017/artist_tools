@@ -617,7 +617,7 @@ export default function ColorTab() {
     <div className="flex-1 min-h-0 overflow-y-auto canvas-area">
       <div className="max-w-4xl mx-auto p-4 space-y-5">
         <Tabs defaultValue="wheel" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList data-onboarding="color-tabs" className="grid w-full grid-cols-3">
             <TabsTrigger value="wheel">Color Wheel</TabsTrigger>
             <TabsTrigger value="recipes">Mixing Recipes</TabsTrigger>
             <TabsTrigger value="skin">Skin Tones</TabsTrigger>
@@ -626,7 +626,9 @@ export default function ColorTab() {
           {/* ── Color Wheel ── */}
           <TabsContent value="wheel" className="space-y-4 mt-4">
             <div className="bg-card border border-border rounded-lg p-4">
-              <ColorWheel hue={hue} sat={sat} val={val} onHueChange={onHueChange} onSVChange={onSVChange} />
+              <div data-onboarding="color-wheel">
+                <ColorWheel hue={hue} sat={sat} val={val} onHueChange={onHueChange} onSVChange={onSVChange} />
+              </div>
 
               {/* Selected color */}
               <div className="mt-4 flex items-center gap-3">
@@ -657,6 +659,7 @@ export default function ColorTab() {
               {/* Pick from image */}
               {image && (
                 <button
+                  data-onboarding="color-pick"
                   onClick={() => setPicking(!picking)}
                   className={`mt-3 flex items-center gap-2 px-3 py-2 rounded text-xs font-medium transition-colors w-full justify-center ${
                     picking ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
@@ -680,7 +683,7 @@ export default function ColorTab() {
             </div>
 
             {/* Harmonies */}
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div data-onboarding="color-harmony" className="grid gap-3 sm:grid-cols-2">
               <HarmonyBlock
                 label="Complementary"
                 colors={[{ hex: selectedHex, tag: 'Base' }, { hex: compHex, tag: 'Comp' }]}

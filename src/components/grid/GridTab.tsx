@@ -328,6 +328,7 @@ export default function GridTab() {
         <>
           <div
             ref={containerRef}
+            data-onboarding="grid-canvas"
             className="relative flex-1 canvas-area flex items-center justify-center p-2 min-h-0"
           >
             <canvas
@@ -356,6 +357,7 @@ export default function GridTab() {
               {activeImage && (
                 <button
                   onClick={handleExport}
+                  data-onboarding="grid-export"
                   className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
                   title="Save image"
                 >
@@ -435,6 +437,7 @@ export default function GridTab() {
           {/* Desktop canvas */}
           <div
             ref={containerRef}
+            data-onboarding="grid-canvas"
             className="flex-1 canvas-area flex items-center justify-center p-4 min-h-0"
           >
             <canvas
@@ -462,6 +465,7 @@ export default function GridTab() {
           </span>
           <button
             onClick={handleExport}
+            data-onboarding="grid-export"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:opacity-90 active:scale-95 transition-transform"
           >
             <Download className="w-3.5 h-3.5" />
@@ -492,7 +496,7 @@ function GridControls({
   return (
     <>
       {/* Canvas dimensions */}
-      <div>
+      <div data-onboarding="grid-size">
         <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
           Canvas Size
         </label>
@@ -556,7 +560,7 @@ function GridControls({
       </div>
 
       {/* Grid divisions */}
-      <div>
+      <div data-onboarding="grid-divisions">
         <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
           Grid Divisions
         </label>

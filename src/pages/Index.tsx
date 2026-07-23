@@ -5,6 +5,7 @@ import MeasureTab from '@/components/measure/MeasureTab';
 import ValueTab from '@/components/value/ValueTab';
 import ColorTab from '@/components/color/ColorTab';
 import GridTab from '@/components/grid/GridTab';
+import { OnboardingProvider, OnboardingHost } from '@/onboarding';
 
 // Compare Art (with its gifenc dependency) is code-split so it never weighs down
 // the initial load of the other workspaces.
@@ -41,6 +42,7 @@ function Workspace() {
       className="flex flex-col overflow-hidden"
       style={{ height: 'var(--app-height, 100vh)' }}
     >
+      <OnboardingHost />
       <Header />
       <main className="flex-1 flex min-h-0">
         {activeTab === 'measure' && <MeasureTab />}
@@ -66,7 +68,9 @@ function Workspace() {
 export default function Index() {
   return (
     <ProjectProvider>
-      <Workspace />
+      <OnboardingProvider>
+        <Workspace />
+      </OnboardingProvider>
     </ProjectProvider>
   );
 }

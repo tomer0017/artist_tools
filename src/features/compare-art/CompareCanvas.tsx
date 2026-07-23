@@ -742,6 +742,7 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
   return (
     <div
       ref={containerRef}
+      data-onboarding="compare-canvas"
       className="relative flex-1 min-h-0 overflow-hidden"
       style={{ touchAction: 'none' }}
     >

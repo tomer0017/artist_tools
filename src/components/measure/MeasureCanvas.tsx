@@ -487,6 +487,7 @@ export default function MeasureCanvas({ containerRef }: Props) {
   return (
     <div
       ref={containerRef}
+      data-onboarding="measure-canvas"
       className={`relative flex-1 overflow-hidden canvas-area select-none ${cursorClass} ${panning ? '!cursor-grabbing' : ''}`}
       onWheel={onWheel}
       onMouseDown={handleMouseDown}
