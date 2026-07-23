@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, Undo2, Redo2, MoreVertical, Hand, MousePointer, Plus, Layers as LayersIcon,
   Ruler, Crosshair, X, Check, Eye, EyeOff, Trash2, Download, FileJson, FilePlus,
-  ChevronUp, ArrowUp, ArrowDown, ArrowLeft as ArrLeft, ArrowRight, Focus, Maximize,
+  Focus, Maximize,
 } from 'lucide-react';
 import { useProject } from '@/hooks/useProjectStore';
 import { useSaveMedia } from '@/components/common/SaveMedia';
@@ -72,9 +72,20 @@ export default function MeasureMobile() {
   const [calSize, setCalSize] = useState('');
   const [calUnit, setCalUnit] = useState('cm');
 
-  // Sheets
-  type SheetId = null | 'layers' | 'selected' | 'reference' | 'more' | 'precision';
+  // Sheets — the high-frequency actions (color, delete, pan, labels, reference
+  // access) now live directly on the canvas, so only the genuinely list-based
+  // panels remain as sheets.
+  type SheetId = null | 'layers' | 'reference' | 'more';
   const [sheet, setSheet] = useState<SheetId>(null);
+
+  // Floating default-line-color picker popover (opened from the color swatch
+  // in the floating action column).
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+
+  // Height of the visible viewport above the soft keyboard, tracked only while
+  // the reference-length dialog is open so it can stay vertically centered in
+  // the space above the keyboard instead of being pinned to the screen edge.
+  const [kbViewport, setKbViewport] = useState<{ top: number; height: number } | null>(null);
 
   // Drag state
   const [drag, setDrag] = useState<
@@ -84,9 +95,6 @@ export default function MeasureMobile() {
     | { kind: 'pinch'; startDist: number; startZoom: number; anchorImg: Point }
     | null
   >(null);
-
-  const [precisionEndpoint, setPrecisionEndpoint] = useState<'start' | 'end'>('start');
-  const [precisionStep, setPrecisionStep] = useState(1);
 
   // Image export goes through the shared Save-to-Photos flow.
   const { save } = useSaveMedia();
@@ -160,19 +168,22 @@ export default function MeasureMobile() {
     // Only consider visible & in visible layers
     const visLayerIds = new Set(layers.filter(l => l.visible).map(l => l.id));
     const candidates = measurements.filter(m => m.visible && visLayerIds.has(m.layerId));
-    // In focus mode, only the selected line is touchable
-    const list = focusSelected && selectedLineId
+    // In focus mode, only the selected line's *endpoints* are draggable (so
+    // editing one line never accidentally grabs a neighbour's endpoint)…
+    const endpointList = focusSelected && selectedLineId
       ? candidates.filter(m => m.id === selectedLineId)
       : candidates;
-    // Endpoints first (selected line gets priority)
-    const ordered = [...list].sort((a, b) => (a.id === selectedLineId ? -1 : b.id === selectedLineId ? 1 : 0));
-    for (const m of ordered) {
+    const orderedEndpoints = [...endpointList].sort((a, b) => (a.id === selectedLineId ? -1 : b.id === selectedLineId ? 1 : 0));
+    for (const m of orderedEndpoints) {
       const a = { x: m.start.x * zoom + panOffset.x, y: m.start.y * zoom + panOffset.y };
       const b = { x: m.end.x * zoom + panOffset.x, y: m.end.y * zoom + panOffset.y };
       if (Math.hypot(sx - a.x, sy - a.y) <= ENDPOINT_HIT_PX) return { type: 'endpoint' as const, lineId: m.id, endpoint: 'start' as const };
       if (Math.hypot(sx - b.x, sy - b.y) <= ENDPOINT_HIT_PX) return { type: 'endpoint' as const, lineId: m.id, endpoint: 'end' as const };
     }
-    for (const m of ordered) {
+    // …but tapping any visible line body selects it, so the artist can switch
+    // between lines directly on the canvas (the old "all lines" list is gone).
+    const orderedLines = [...candidates].sort((a, b) => (a.id === selectedLineId ? -1 : b.id === selectedLineId ? 1 : 0));
+    for (const m of orderedLines) {
       const a = { x: m.start.x * zoom + panOffset.x, y: m.start.y * zoom + panOffset.y };
       const b = { x: m.end.x * zoom + panOffset.x, y: m.end.y * zoom + panOffset.y };
       if (distToSegment({ x: sx, y: sy }, a, b) <= LINE_HIT_PX) return { type: 'line' as const, lineId: m.id };
@@ -458,14 +469,39 @@ export default function MeasureMobile() {
     [calibration],
   );
 
-  // ---------- Precision nudge ----------
-  const nudge = (dx: number, dy: number) => {
-    if (!selectedLine) return;
-    const step = precisionStep / zoom; // step is in screen px equivalent to keep feel consistent
-    const pt = precisionEndpoint === 'start' ? selectedLine.start : selectedLine.end;
-    const next = { x: pt.x + dx * step, y: pt.y + dy * step };
-    updateMeasurement(selectedLine.id, { [precisionEndpoint]: next });
-  };
+  // Delete the currently selected line directly from the canvas (floating
+  // action column). deleteMeasurement already clears the selection.
+  const deleteSelected = useCallback(() => {
+    if (!selectedLineId) return;
+    deleteMeasurement(selectedLineId);
+  }, [selectedLineId, deleteMeasurement]);
+
+  // Toggle the Pan navigation tool from the floating action column. Pan is not
+  // a creation mode — it just enables pan/zoom — so tapping it again returns to
+  // the previous Edit mode.
+  const togglePan = useCallback(() => {
+    setTool(t => (t === 'pan' ? 'edit' : 'pan'));
+    setPendingPoint(null);
+  }, []);
+
+  // Track the viewport above the soft keyboard while the reference-length
+  // dialog is open, so the dialog can be centered in the available space
+  // (Task 8 — never pinned to the top/bottom edge when the keyboard opens).
+  useEffect(() => {
+    if (!calInputVisible || typeof window === 'undefined') { setKbViewport(null); return; }
+    const vv = window.visualViewport;
+    const update = () => {
+      if (vv) setKbViewport({ top: vv.offsetTop, height: vv.height });
+      else setKbViewport({ top: 0, height: window.innerHeight });
+    };
+    update();
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    return () => {
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+    };
+  }, [calInputVisible]);
 
   // ---------- Export PNG ----------
   const triggerDownload = useCallback((blob: Blob, filename: string) => {
@@ -787,18 +823,76 @@ export default function MeasureMobile() {
           </div>
         )}
 
-        {/* Fit + focus toggles — hidden while typing the reference length. */}
+        {/* Floating action column — the professional "on-canvas" workspace.
+            Nearly every high-frequency action lives here so the artist never
+            has to open a bottom sheet. Hidden while typing the reference length
+            so that step stays fully focused. */}
         {!enteringLength && (
-        <div className="absolute top-2 right-2 flex flex-col gap-2">
-          <button onClick={fitImage} aria-label="Fit"
-            className="h-10 w-10 rounded-full bg-card/90 border border-border text-foreground flex items-center justify-center shadow active:scale-95">
+        <div className="absolute top-2 right-2 z-20 flex flex-col gap-2">
+          {/* Fullscreen / fit-to-view */}
+          <ColBtn onClick={fitImage} label="Fit to screen">
             <Maximize className="w-4 h-4" />
-          </button>
-          <button onClick={() => setFocusSelected(v => !v)} aria-label="Focus selected"
-            className={`h-10 w-10 rounded-full border border-border flex items-center justify-center shadow active:scale-95 ${focusSelected ? 'bg-primary text-primary-foreground' : 'bg-card/90 text-foreground'}`}>
+          </ColBtn>
+          {/* Focus selected — dims everything but the active line */}
+          <ColBtn onClick={() => setFocusSelected(v => !v)} active={focusSelected} label="Focus selected line">
             <Focus className="w-4 h-4" />
-          </button>
+          </ColBtn>
+
+          {/* The rest of the column is measurement-editing chrome; during the
+              guided reference-setup step we hide it to keep things calm. */}
+          {!referenceMode && (
+            <>
+              {/* Show / hide measurement labels (Task 1) */}
+              <ColBtn onClick={toggleMeasurements} active={showMeasurements}
+                label={showMeasurements ? 'Hide labels' : 'Show labels'}>
+                {showMeasurements ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </ColBtn>
+
+              {/* Default line color for the next line drawn (Task 2) */}
+              <button onClick={() => setColorPickerOpen(v => !v)} aria-label="Default line color"
+                className="h-10 w-10 rounded-full bg-card/90 border border-border flex items-center justify-center shadow active:scale-95">
+                <span className="w-5 h-5 rounded-md border-2 border-white shadow-inner" style={{ backgroundColor: lineColor }} />
+              </button>
+
+              {/* Delete the selected line (Task 3) — only while editing one */}
+              {tool === 'edit' && selectedLine && (
+                <ColBtn onClick={deleteSelected} label="Delete selected line" danger>
+                  <Trash2 className="w-4 h-4" />
+                </ColBtn>
+              )}
+
+              {/* Pan / zoom navigation (Task 4) */}
+              <ColBtn onClick={togglePan} active={tool === 'pan'} label="Pan and zoom">
+                <Hand className="w-4 h-4" />
+              </ColBtn>
+
+              {/* Scale / reference — defines the measurement scale (Task 7) */}
+              <ColBtn onClick={() => setSheet('reference')} highlight={!calibration}
+                label={calibration ? 'Edit measurement scale' : 'Set measurement scale'}>
+                <Ruler className="w-4 h-4" />
+              </ColBtn>
+            </>
+          )}
         </div>
+        )}
+
+        {/* Default-line-color picker popover (Task 2) — a compact floating
+            panel anchored beside the color swatch, not a bottom sheet. */}
+        {colorPickerOpen && !enteringLength && !referenceMode && (
+          <>
+            <div className="absolute inset-0 z-20" onClick={() => setColorPickerOpen(false)} />
+            <div className="absolute top-2 right-14 z-30 w-[184px] p-2.5 rounded-2xl bg-card border border-border shadow-2xl">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 pb-2">Default line color</div>
+              <div className="grid grid-cols-4 gap-2">
+                {LINE_COLORS.map(c => (
+                  <button key={c} onClick={() => { setLineColor(c); setColorPickerOpen(false); }}
+                    aria-label={`Use line color ${c}`}
+                    className={`h-9 w-9 rounded-lg border-2 transition-all ${lineColor === c ? 'border-foreground scale-105' : 'border-border/40'}`}
+                    style={{ backgroundColor: c }} />
+                ))}
+              </div>
+            </div>
+          </>
         )}
 
         {/* Magnifier */}
@@ -822,23 +916,44 @@ export default function MeasureMobile() {
             </button>
           </div>
         )}
+        {/* Reference-length entry (Task 8) — a focused, centered modal dialog.
+            It stays fully assembled and is vertically centered in the viewport
+            *above* the soft keyboard (tracked via visualViewport) instead of
+            being pinned to a screen edge. */}
         {calInputVisible && (
-          <div className="absolute bottom-0 inset-x-0 z-40 bg-card border-t border-border p-3 space-y-2 pb-[env(safe-area-inset-bottom)]">
-            <p className="text-sm font-medium text-foreground">Real-world size of the reference line</p>
-            <div className="flex items-center gap-2">
-              <input ref={calInputRef} type="number" inputMode="decimal" value={calSize} onChange={e => setCalSize(e.target.value)}
-                placeholder="e.g. 50"
-                /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
-                style={{ fontSize: '16px' }}
-                className="flex-1 min-w-0 h-11 px-3 bg-secondary border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmCal(); } }} />
-              <select value={calUnit} onChange={e => setCalUnit(e.target.value)}
-                style={{ fontSize: '16px' }}
-                className="h-11 px-2 bg-secondary border border-border rounded-md text-foreground">
-                <option value="cm">cm</option><option value="in">in</option><option value="mm">mm</option>
-              </select>
-              <button onClick={confirmCal} className="h-11 px-4 bg-primary text-primary-foreground rounded-md font-medium">Set</button>
-              <button onClick={cancelCal} className="h-11 w-11 flex items-center justify-center bg-secondary text-muted-foreground rounded-md"><X className="w-4 h-4" /></button>
+          <div
+            className="fixed inset-x-0 z-[60] flex items-center justify-center px-6"
+            style={{
+              top: kbViewport?.top ?? 0,
+              height: kbViewport?.height ?? undefined,
+              bottom: kbViewport ? undefined : 0,
+            }}
+          >
+            <div className="absolute inset-0 bg-black/60" onClick={cancelCal} />
+            <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-4 space-y-3 animate-slide-up">
+              <div className="text-center space-y-1">
+                <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <Ruler className="w-4 h-4 text-primary" /> Reference length
+                </div>
+                <p className="text-xs text-muted-foreground">This defines the measurement scale. Enter the real-world size of the line you drew.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input ref={calInputRef} type="number" inputMode="decimal" value={calSize} onChange={e => setCalSize(e.target.value)}
+                  placeholder="e.g. 50"
+                  /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
+                  style={{ fontSize: '16px' }}
+                  className="flex-1 min-w-0 h-11 px-3 bg-secondary border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmCal(); } }} />
+                <select value={calUnit} onChange={e => setCalUnit(e.target.value)}
+                  style={{ fontSize: '16px' }}
+                  className="h-11 px-2 bg-secondary border border-border rounded-md text-foreground">
+                  <option value="cm">cm</option><option value="in">in</option><option value="mm">mm</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={cancelCal} className="flex-1 h-11 bg-secondary text-muted-foreground rounded-md font-medium">Cancel</button>
+                <button onClick={confirmCal} className="flex-1 h-11 bg-primary text-primary-foreground rounded-md font-medium">Set</button>
+              </div>
             </div>
           </div>
         )}
@@ -849,6 +964,14 @@ export default function MeasureMobile() {
             className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 h-10 px-4 text-xs bg-card border border-border rounded-full text-muted-foreground shadow">
             Cancel point
           </button>
+        )}
+
+        {/* On-canvas selected-line editor — shows the measurement and lets the
+            artist label the line directly on the artwork, replacing the old
+            "Selected" bottom sheet. Delete lives in the floating column. */}
+        {tool === 'edit' && selectedLine && !enteringLength && (
+          <InlineLabelEditor key={selectedLine.id} line={selectedLine} getRealSize={getRealSize}
+            onChange={(u) => updateMeasurement(selectedLine.id, u)} />
         )}
 
         {/* Loading overlay */}
@@ -876,22 +999,17 @@ export default function MeasureMobile() {
           step so only reference controls are visible. */}
       {!referenceMode && (
       <div className="shrink-0 z-30 border-t border-border bg-card/95 backdrop-blur-sm">
-        {/* Mode toggle row */}
+        {/* Primary toolbar — Layers (Task 5) now sits alongside the creation
+            modes. Pan moved to the floating action column (Task 4); Selected /
+            Precision were removed entirely (Task 6). */}
         <div className="flex items-center gap-1 px-2 pt-2">
-          <ModeToggle active={tool === 'pan'} onClick={() => setTool('pan')} icon={<Hand className="w-4 h-4" />} label="Pan" />
+          <ModeToggle onClick={() => setSheet('layers')} icon={<LayersIcon className="w-4 h-4" />} label="Layers" />
           <ModeToggle active={tool === 'edit'} onClick={() => setTool('edit')} icon={<MousePointer className="w-4 h-4" />} label="Edit" />
           <ModeToggle active={tool === 'add'} onClick={() => { if (!calibration) { setSheet('reference'); return; } setTool('add'); setPendingPoint(null); }}
             icon={<Plus className="w-4 h-4" />} label="Add" />
         </div>
-        {/* Secondary actions */}
-        <div className="grid grid-cols-4 gap-1 p-2">
-          <ActionBtn onClick={() => setSheet('layers')} icon={<LayersIcon className="w-5 h-5" />} label="Layers" />
-          <ActionBtn onClick={() => setSheet('reference')} icon={<Crosshair className="w-5 h-5" />} label={calibration ? 'Reference' : 'Set ref.'} highlight={!calibration} />
-          <ActionBtn onClick={() => selectedLine ? setSheet('precision') : null} icon={<Ruler className="w-5 h-5" />} label="Precision" disabled={!selectedLine} />
-          <ActionBtn onClick={() => setSheet('selected')} icon={<ChevronUp className="w-5 h-5" />} label={selectedLine ? 'Selected' : 'Lines'} />
-        </div>
         {/* Primary Save Image */}
-        <div className="px-2 pb-2">
+        <div className="px-2 pt-2 pb-2">
           <button onClick={exportPNG}
             className="w-full h-12 rounded-md bg-primary text-primary-foreground font-medium text-sm flex items-center justify-center gap-2 active:opacity-80">
             <Download className="w-5 h-5" />
@@ -905,9 +1023,7 @@ export default function MeasureMobile() {
       {sheet && (
         <Sheet onClose={() => setSheet(null)} title={
           sheet === 'layers' ? 'Layers'
-          : sheet === 'selected' ? (selectedLine ? 'Selected line' : 'Lines')
-          : sheet === 'reference' ? 'Reference measurement'
-          : sheet === 'precision' ? 'Precision controls'
+          : sheet === 'reference' ? 'Measurement scale'
           : 'More'
         }>
           {sheet === 'layers' && (
@@ -957,105 +1073,22 @@ export default function MeasureMobile() {
             </div>
           )}
 
-          {sheet === 'selected' && (
-            <div className="space-y-3">
-              {/* New-line color — same active line color as the desktop toolbar
-                  (lineColor/setLineColor). Affects the next line drawn; existing
-                  lines keep their own stored color. */}
-              <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground px-1 pb-2">New line color</div>
-                <div className="flex flex-wrap gap-2">
-                  {LINE_COLORS.map(c => (
-                    <button key={c} onClick={() => setLineColor(c)}
-                      aria-label={`Use line color ${c}`}
-                      className={`h-10 w-10 rounded-md border-2 transition-all ${lineColor === c ? 'border-foreground scale-105' : 'border-border/40'}`}
-                      style={{ backgroundColor: c }} />
-                  ))}
-                </div>
-              </div>
-              {selectedLine ? (
-                <SelectedLineEditor line={selectedLine} getRealSize={getRealSize}
-                  onChange={(u) => updateMeasurement(selectedLine.id, u)}
-                  onDelete={() => { deleteMeasurement(selectedLine.id); setSheet(null); }} />
-              ) : (
-                <p className="text-xs text-muted-foreground">No line selected. Tap a line on the canvas.</p>
-              )}
-              <div className="border-t border-border pt-3 space-y-1 max-h-[40vh] overflow-y-auto">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground px-1 pb-1">All lines ({measurements.length})</div>
-                {measurements.map(line => {
-                  const sel = line.id === selectedLineId;
-                  return (
-                    <div key={line.id}
-                      onClick={() => setSelectedLineId(line.id)}
-                      className={`flex items-center gap-3 px-3 py-3 rounded-md min-h-[48px] ${sel ? 'bg-secondary' : 'active:bg-secondary/60'}`}>
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: line.color }} />
-                      <span className="flex-1 text-sm text-foreground truncate">{line.label || getRealSize(line)}</span>
-                      <button onClick={(e) => { e.stopPropagation(); updateMeasurement(line.id, { visible: !line.visible }); }}
-                        className="h-9 w-9 flex items-center justify-center text-muted-foreground" aria-label="Hide line">
-                        {line.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); deleteMeasurement(line.id); }}
-                        className="h-9 w-9 flex items-center justify-center text-muted-foreground" aria-label="Delete line">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {sheet === 'reference' && (
             <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">The reference line defines the measurement scale — draw it across a part of the artwork whose real-world size you know.</p>
               {calibration ? (
                 <div className="rounded-md border border-border p-3 bg-secondary/30">
-                  <div className="text-xs text-muted-foreground">Current reference</div>
+                  <div className="text-xs text-muted-foreground">Current scale</div>
                   <div className="text-lg font-semibold text-foreground">{calibration.realWorldSize} {calibration.unit}</div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No reference set. You need a reference line before measurements show real-world sizes.</p>
+                <p className="text-sm text-muted-foreground">No scale set yet. Measurements show real-world sizes only once a reference is defined.</p>
               )}
               <button onClick={() => { setTool('cal'); setCalPoints([]); setCalDraftReady(false); setSheet(null); }}
                 className="w-full h-12 rounded-md bg-primary text-primary-foreground font-medium">
-                {calibration ? 'Replace reference' : 'Draw reference line'}
+                {calibration ? 'Replace reference line' : 'Draw reference line'}
               </button>
               <p className="text-xs text-muted-foreground">Tap two points on the canvas, then enter the real-world size in cm or inches.</p>
-            </div>
-          )}
-
-          {sheet === 'precision' && selectedLine && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Endpoint</span>
-                <div className="flex bg-secondary rounded-md p-0.5">
-                  {(['start', 'end'] as const).map(k => (
-                    <button key={k} onClick={() => setPrecisionEndpoint(k)}
-                      className={`h-9 px-3 text-xs rounded ${precisionEndpoint === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>
-                      {k === 'start' ? 'Start' : 'End'}
-                    </button>
-                  ))}
-                </div>
-                <span className="ml-auto text-xs text-muted-foreground">Step</span>
-                <div className="flex bg-secondary rounded-md p-0.5">
-                  {[1, 5, 10].map(s => (
-                    <button key={s} onClick={() => setPrecisionStep(s)}
-                      className={`h-9 px-2 text-xs rounded ${precisionStep === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>
-                      {s}px
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 max-w-[260px] mx-auto">
-                <div />
-                <NudgeBtn onClick={() => nudge(0, -1)}><ArrowUp className="w-5 h-5" /></NudgeBtn>
-                <div />
-                <NudgeBtn onClick={() => nudge(-1, 0)}><ArrLeft className="w-5 h-5" /></NudgeBtn>
-                <div className="h-14 flex items-center justify-center text-xs text-muted-foreground">{getRealSize(selectedLine)}</div>
-                <NudgeBtn onClick={() => nudge(1, 0)}><ArrowRight className="w-5 h-5" /></NudgeBtn>
-                <div />
-                <NudgeBtn onClick={() => nudge(0, 1)}><ArrowDown className="w-5 h-5" /></NudgeBtn>
-                <div />
-              </div>
             </div>
           )}
 
@@ -1079,7 +1112,7 @@ export default function MeasureMobile() {
 
 // ---------------- Small subcomponents ----------------
 
-function ModeToggle({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function ModeToggle({ active, onClick, icon, label }: { active?: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick}
       className={`flex-1 h-11 rounded-md flex items-center justify-center gap-1.5 text-sm font-medium transition-colors ${active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground active:bg-secondary/80'}`}>
@@ -1088,18 +1121,21 @@ function ModeToggle({ active, onClick, icon, label }: { active: boolean; onClick
   );
 }
 
-function ActionBtn({ onClick, icon, label, disabled, highlight }: { onClick: () => void; icon: React.ReactNode; label: string; disabled?: boolean; highlight?: boolean }) {
+// Round button used throughout the floating action column. `active` = the
+// tool/toggle is currently on; `highlight` = draws attention (e.g. no scale set
+// yet); `danger` = destructive (delete).
+function ColBtn({ onClick, active, highlight, danger, label, children }:
+  { onClick: () => void; active?: boolean; highlight?: boolean; danger?: boolean; label: string; children: React.ReactNode }) {
+  const tone = active
+    ? 'bg-primary text-primary-foreground'
+    : danger
+      ? 'bg-card/90 text-destructive'
+      : highlight
+        ? 'bg-card/90 text-primary'
+        : 'bg-card/90 text-foreground';
   return (
-    <button onClick={onClick} disabled={disabled}
-      className={`h-14 rounded-md flex flex-col items-center justify-center gap-0.5 text-[11px] ${disabled ? 'opacity-40' : 'active:bg-secondary'} ${highlight ? 'text-primary' : 'text-foreground'}`}>
-      {icon}<span>{label}</span>
-    </button>
-  );
-}
-
-function NudgeBtn({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="h-14 rounded-md bg-secondary text-foreground flex items-center justify-center active:bg-secondary/70">
+    <button onClick={onClick} aria-label={label} aria-pressed={active}
+      className={`h-10 w-10 rounded-full border border-border flex items-center justify-center shadow active:scale-95 transition-colors ${tone}`}>
       {children}
     </button>
   );
@@ -1131,40 +1167,24 @@ function Sheet({ title, children, onClose }: { title: string; children: React.Re
   );
 }
 
-function SelectedLineEditor({ line, getRealSize, onChange, onDelete }:
-  { line: MeasurementLine; getRealSize: (l: MeasurementLine) => string; onChange: (u: Partial<MeasurementLine>) => void; onDelete: () => void }) {
+// Compact on-canvas editor for the selected line. Floats at the bottom-center
+// of the artwork so the artist can read the measurement and label the line
+// without opening any menu. Delete is handled by the floating action column.
+function InlineLabelEditor({ line, getRealSize, onChange }:
+  { line: MeasurementLine; getRealSize: (l: MeasurementLine) => string; onChange: (u: Partial<MeasurementLine>) => void }) {
   const [label, setLabel] = useState(line.label);
-  const [labelOpen, setLabelOpen] = useState(!!line.label);
-  useEffect(() => { setLabel(line.label); setLabelOpen(!!line.label); }, [line.id, line.label]);
+  // `key={line.id}` on the mount site keeps this in sync when selection changes.
   return (
-    <div className="rounded-md border border-border p-3 space-y-3 bg-secondary/30">
-      <div className="flex items-center gap-3">
-        <span className="w-4 h-4 rounded-full" style={{ backgroundColor: line.color }} />
-        <div className="flex-1">
-          <div className="text-xs text-muted-foreground">Measurement</div>
-          <div className="text-base font-semibold text-foreground">{getRealSize(line)}</div>
-        </div>
-        <button onClick={onDelete} className="h-10 w-10 flex items-center justify-center text-destructive" aria-label="Delete">
-          <Trash2 className="w-5 h-5" />
-        </button>
-      </div>
-      {labelOpen ? (
-        <label className="block">
-          <span className="text-xs text-muted-foreground">Label</span>
-          <input autoFocus value={label} onChange={e => setLabel(e.target.value)} onBlur={() => onChange({ label })}
-            placeholder="e.g. eye width"
-            className="mt-1 w-full h-11 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
-        </label>
-      ) : (
-        <button onClick={() => setLabelOpen(true)}
-          className="text-xs text-muted-foreground active:text-foreground inline-flex items-center gap-1">
-          + Add label
-        </button>
-      )}
-      <button onClick={() => onChange({ visible: !line.visible })}
-        className="w-full h-10 rounded-md bg-secondary text-muted-foreground text-sm">
-        {line.visible ? 'Hide line' : 'Show line'}
-      </button>
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 max-w-[calc(100%-6rem)] bg-card/95 border border-border rounded-full pl-3 pr-2 py-1.5 shadow-lg backdrop-blur-sm">
+      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: line.color }} />
+      <span className="text-sm font-semibold text-foreground whitespace-nowrap">{getRealSize(line)}</span>
+      <span className="w-px self-stretch bg-border" />
+      <input value={label}
+        onChange={e => { setLabel(e.target.value); onChange({ label: e.target.value }); }}
+        placeholder="Add label"
+        /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
+        style={{ fontSize: '16px' }}
+        className="w-28 min-w-0 h-8 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
     </div>
   );
 }

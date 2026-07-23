@@ -116,7 +116,7 @@ const initialState: StoreState = {
   activeLayerId: 'general',
   selectedLineId: null,
   mode: 'idle',
-  lineColor: '#f59e0b',
+  lineColor: '#8b5cf6',
   showMeasurements: true,
   valueSettings: { ...DEFAULT_VALUE_SETTINGS },
   sampledColors: [],
@@ -138,7 +138,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [activeLayerId, setActiveLayerId] = useState(saved.current.activeLayerId || 'general');
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [mode, setMode] = useState<InteractionMode>(image ? 'measure' : 'idle');
-  const [lineColor, setLineColor] = useState('#f59e0b');
+  const [lineColor, setLineColor] = useState('#8b5cf6');
   const [showMeasurements, setShowMeasurements] = useState(true);
   const [valueSettings, setValueSettingsRaw] = useState<ValueSettings>(saved.current.valueSettings || { ...DEFAULT_VALUE_SETTINGS });
   const [sampledColors, setSampledColors] = useState<SampledColor[]>(saved.current.sampledColors || []);
