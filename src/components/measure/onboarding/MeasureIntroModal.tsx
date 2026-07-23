@@ -56,19 +56,16 @@ export default function MeasureIntroModal({
         </button>
 
         <div className="p-5 sm:p-6 space-y-5">
-          {/* Hero storyboard — carries the explanation on its own */}
+          {/* Hero storyboard — carries the entire explanation on its own, so no
+              paragraph of copy is needed beneath it. */}
           <MeasureWorkflowArt />
 
-          {/* One heading, one line of copy */}
-          <div className="space-y-1.5 text-center">
-            <h2 className="text-xl font-bold text-foreground">Start with one thing you can measure</h2>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Draw a line across something whose real size you already know. That’s all it
-              takes for every measurement to become accurate.
-            </p>
-          </div>
+          {/* One short headline — the picture already showed the "how". */}
+          <h2 className="text-center text-xl font-bold text-foreground">
+            First, measure something you know the size&nbsp;of
+          </h2>
 
-          {/* Known-object examples — quiet, scannable chips */}
+          {/* Known-object examples — the visual answer to "measure what?" */}
           <div className="flex flex-wrap justify-center gap-2">
             {KNOWN_OBJECTS.map(o => (
               <span key={o.label}
@@ -78,18 +75,12 @@ export default function MeasureIntroModal({
             ))}
           </div>
 
-          {/* One clear call to action */}
-          <div className="space-y-2 pt-1">
-            <button onClick={onStart}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 active:opacity-90">
-              <Ruler className="w-5 h-5" />
-              Draw my reference line
-            </button>
-            <button onClick={onClose}
-              className="h-9 w-full text-sm font-medium text-muted-foreground active:text-foreground">
-              Skip for now
-            </button>
-          </div>
+          {/* One clear call to action — dismissal lives on the ✕ / backdrop. */}
+          <button onClick={onStart}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 active:opacity-90">
+            <Ruler className="w-5 h-5" />
+            Draw my reference line
+          </button>
         </div>
       </div>
     </div>

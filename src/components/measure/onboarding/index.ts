@@ -5,5 +5,6 @@ export { default as MeasureIntroModal } from './MeasureIntroModal';
 export { default as MeasureDesktopOnboarding } from './MeasureDesktopOnboarding';
 export { default as MeasureScaleSuccess } from './MeasureScaleSuccess';
 export { default as MeasureWorkflowArt } from './MeasureWorkflowArt';
+export { default as TapCoach } from './TapCoach';
 export { default as MeasureHelpButton } from './MeasureHelpButton';
 export { useMeasureIntro, useScaleSuccess, requestMeasureIntroReplay, MEASURE_INTRO_ID } from './useMeasureIntro';

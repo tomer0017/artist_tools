@@ -3,6 +3,7 @@ import { useProject } from '@/hooks/useProjectStore';
 import { useIsTouchOrMobile } from '@/hooks/use-touch-or-mobile';
 import { type Point, type MeasurementLine, type SampledColor, genId, angleBetween, midpoint, realWorldLength } from '@/types/project';
 import { X, Check } from 'lucide-react';
+import { TapCoach } from './onboarding';
 
 interface Props {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -565,6 +566,12 @@ export default function MeasureCanvas({ containerRef }: Props) {
           </g>
         </svg>
       </div>
+
+      {/* First-run gesture coach — teaches the click for the very first
+          calibration point, then clears once one is placed. */}
+      {mode === 'calibrate' && calPoints.length === 0 && !calDraftReady && !calInputVisible && (
+        <TapCoach label="Click to start" />
+      )}
 
       {/* Calibration draft confirmation — confirm line placement before entering size */}
       {calDraftReady && !calInputVisible && (

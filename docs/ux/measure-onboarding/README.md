@@ -21,11 +21,24 @@ mobile and desktop:
 
 | Step | Trigger | What the painter sees |
 |------|---------|-----------------------|
-| **1. Intro** | First time on Measure with an image but no scale | A single card: a big storyboard illustration, one line of copy, one button — **"Draw my reference line"**. No tour, no second screen. |
-| **2. Do it** | On closing the card | Straight onto the canvas in draw mode, with one quiet helper line: *"Draw a line over something whose real size you know."* Nothing else. |
+| **1. Intro** | First time on Measure with an image but no scale | A single card: the storyboard illustration, **one** short headline, example chips, **one** button — *"Draw my reference line"*. No paragraph, no second screen, no second button. |
+| **2. Do it** | On closing the card | Straight onto the canvas in draw mode. A **pulsing tap target** (`TapCoach`) shows the gesture for the first point — teaching by interaction, not a sentence — backed by one quiet helper line. The coach clears the instant a point is placed (one action at a time). |
 | **3. Payoff** | After the real length is entered | A short success card animates a reference line resolving into a real size + ✓ — *"Scale set — 80 cm. Every line you draw now measures the real thing."* Auto-dismisses. |
 
 The generic multi-step tour is **removed** for Measure. Other tools keep it.
+
+### Design-critique pass (reduce text, show don't tell)
+
+The first build was re-audited against "can this be understood without reading /
+can one interaction be removed / can an illustration replace text":
+
+- **Cut the modal to the bone** — removed the body paragraph (the storyboard
+  already delivers it) and the redundant "Skip for now" (the ✕ / backdrop
+  already dismiss). What remains: picture → 6-word headline → example chips →
+  one button.
+- **Taught the first gesture on-canvas** — added `TapCoach`, a pulsing target
+  that answers "what do I do now?" with motion instead of a sentence, so the
+  painter feels they are already using the tool. First point only.
 
 ---
 
@@ -55,13 +68,12 @@ Design rules it follows:
 Mockups in this folder (`*.svg`) inline the theme colours so they preview
 standalone; the shipped React components use the live theme tokens.
 
-## Copy
+## Copy (deliberately minimal)
 
-- **Heading:** "Start with one thing you can measure"
-- **Body:** "Draw a line across something whose real size you already know.
-  That's all it takes for every measurement to become accurate."
+- **Heading (only line of prose in the modal):** "First, measure something you know the size of"
 - **Known-object chips:** Canvas · Frame · Ruler · Book · Door
-- **CTA:** "Draw my reference line" — secondary: "Skip for now"
+- **CTA:** "Draw my reference line" (single button; dismiss via ✕ / backdrop)
+- **Tap coach (Step 2):** "Tap to start" (mobile) / "Click to start" (desktop)
 - **Canvas helper (Step 2):** "Draw a line over something whose real size you know"
 - **Success (Step 3):** "Scale set — {size}. Every line you draw now measures the real thing."
 
@@ -75,6 +87,7 @@ Components live in [`src/components/measure/onboarding/`](../../../src/component
 |------|------|
 | `MeasureWorkflowArt.tsx` | The animated hero storyboard (the design asset, in code). |
 | `MeasureIntroModal.tsx` | Step 1 — the single illustrated card + one CTA. |
+| `TapCoach.tsx` | Step 2 — pulsing on-canvas target that teaches the first tap/click. |
 | `MeasureScaleSuccess.tsx` | Step 3 — the celebratory success card. |
 | `MeasureDesktopOnboarding.tsx` | Desktop wiring (mounts on the desktop canvas path only). |
 | `MeasureHelpButton.tsx` | Header "?" replay for Measure (it opts out of the generic tour). |

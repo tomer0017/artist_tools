@@ -5,7 +5,7 @@ import {
   Maximize,
 } from 'lucide-react';
 import { useProject } from '@/hooks/useProjectStore';
-import { MeasureIntroModal, MeasureScaleSuccess, useMeasureIntro, useScaleSuccess } from './onboarding';
+import { MeasureIntroModal, MeasureScaleSuccess, TapCoach, useMeasureIntro, useScaleSuccess } from './onboarding';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import ImageUploader from '@/components/common/ImageUploader';
 import {
@@ -855,6 +855,12 @@ export default function MeasureMobile() {
               : calPoints.length === 1 ? 'Tap the second point'
               : 'Check the line, then confirm below')}
           </div>
+        )}
+
+        {/* First-run gesture coach — a pulsing target that teaches the tap for
+            the very first reference point, then disappears once one is placed. */}
+        {referenceMode && calPoints.length === 0 && !calDraftReady && !calInputVisible && (
+          <TapCoach />
         )}
 
         {/* Floating action column — the professional "on-canvas" workspace.

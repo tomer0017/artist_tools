@@ -14,10 +14,8 @@
     <use href="#mini"/>
   </g>
 
-  <!-- Copy -->
-  <text x="210" y="380" text-anchor="middle" font-family="Inter, sans-serif" font-size="21" font-weight="700" fill="#e7e3da">Start with one thing you can measure</text>
-  <text x="210" y="406" text-anchor="middle" font-family="Inter, sans-serif" font-size="13.5" fill="#9a9aa2">Draw a line across something whose real size you</text>
-  <text x="210" y="424" text-anchor="middle" font-family="Inter, sans-serif" font-size="13.5" fill="#9a9aa2">already know. That's all it takes to be accurate.</text>
+  <!-- One short headline — no paragraph; the storyboard already taught the how -->
+  <text x="210" y="392" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#e7e3da">First, measure something you know the size of</text>
 
   <!-- Chips -->
   <g font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#9a9aa2">
@@ -27,11 +25,9 @@
     <g><rect x="288" y="446" width="50" height="26" rx="13" fill="#26262b" stroke="#34343a"/><text x="313" y="463" text-anchor="middle">Book</text></g>
   </g>
 
-  <!-- Primary CTA -->
-  <rect x="54" y="496" width="312" height="48" rx="12" fill="#f59e0b"/>
-  <text x="210" y="525" text-anchor="middle" font-family="Inter, sans-serif" font-size="15.5" font-weight="700" fill="#191a1c">Draw my reference line</text>
-  <!-- Secondary -->
-  <text x="210" y="568" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#78787f">Skip for now</text>
+  <!-- Single primary CTA — dismissal lives on the corner ✕ / backdrop -->
+  <rect x="54" y="512" width="312" height="48" rx="12" fill="#f59e0b"/>
+  <text x="210" y="541" text-anchor="middle" font-family="Inter, sans-serif" font-size="15.5" font-weight="700" fill="#191a1c">Draw my reference line</text>
 
   <!-- reusable mini storyboard -->
   <defs>
