@@ -14,7 +14,6 @@ import {
   ImagePlus,
   Layers,
   Lock,
-  Move,
   Redo2,
   SlidersHorizontal,
   Sparkles,
@@ -52,7 +51,6 @@ function Workspace() {
   const [nudgeStep, setNudgeStep] = useState<NudgeStep>('normal');
   const [anchor, setAnchor] = useState<AnchorState | null>(null);
   const [cropActive, setCropActive] = useState(false);
-  const [showStatus, setShowStatus] = useState(true);
   // Locked-comparison zoom: pinch/pan move both images together (a view-only
   // camera in the canvas), alignment untouched.
   const [viewLocked, setViewLocked] = useState(false);
@@ -164,7 +162,6 @@ function Workspace() {
     setViewLocked(false);
     setAnchor({ step: 0 });
     setSheet(null);
-    setShowStatus(false);
   };
 
   // The bottom-bar slot that changes with the active comparison mode.
@@ -263,7 +260,6 @@ function Workspace() {
         onAnchorPoint={handleAnchorPoint}
         viewLocked={viewLocked}
         onGestureActivity={() => {
-          setShowStatus(false);
           if (sheet === 'align') setSheetCollapsed(true);
         }}
         onGestureEnd={() => setSheetCollapsed(false)}
@@ -276,47 +272,16 @@ function Workspace() {
         }`}
       />
 
-      {/* Locked-comparison zoom toggle. Once aligned, lock to treat both images
-          as one scene and pinch/pan into details together. */}
+      {/* Persistent alignment toolbar — the alignment workspace's home for every
+          alignment tool. All three stay visible the whole time you're comparing
+          (Smart Align never disappears after a run; Manual and Smart coexist;
+          Lock & Zoom no longer floats over/overlaps anything). It's hidden only
+          during the brief Smart Align tap sequence, which shows its own prompt. */}
       {!anchor && (
-        <button
-          onClick={() => setViewLocked((v) => !v)}
-          aria-pressed={viewLocked}
-          title={
-            viewLocked
-              ? 'Locked — pinch to zoom both together. Tap to unlock.'
-              : 'Lock alignment, then pinch to zoom both together'
-          }
-          className={`absolute right-3 top-14 z-20 flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium shadow-lg backdrop-blur-sm active:scale-95 ${
-            viewLocked
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border bg-card/95 text-foreground'
-          }`}
-        >
-          <Lock className="h-4 w-4" />
-          {viewLocked ? 'Locked' : 'Lock & zoom'}
-        </button>
-      )}
-
-      {/* Alignment status — a primary, immediately-discoverable Smart Align CTA.
-          Non-blocking; dismissable. Teaches the fastest path first. */}
-      {showStatus && !anchor && !viewLocked && (
-        <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center px-3">
-          <div className="pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-foreground">Align the reference over your painting.</p>
-              <p className="text-[11px] text-muted-foreground">Tap two matching points — it snaps into place.</p>
-            </div>
-            <button
-              onClick={startSmartAlign}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground shadow active:scale-95"
-            >
-              <Sparkles className="h-3.5 w-3.5" /> Smart Align
-            </button>
-            <button onClick={() => setShowStatus(false)} className="shrink-0 text-muted-foreground" aria-label="Dismiss">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
+        <div className="absolute right-2 top-16 z-20 flex flex-col gap-2">
+          <AlignToolBtn icon={<Sparkles className="h-5 w-5" />} label="Smart Align" primary onClick={startSmartAlign} />
+          <AlignToolBtn icon={<SlidersHorizontal className="h-5 w-5" />} label="Manual" active={sheet === 'align'} onClick={() => openSheet('align')} />
+          <AlignToolBtn icon={<Lock className="h-5 w-5" />} label={viewLocked ? 'Locked' : 'Lock & Zoom'} active={viewLocked} onClick={() => setViewLocked((v) => !v)} />
         </div>
       )}
 
@@ -338,7 +303,6 @@ function Workspace() {
       {/* Bottom action bar */}
       <div data-onboarding="compare-bar" className="flex items-stretch justify-around gap-1 border-t border-border px-1 py-1 toolbar-surface">
         <BarButton icon={<Layers className="h-5 w-5" />} label="Mode" active={sheet === 'mode'} onClick={() => openSheet('mode')} />
-        <BarButton icon={<Move className="h-5 w-5" />} label="Align" active={sheet === 'align'} onClick={() => openSheet('align')} />
         <BarButton icon={contextControl.icon} label={contextControl.label} active={contextControl.active} onClick={contextControl.onClick} />
         <BarButton icon={<SlidersHorizontal className="h-5 w-5" />} label="Grid" active={sheet === 'grid'} onClick={() => openSheet('grid')} />
         <BarButton icon={<Download className="h-5 w-5" />} label="Export" active={sheet === 'export'} onClick={() => openSheet('export')} />
@@ -365,7 +329,6 @@ function Workspace() {
           setSelectedLayer={setSelectedLayer}
           nudgeStep={nudgeStep}
           setNudgeStep={setNudgeStep}
-          onStartAnchor={startSmartAlign}
           cropActive={cropActive}
           onToggleCrop={() => setCropActive((v) => !v)}
           onRecrop={(role) => {
@@ -394,6 +357,40 @@ function Workspace() {
         <CompareExportSheet />
       </CompareBottomSheet>
     </div>
+  );
+}
+
+// A button in the persistent right-side alignment toolbar. `primary` marks the
+// always-recommended action (Smart Align); `active` marks a currently-on tool
+// (Manual sheet open, or view Locked).
+function AlignToolBtn({
+  icon,
+  label,
+  active,
+  primary,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  primary?: boolean;
+  onClick: () => void;
+}) {
+  const tone = active
+    ? 'border-primary bg-primary text-primary-foreground'
+    : primary
+      ? 'border-primary/50 bg-primary text-primary-foreground'
+      : 'border-border bg-card/95 text-foreground';
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      title={label}
+      className={`flex w-[68px] flex-col items-center gap-1 rounded-2xl border px-1 py-2 text-[10px] font-semibold leading-tight shadow-lg backdrop-blur-sm transition-colors active:scale-95 ${tone}`}
+    >
+      {icon}
+      <span className="text-center">{label}</span>
+    </button>
   );
 }
 

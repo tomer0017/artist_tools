@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, RotateCcw, X } from 'lucide-react';
 import { CropPreset, ImageCrop, ImageMeta } from './compareArtTypes';
-import { decodeImageElement, presetAspect, renderCrop } from './compareArtCrop';
+import { CROP_PRESETS, decodeImageElement, presetAspect, renderCrop } from './compareArtCrop';
 
 interface Props {
   role: 'artwork' | 'reference';
@@ -37,15 +37,9 @@ interface Rect {
   h: number;
 }
 
-const PRESETS: { id: CropPreset; label: string }[] = [
-  { id: 'free', label: 'Free' },
-  { id: 'square', label: 'Square' },
-  { id: 'circle', label: 'Circle' },
-  { id: '4:3', label: '4:3' },
-  { id: '3:4', label: '3:4' },
-  { id: '16:9', label: '16:9' },
-  { id: 'original', label: 'Original' },
-];
+// Preset buttons are driven by the shared registry (CROP_PRESETS) so painter
+// formats added there appear here automatically.
+const PRESETS = CROP_PRESETS;
 
 const HANDLE_HIT = 28;
 const MIN_FRAME = 48;

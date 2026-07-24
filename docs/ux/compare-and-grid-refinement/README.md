@@ -74,6 +74,46 @@ robust pattern was applied to the shared `ImageUploader`.
 | Smart Align promotion | `src/features/compare-art/CompareArt.tsx` (`startSmartAlign` + status-card CTA) |
 | Picker cancel fix | `src/features/compare-art/compareArtImage.ts`, `src/components/common/ImageUploader.tsx` |
 
+---
+
+## Polish sprint (follow-up) — Compare feels like one workflow
+
+A second pass turned Compare Art from "a set of features" into one continuous,
+painter-oriented workflow.
+
+### Onboarding rebuilt as a story (not a feature list)
+`src/features/compare-art/onboarding/CompareOnboardingArt.tsx` +
+`CompareIntroModal.tsx`:
+- A **Load → Align → Compare → Grid → Export GIF** ribbon shows the whole
+  journey at a glance.
+- The same journey is then told **two ways** as numbered comic-strips:
+  **A — Overlay & fade** (load → drag → fade → mistakes appear → GIF) and
+  **B — Smart Align** (tap eye on painting → same eye on reference → repeat →
+  *snaps into place* → GIF). Each strip reads without its captions.
+- A **"Why export a GIF?"** panel *actually blinks* between a painting and a
+  reference so the value is felt, not explained.
+- All inline SVG, theme-aware, reduced-motion-safe. One CTA: *Start comparing*.
+
+### Persistent alignment toolbar (Part 2 of the brief)
+`CompareArt.tsx` now shows a dedicated right-side **alignment toolbar** the whole
+time both images are loaded: **Smart Align · Manual · Lock & Zoom**. This
+replaced three problems at once:
+- Smart Align used to live in a status card that **disappeared** after use — it
+  is now always one tap away (run → adjust manually → run again).
+- Lock & Zoom used to **float over** the Smart Align control — now they're
+  separate rows in one toolbar; nothing overlaps.
+- Manual and Smart alignment **coexist** as equal, always-visible tools (the
+  Manual sheet is now purely the manual toolkit; the bottom bar dropped its
+  redundant "Align" item). The toolbar hides only during the brief Smart Align
+  tap sequence, which has its own prompt.
+
+### Extensible crop presets + painter formats (Part 3 of the brief)
+Crop presets are now a **data-driven registry** (`CROP_PRESETS` in
+`compareArtCrop.ts`) — id, label, aspect (`number | 'original' | null`), optional
+`shape`. Added **A5 / A4 / A3** (portrait ISO ratio) that behave exactly like the
+existing ratio presets. Adding future formats (A2/A1, square/round canvas,
+50×70/60×90/70×100 cm) is a one-line entry — no logic changes.
+
 ## Validation
 
 Typecheck ✅ · ESLint (no new issues — baseline 3 pre-existing errors unchanged)

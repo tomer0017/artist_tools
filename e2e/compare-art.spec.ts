@@ -91,9 +91,10 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Confirm crop' })).toBeEnabled();
   await page.getByRole('button', { name: 'Confirm crop' }).click();
 
-  // The comparison canvas + bottom bar should now be visible.
+  // The comparison canvas + bottom bar should now be visible, and the persistent
+  // alignment toolbar (Smart Align always available) is present.
   await expect(page.getByRole('button', { name: 'Export' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Align', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Smart Align' }).first()).toBeVisible();
 
   // Task 3: Overlay mode shows an always-visible opacity slider + one-tap GIF.
   await expect(page.getByRole('slider', { name: 'Reference opacity' })).toBeVisible();
@@ -128,8 +129,8 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   await page.getByRole('button', { name: 'Difference' }).click();
   await page.getByRole('button', { name: 'Close' }).click();
 
-  // Nudge the reference (precision) — proves alignment controls work.
-  await page.getByRole('button', { name: 'Align', exact: true }).click();
+  // Nudge the reference (precision) — the Manual tool opens the manual toolkit.
+  await page.getByRole('button', { name: 'Manual' }).click();
   await page.getByRole('button', { name: 'Move right' }).click();
   await page.getByRole('button', { name: 'Move right' }).click();
   await page.getByRole('button', { name: 'Close' }).click();

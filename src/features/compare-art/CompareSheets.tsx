@@ -16,7 +16,6 @@ import {
   Lock,
   RotateCcw,
   RotateCw,
-  Target,
   Unlock,
   ZoomIn,
   ZoomOut,
@@ -265,7 +264,6 @@ interface AlignProps {
   setSelectedLayer: (l: 'artwork' | 'reference') => void;
   nudgeStep: NudgeStep;
   setNudgeStep: (s: NudgeStep) => void;
-  onStartAnchor: () => void;
   cropActive: boolean;
   onToggleCrop: () => void;
   onRecrop: (role: 'artwork' | 'reference') => void;
@@ -276,7 +274,6 @@ export function AlignSheet({
   setSelectedLayer,
   nudgeStep,
   setNudgeStep,
-  onStartAnchor,
   cropActive,
   onToggleCrop,
   onRecrop,
@@ -287,20 +284,8 @@ export function AlignSheet({
 
   return (
     <div className="space-y-4">
-      {/* Smart Align — the single strongest alignment tool, promoted to the top
-          so painters actually discover it. Plain-language name + one-line how-to. */}
-      <button
-        onClick={onStartAnchor}
-        className="flex w-full items-center gap-3 rounded-xl bg-primary px-3 py-3 text-left text-primary-foreground shadow-sm active:scale-[0.99]"
-      >
-        <Target className="h-5 w-5 shrink-0" />
-        <span className="flex-1">
-          <span className="block text-sm font-semibold">Smart Align</span>
-          <span className="block text-[11px] leading-snug opacity-90">
-            Select two matching points on your artwork and on the reference.
-          </span>
-        </span>
-      </button>
+      {/* Smart Align lives in the persistent alignment toolbar now, so this sheet
+          is purely the MANUAL toolkit (nudge, layer, fit, mirror, crop). */}
 
       {/* Re-crop each source image (region to compare) */}
       <Field label="Re-crop source image">

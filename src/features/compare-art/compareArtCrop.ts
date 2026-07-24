@@ -10,24 +10,47 @@
 
 import { CROP_OUTPUT_MAX_DIM, CropPreset, ImageCrop } from './compareArtTypes';
 
+// ─── Crop preset registry (single source of truth) ──────────────────────────
+// Adding a painter format is a one-line entry here — the crop UI, aspect
+// constraint, persistence and rendering all read from this list, so nothing
+// else needs to change. `aspect` is width/height; `'original'` means the
+// image's own ratio; `null` means a free/unconstrained frame. `shape: 'circle'`
+// masks to an ellipse. This is deliberately extensible for future formats
+// (A2/A1, square/round canvas, 50×70, 60×90, 70×100 cm, …).
+export interface CropPresetDef {
+  id: CropPreset;
+  label: string;
+  aspect: number | 'original' | null;
+  shape?: 'circle';
+}
+
+// ISO A-series share one ratio (1 : √2). Painters usually work portrait, so the
+// paper presets constrain to portrait; a landscape reference still pans/zooms
+// freely inside the frame.
+const A_SERIES_PORTRAIT = 1 / Math.SQRT2; // ≈ 0.7071 (w/h)
+
+export const CROP_PRESETS: CropPresetDef[] = [
+  { id: 'free', label: 'Free', aspect: null },
+  { id: 'square', label: 'Square', aspect: 1 },
+  { id: 'circle', label: 'Circle', aspect: 1, shape: 'circle' },
+  { id: '4:3', label: '4:3', aspect: 4 / 3 },
+  { id: '3:4', label: '3:4', aspect: 3 / 4 },
+  { id: '16:9', label: '16:9', aspect: 16 / 9 },
+  { id: 'original', label: 'Original', aspect: 'original' },
+  // Painter paper formats (portrait, ISO A ratio).
+  { id: 'a5', label: 'A5', aspect: A_SERIES_PORTRAIT },
+  { id: 'a4', label: 'A4', aspect: A_SERIES_PORTRAIT },
+  { id: 'a3', label: 'A3', aspect: A_SERIES_PORTRAIT },
+];
+
+const PRESET_BY_ID = new Map(CROP_PRESETS.map((p) => [p.id, p]));
+
 /** Aspect ratio (w/h) for a preset, or null for a free/custom crop. */
 export function presetAspect(preset: CropPreset, imgW: number, imgH: number): number | null {
-  switch (preset) {
-    case 'square':
-    case 'circle':
-      return 1;
-    case '4:3':
-      return 4 / 3;
-    case '3:4':
-      return 3 / 4;
-    case '16:9':
-      return 16 / 9;
-    case 'original':
-      return imgW && imgH ? imgW / imgH : 1;
-    case 'free':
-    default:
-      return null;
-  }
+  const def = PRESET_BY_ID.get(preset);
+  if (!def) return null;
+  if (def.aspect === 'original') return imgW && imgH ? imgW / imgH : 1;
+  return def.aspect;
 }
 
 function clamp01(v: number) {

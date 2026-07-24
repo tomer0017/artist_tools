@@ -29,7 +29,12 @@ export type GifSpeed = 'slow' | 'normal' | 'fast';
 export type GifSize = 'small' | 'standard' | 'high';
 
 /** Aspect/shape presets offered on the pre-comparison crop screen. */
-export type CropPreset = 'free' | 'square' | 'circle' | '4:3' | '3:4' | '16:9' | 'original';
+// Crop presets are data-driven (see CROP_PRESETS in compareArtCrop.ts) so new
+// painter formats can be added without touching crop logic. The union is the
+// set of known ids; the 'a5'/'a4'/'a3' painter paper formats are additive.
+export type CropPreset =
+  | 'free' | 'square' | 'circle' | '4:3' | '3:4' | '16:9' | 'original'
+  | 'a5' | 'a4' | 'a3';
 
 /**
  * A non-destructive, re-editable crop applied to a *source* image BEFORE it
