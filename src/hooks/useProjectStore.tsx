@@ -24,6 +24,9 @@ interface StoreState {
   zoom: number;
   panOffset: Point;
   gridSettings: GridSettings;
+  // Grid's own working image (see setGridImage / initGridImageFromReference).
+  gridImage: string | null;
+  gridImageInitialized: boolean;
   isImageLoading: boolean;
   imageLoadError: string | null;
 }
@@ -56,6 +59,13 @@ interface StoreActions {
   newProject: () => void;
   exportProjectJSON: () => string;
   setGridSettings: (updates: Partial<GridSettings>) => void;
+  // Set the Grid's working image directly (Upload / Replace inside Grid). Never
+  // touches the main reference image.
+  setGridImage: (img: string | null) => void;
+  // One-time initialization of the Grid image from the main reference, so Grid
+  // never opens empty when a usable reference already exists. No-op once the
+  // Grid has its own image.
+  initGridImageFromReference: () => void;
   setImageLoaded: () => void;
   setImageLoadError: (error: string | null) => void;
   clearImageLoadError: () => void;
@@ -80,6 +90,8 @@ function loadFromStorage(): Partial<StoreState> {
       valueSettings: data.valueSettings || DEFAULT_VALUE_SETTINGS,
       sampledColors: data.sampledColors || [],
       gridSettings: data.gridSettings || { ...DEFAULT_GRID_SETTINGS },
+      gridImage: data.gridImage ?? null,
+      gridImageInitialized: data.gridImageInitialized ?? false,
     };
   } catch (error) {
     console.error('[useProjectStore] Failed to read project from localStorage:', error);
@@ -98,6 +110,8 @@ function saveToStorage(state: StoreState) {
       valueSettings: state.valueSettings,
       sampledColors: state.sampledColors,
       gridSettings: state.gridSettings,
+      gridImage: state.gridImage,
+      gridImageInitialized: state.gridImageInitialized,
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -123,6 +137,8 @@ const initialState: StoreState = {
   zoom: 1,
   panOffset: { x: 0, y: 0 },
   gridSettings: { ...DEFAULT_GRID_SETTINGS },
+  gridImage: null,
+  gridImageInitialized: false,
   isImageLoading: false,
   imageLoadError: null,
 };
@@ -145,6 +161,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
   const [gridSettings, setGridSettingsRaw] = useState<GridSettings>(saved.current.gridSettings || { ...DEFAULT_GRID_SETTINGS });
+  const [gridImage, setGridImageRaw] = useState<string | null>(saved.current.gridImage ?? null);
+  const [gridImageInitialized, setGridImageInitialized] = useState<boolean>(saved.current.gridImageInitialized ?? false);
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [imageLoadError, setImageLoadError] = useState<string | null>(null);
 
@@ -161,11 +179,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         activeTab, image, calibration, measurements, layers,
         activeLayerId, selectedLineId, mode, lineColor,
         showMeasurements, valueSettings, sampledColors, zoom, panOffset, gridSettings,
+        gridImage, gridImageInitialized,
         isImageLoading, imageLoadError,
       });
     }, 300);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [image, calibration, measurements, layers, activeLayerId, valueSettings, sampledColors, gridSettings, isImageLoading, imageLoadError]);
+  }, [image, calibration, measurements, layers, activeLayerId, valueSettings, sampledColors, gridSettings, gridImage, gridImageInitialized, isImageLoading, imageLoadError]);
 
   const pushUndo = useCallback(() => {
     undoStack.current.push([...measurements]);
@@ -295,6 +314,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
     setGridSettingsRaw({ ...DEFAULT_GRID_SETTINGS });
+    setGridImageRaw(null);
+    setGridImageInitialized(false);
     setIsImageLoading(false);
     setImageLoadError(null);
     try {
@@ -316,6 +337,23 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     setGridSettingsRaw(prev => ({ ...prev, ...updates }));
   }, []);
 
+  // Grid owns its own image. Setting it (Upload / Replace inside Grid) marks the
+  // Grid document as initialized so it is never later overwritten by the main
+  // reference — and it deliberately does NOT touch the main `image`.
+  const setGridImage = useCallback((img: string | null) => {
+    setGridImageRaw(img);
+    setGridImageInitialized(true);
+  }, []);
+
+  // Copy the main reference into Grid exactly once, so Grid opens ready when a
+  // reference already exists. After that the two documents are fully decoupled.
+  const initGridImageFromReference = useCallback(() => {
+    if (gridImageInitialized) return;
+    if (!image) return; // nothing to seed yet — a later entry can still init
+    setGridImageRaw(image);
+    setGridImageInitialized(true);
+  }, [gridImageInitialized, image]);
+
   const store: Store = {
     activeTab, setActiveTab,
     image, setImage,
@@ -336,6 +374,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     undo, redo,
     clearAllLines, newProject, exportProjectJSON,
     gridSettings, setGridSettings,
+    gridImage, gridImageInitialized, setGridImage, initGridImageFromReference,
     isImageLoading, setImageLoaded,
     imageLoadError, setImageLoadError, clearImageLoadError,
     beginImageUpload,

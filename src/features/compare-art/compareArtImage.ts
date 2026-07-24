@@ -52,29 +52,62 @@ export function openImagePicker(capture = false): Promise<{ dataUrl: string; met
     input.style.left = '-9999px';
     input.style.opacity = '0';
 
-    const cleanup = () => {
+    // A picker cancel must ALWAYS settle the promise (resolve null), otherwise
+    // the caller's "busy" state would stick and disable its controls forever.
+    // Desktop browsers fire no `change` on cancel, so we settle from three
+    // signals — whichever comes first — all guarded so we settle exactly once:
+    //   1. `change`  — a file was chosen (or explicitly none).
+    //   2. `cancel`  — modern browsers' native file-dialog cancel event.
+    //   3. window `focus` returning with no file — a fallback for the rest.
+    let settled = false;
+    const teardown = () => {
+      window.removeEventListener('focus', onFocus);
       if (input.parentNode) input.parentNode.removeChild(input);
     };
+    const finish = (value: { dataUrl: string; meta: ImageMeta } | null) => {
+      if (settled) return;
+      settled = true;
+      teardown();
+      resolve(value);
+    };
+    const fail = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      teardown();
+      reject(err instanceof Error ? err : new ImagePickError('Failed to load image.'));
+    };
 
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      cleanup();
+    const onFocus = () => {
+      // The window regains focus when the dialog closes. Give `change` a beat to
+      // arrive; if no file materialised, treat it as a cancel.
+      window.setTimeout(() => {
+        if (!settled && !(input.files && input.files.length)) finish(null);
+      }, 500);
+    };
+
+    input.onchange = async () => {
+      const file = input.files?.[0];
       if (!file) {
-        resolve(null);
+        finish(null);
         return;
       }
+      // Claim settlement now so the focus/cancel fallbacks can't race us, then
+      // read + decode asynchronously.
+      if (settled) return;
+      settled = true;
+      teardown();
       try {
         const dataUrl = await readFileAsDataUrl(file);
         const meta = await loadImageMeta(dataUrl, file.name);
         resolve({ dataUrl, meta });
       } catch (err) {
-        reject(err instanceof Error ? err : new ImagePickError('Failed to load image.'));
+        fail(err);
       }
     };
+    input.addEventListener('cancel', () => finish(null));
 
     document.body.appendChild(input);
+    window.addEventListener('focus', onFocus);
     input.click();
-    // Safety cleanup if the user cancels (iOS fires no change event then).
-    setTimeout(cleanup, 60_000);
   });
 }

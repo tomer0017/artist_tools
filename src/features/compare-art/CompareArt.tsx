@@ -12,16 +12,17 @@ import {
   Download,
   FlipHorizontal2,
   ImagePlus,
-  Info,
   Layers,
   Lock,
   Move,
   Redo2,
   SlidersHorizontal,
+  Sparkles,
   Undo2,
   X,
 } from 'lucide-react';
 import { CompareProvider, useCompare } from './compareArtState';
+import { CompareIntroModal, useCompareIntro } from './onboarding';
 import { openImagePicker } from './compareArtImage';
 import { ImageCrop, NudgeStep } from './compareArtTypes';
 import CompareUploadStep from './CompareUploadStep';
@@ -156,6 +157,16 @@ function Workspace() {
     setSheet((cur) => (cur === s ? null : s));
   };
 
+  // Smart Align is a primary action — startable directly from the workspace
+  // (the alignment status card) and from the Align sheet. It kicks off the
+  // 2-point tap flow.
+  const startSmartAlign = () => {
+    setViewLocked(false);
+    setAnchor({ step: 0 });
+    setSheet(null);
+    setShowStatus(false);
+  };
+
   // The bottom-bar slot that changes with the active comparison mode.
   const contextControl =
     session.mode === 'split'
@@ -287,16 +298,22 @@ function Workspace() {
         </button>
       )}
 
-      {/* Alignment status (prominent, non-blocking) */}
+      {/* Alignment status — a primary, immediately-discoverable Smart Align CTA.
+          Non-blocking; dismissable. Teaches the fastest path first. */}
       {showStatus && !anchor && !viewLocked && (
         <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center px-3">
-          <div className="pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border border-border bg-card/95 px-3 py-2 text-[11px] text-muted-foreground shadow-lg backdrop-blur-sm">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-            <div>
-              <p>Align the reference first for an accurate comparison.</p>
-              <p dir="rtl" className="mt-0.5">כדי לקבל השוואה מדויקת, יש ליישר תחילה את הרפרנס מעל הציור.</p>
+          <div className="pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-foreground">Align the reference over your painting.</p>
+              <p className="text-[11px] text-muted-foreground">Tap two matching points — it snaps into place.</p>
             </div>
-            <button onClick={() => setShowStatus(false)} className="text-muted-foreground" aria-label="Dismiss">
+            <button
+              onClick={startSmartAlign}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground shadow active:scale-95"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Smart Align
+            </button>
+            <button onClick={() => setShowStatus(false)} className="shrink-0 text-muted-foreground" aria-label="Dismiss">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -348,11 +365,7 @@ function Workspace() {
           setSelectedLayer={setSelectedLayer}
           nudgeStep={nudgeStep}
           setNudgeStep={setNudgeStep}
-          onStartAnchor={() => {
-            setViewLocked(false);
-            setAnchor({ step: 0 });
-            setSheet(null);
-          }}
+          onStartAnchor={startSmartAlign}
           cropActive={cropActive}
           onToggleCrop={() => setCropActive((v) => !v)}
           onRecrop={(role) => {
@@ -409,10 +422,18 @@ function BarButton({
   );
 }
 
+// Mounts the first-run visual onboarding above the whole Compare workspace (so
+// it teaches before the upload step too) and handles Help-triggered replays.
+function CompareIntroLayer() {
+  const { open, close } = useCompareIntro();
+  return <CompareIntroModal open={open} onStart={close} onClose={close} />;
+}
+
 export default function CompareArt() {
   return (
     <CompareProvider>
       <Workspace />
+      <CompareIntroLayer />
     </CompareProvider>
   );
 }

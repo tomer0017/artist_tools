@@ -51,7 +51,7 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   // own dedicated spec in e2e/onboarding.spec.ts.)
   await page.addInitScript(() => {
     try {
-      ['measure', 'value', 'color', 'grid', 'compare'].forEach((id) =>
+      ['measure', 'measure-intro', 'value', 'color', 'grid', 'compare', 'compare-intro'].forEach((id) =>
         localStorage.setItem('studio-onboarding-' + id, 'done'),
       );
     } catch {
@@ -93,7 +93,7 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
 
   // The comparison canvas + bottom bar should now be visible.
   await expect(page.getByRole('button', { name: 'Export' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Align' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Align', exact: true })).toBeVisible();
 
   // Task 3: Overlay mode shows an always-visible opacity slider + one-tap GIF.
   await expect(page.getByRole('slider', { name: 'Reference opacity' })).toBeVisible();
@@ -116,10 +116,9 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
     expect(bytes.length).toBeGreaterThan(100);
   }
 
-  // Task 2: 2-point align opens a guided prompt (magnifier interaction).
-  await page.getByRole('button', { name: 'Align' }).click();
-  // "Smart Align" is the shipped name for the promoted 2-point align tool.
-  await page.getByRole('button', { name: 'Smart Align' }).click();
+  // Task 2: Smart Align is now a PRIMARY action on the workspace (no menu dig).
+  // Its 2-point flow opens a guided prompt (magnifier interaction).
+  await page.getByRole('button', { name: 'Smart Align' }).first().click();
   await expect(page.getByText('Tap point A on your ARTWORK')).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/04-two-point-align.png` });
   await page.getByRole('button', { name: 'Cancel alignment' }).click();
@@ -130,7 +129,7 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
   await page.getByRole('button', { name: 'Close' }).click();
 
   // Nudge the reference (precision) — proves alignment controls work.
-  await page.getByRole('button', { name: 'Align' }).click();
+  await page.getByRole('button', { name: 'Align', exact: true }).click();
   await page.getByRole('button', { name: 'Move right' }).click();
   await page.getByRole('button', { name: 'Move right' }).click();
   await page.getByRole('button', { name: 'Close' }).click();

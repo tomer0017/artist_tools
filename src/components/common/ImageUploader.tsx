@@ -7,9 +7,13 @@ interface Props {
   disabled?: boolean;
   onUploadStart?: () => void;
   onUploadError?: (message: string) => void;
+  /** When set (with `compact`), render a labelled pill instead of an icon-only button. */
+  label?: string;
+  /** Optional custom leading icon for the labelled/compact button. */
+  icon?: React.ReactNode;
 }
 
-export default function ImageUploader({ onImageLoad, compact, disabled, onUploadStart, onUploadError }: Props) {
+export default function ImageUploader({ onImageLoad, compact, disabled, onUploadStart, onUploadError, label, icon }: Props) {
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
       onUploadError?.('Unsupported file type. Please choose an image.');
@@ -50,24 +54,51 @@ export default function ImageUploader({ onImageLoad, compact, disabled, onUpload
     input.style.left = '-9999px';
     input.style.top = '0';
     input.style.opacity = '0';
-    const cleanup = () => {
+
+    // Cancelling the picker is a normal action — it must always tear down
+    // cleanly (no lingering hidden input, no stuck state), whether the browser
+    // reports it via `change` (no file), the native `cancel` event, or only by
+    // returning focus. Guarded so teardown runs exactly once.
+    let settled = false;
+    const teardown = () => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('focus', onFocus);
       if (input.parentNode) input.parentNode.removeChild(input);
     };
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) handleFile(file);
-      cleanup();
+    const onFocus = () => {
+      window.setTimeout(() => {
+        if (!settled && !(input.files && input.files.length)) teardown();
+      }, 500);
     };
+
+    input.onchange = () => {
+      const file = input.files?.[0];
+      teardown();
+      if (file) handleFile(file);
+    };
+    input.addEventListener('cancel', teardown);
+
     document.body.appendChild(input);
+    window.addEventListener('focus', onFocus);
     input.click();
-    // Safety cleanup if the user cancels (no change event on iOS in that case).
-    setTimeout(cleanup, 60_000);
   }, [handleFile, disabled]);
 
   if (compact) {
+    // Labelled pill (e.g. "Upload Image" / "Replace Image") when a label is given;
+    // otherwise the original icon-only tool button.
+    if (label) {
+      return (
+        <button onClick={handleClick} disabled={disabled} title={label}
+          className={`flex items-center gap-1.5 rounded-lg border border-border bg-card/95 px-3 py-2 text-xs font-medium text-foreground shadow-sm active:scale-95 transition-transform ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          {icon ?? <Upload className="w-4 h-4" />}
+          <span>{label}</span>
+        </button>
+      );
+    }
     return (
       <button onClick={handleClick} className={`btn-tool ${disabled ? 'opacity-40 pointer-events-none' : ''}`} title="Upload image" disabled={disabled}>
-        <Upload className="w-4 h-4" />
+        {icon ?? <Upload className="w-4 h-4" />}
       </button>
     );
   }

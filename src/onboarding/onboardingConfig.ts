@@ -111,34 +111,9 @@ export const ONBOARDING: Partial<Record<ToolId, OnboardingConfig>> = {
     ],
   },
 
-  compare: {
-    id: 'compare',
-    title: 'Compare Art',
-    tagline: 'Overlay your painting on the reference to instantly see what to fix.',
-    preview: [
-      { variant: 'original', label: 'Reference' },
-      { variant: 'compare', label: 'Overlay' },
-    ],
-    steps: [
-      {
-        title: 'Add two images',
-        body: 'Load your reference and a photo of your painting to compare them.',
-      },
-      {
-        target: 'compare-canvas',
-        title: 'Align them',
-        body: 'Drag, pinch or use Smart Align so both images sit exactly on top of each other.',
-      },
-      {
-        target: 'compare-bar',
-        title: 'Try the modes',
-        body: 'Overlay, Blink, Split and Difference each reveal errors differently.',
-      },
-      {
-        target: 'compare-update',
-        title: 'Update as you paint',
-        body: 'Snap a new photo of your painting anytime to re-check your progress.',
-      },
-    ],
-  },
+  // NOTE: Compare Art, like Measure, intentionally has NO entry here. It uses a
+  // dedicated, workflow-driven visual onboarding (an animated intro demonstrating
+  // both comparison workflows + the Load → Align → Compare → Grid → GIF flow) in
+  // src/features/compare-art/onboarding/. Its Help replay is handled by
+  // CompareHelpButton, not the generic HelpButton.
 };

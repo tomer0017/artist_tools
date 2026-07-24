@@ -88,6 +88,11 @@ export interface ProjectData {
   valueSettings: ValueSettings;
   sampledColors: SampledColor[];
   gridSettings: GridSettings;
+  // The Grid tool owns its own working image, initialized once from the main
+  // reference and independent thereafter. Optional for backward compatibility
+  // with projects saved before Grid became an independent document.
+  gridImage?: string | null;
+  gridImageInitialized?: boolean;
   savedAt: number;
 }
 

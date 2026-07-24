@@ -3,6 +3,7 @@ import { Ruler, Palette, Sun, Grid3X3, Layers2 } from 'lucide-react';
 import type { TabId } from '@/types/project';
 import { HelpButton } from '@/onboarding';
 import { MeasureHelpButton } from '@/components/measure/onboarding';
+import { CompareHelpButton } from '@/features/compare-art/onboarding';
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'measure', label: 'Measure', icon: <Ruler className="w-4 h-4" /> },
@@ -38,7 +39,9 @@ export default function Header() {
             its dedicated button; every other tool uses the generic tour. */}
         {activeTab === 'measure'
           ? <MeasureHelpButton className="ml-1" />
-          : <HelpButton toolId={activeTab} className="ml-1" />}
+          : activeTab === 'compare'
+            ? <CompareHelpButton className="ml-1" />
+            : <HelpButton toolId={activeTab} className="ml-1" />}
       </nav>
     </header>
   );

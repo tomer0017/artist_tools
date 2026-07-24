@@ -2,20 +2,26 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
-import { Download, Settings, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, Settings, X, RefreshCw, Upload } from 'lucide-react';
 import type { GridSettings } from '@/types/project';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { canvasToBlob } from '@/lib/saveMedia';
 
 export default function GridTab() {
-  const { image, gridSettings, setGridSettings } = useProject();
+  const { image, gridImage, setGridImage, initGridImageFromReference, gridSettings, setGridSettings } = useProject();
   const { save } = useSaveMedia();
-  const [localImage, setLocalImage] = useState<string | null>(null);
-  const [showControls, setShowControls] = useState(() => !image);
+  const [showControls, setShowControls] = useState(false);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const isMobile = useIsMobile();
 
-  const activeImage = localImage || image;
+  // Grid works on its OWN image (see the store): initialize it once from the
+  // main reference so the tool never opens empty when a reference exists, then
+  // keep the two documents fully independent.
+  useEffect(() => {
+    initGridImageFromReference();
+  }, [initGridImageFromReference]);
+
+  const activeImage = gridImage;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const exportCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -354,16 +360,27 @@ export default function GridTab() {
                 {showControls ? 'Hide controls' : 'Grid controls'}
               </button>
 
-              {activeImage && (
-                <button
-                  onClick={handleExport}
-                  data-onboarding="grid-export"
-                  className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-                  title="Save image"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {/* Image action — always visible, alongside the canvas actions. */}
+                <div className="pointer-events-auto">
+                  <ImageUploader
+                    onImageLoad={setGridImage}
+                    compact
+                    label={activeImage ? 'Replace' : 'Upload'}
+                    icon={activeImage ? <RefreshCw className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                  />
+                </div>
+                {activeImage && (
+                  <button
+                    onClick={handleExport}
+                    data-onboarding="grid-export"
+                    className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
+                    title="Save image"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {activeImage && (
@@ -386,6 +403,18 @@ export default function GridTab() {
                 >
                   Center
                 </button>
+              </div>
+            )}
+
+            {/* Empty state — only ever shown when no reference exists at all. */}
+            {!activeImage && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center p-6 pointer-events-none">
+                <div className="pointer-events-auto w-full max-w-xs">
+                  <ImageUploader onImageLoad={setGridImage} />
+                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                    Add an image to grid it. Set your canvas ratio in Grid controls.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -415,7 +444,7 @@ export default function GridTab() {
                   </div>
                 )}
 
-                <GridControls gs={gs} update={update} activeImage={activeImage} setLocalImage={setLocalImage} colors={GRID_COLORS} />
+                <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
               </div>
             </div>
           )}
@@ -431,14 +460,14 @@ export default function GridTab() {
                 <button onClick={resetImagePosition} className="rounded-lg bg-secondary px-2 py-2 text-[11px] font-medium text-foreground hover:bg-secondary/80">Reset position</button>
               </div>
             )}
-            <GridControls gs={gs} update={update} activeImage={activeImage} setLocalImage={setLocalImage} colors={GRID_COLORS} />
+            <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
           </div>
 
           {/* Desktop canvas */}
           <div
             ref={containerRef}
             data-onboarding="grid-canvas"
-            className="flex-1 canvas-area flex items-center justify-center p-4 min-h-0"
+            className="relative flex-1 canvas-area flex items-center justify-center p-4 min-h-0"
           >
             <canvas
               ref={canvasRef}
@@ -453,16 +482,37 @@ export default function GridTab() {
               onTouchEnd={handleTouchEnd}
               style={{ maxWidth: '100%', maxHeight: '100%' }}
             />
+
+            {/* Empty state — only ever shown when no reference exists at all. */}
+            {!activeImage && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center p-8">
+                <div className="w-full max-w-sm">
+                  <ImageUploader onImageLoad={setGridImage} />
+                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                    Add an image to grid it. Set your canvas ratio in the panel on the left.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Export bar */}
+      {/* Export bar — primary canvas actions live here (image + export). */}
       {!isMobile && (
         <div className="flex items-center justify-between px-3 py-2 toolbar-surface border-t border-border shrink-0">
-          <span className="text-[11px] text-muted-foreground">
-            {gs.canvasWidth}×{gs.canvasHeight} {gs.unit} · {gs.columns}×{gs.rows} grid
-          </span>
+          <div className="flex items-center gap-3">
+            {/* Image action — always visible, adaptive label, never buried in the panel. */}
+            <ImageUploader
+              onImageLoad={setGridImage}
+              compact
+              label={activeImage ? 'Replace Image' : 'Upload Image'}
+              icon={activeImage ? <RefreshCw className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
+            />
+            <span className="text-[11px] text-muted-foreground">
+              {gs.canvasWidth}×{gs.canvasHeight} {gs.unit} · {gs.columns}×{gs.rows} grid
+            </span>
+          </div>
           <button
             onClick={handleExport}
             data-onboarding="grid-export"
@@ -484,13 +534,11 @@ function GridControls({
   gs,
   update,
   activeImage,
-  setLocalImage,
   colors,
 }: {
   gs: GridSettings;
   update: (p: Partial<GridSettings>) => void;
   activeImage: string | null;
-  setLocalImage: (img: string) => void;
   colors: string[];
 }) {
   return (
@@ -658,17 +706,6 @@ function GridControls({
           </button>
         </div>
       )}
-
-      {/* Image upload */}
-      <div>
-        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
-          {activeImage ? 'Replace Image' : 'Add Image'}
-        </label>
-        <ImageUploader onImageLoad={setLocalImage} compact />
-        {!activeImage && (
-          <span className="text-[10px] text-muted-foreground ml-2">Upload or use Measure image</span>
-        )}
-      </div>
     </>
   );
 }
