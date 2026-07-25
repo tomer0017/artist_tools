@@ -48,6 +48,34 @@ const ARTIST_LAYERS: LayerMap<BudgetCurve> = {
   fine: [0, 0.5, 5.0],
 };
 
+/**
+ * Region tuning shared by the trace styles.
+ *
+ * Detail does most of its work through `minAreaFrac`, not through `coverage`.
+ * That split matters: lowering the threshold grows the masses that already
+ * exist — push it far and the hair swallows the brows, the brows swallow the
+ * eyes, and the portrait collapses into one silhouette. Lowering the minimum
+ * mass size instead lets *new, separate* shapes appear while the ones already
+ * on the page stay the size the artist has been reading them at. Coverage
+ * still rises, but only enough to bring fainter shadow shapes into existence.
+ * Both curves are monotone, so black area only ever grows.
+ */
+const VECTOR_REGIONS: SketchParams['regions'] = {
+  coverage: [0.14, 0.165, 0.19],
+  backgroundFrac: 0.055,
+  cleanupFrac: 0.0045,
+  growGuardFrac: 0.008,
+  minAreaFrac: [0.003, 0.0015, 0.0006],
+  accentAreaFrac: 0.00012,
+  accentPriority: 0.45,
+  minStep: 11,
+  minSubject: 0.32,
+  holeAreaFrac: 0.0005,
+  backgroundDamping: 0.7,
+  clutterDamping: 0.55,
+  simplifyFrac: 0.0016,
+};
+
 const ARTIST: SketchParams = {
   denoise: { spatialFrac: 0.009, range: 24 },
   shape: { spatialFrac: 0.038, range: 55 },
@@ -79,6 +107,9 @@ const ARTIST: SketchParams = {
     pressure: 0.34,
   },
   shading: { amount: 0.32, bands: 3, hatch: 0.4, start: 0.5 },
+  render: 'strokes',
+  regions: VECTOR_REGIONS,
+  outline: { enabled: false, widthFrac: 0.0022, minLengthFrac: 0.06 },
   layers: ARTIST_LAYERS,
   simplifyFrac: 0.0018,
   maxStrokes: 6000,
@@ -122,27 +153,58 @@ function variant(
 export const SKETCH_STYLES: Record<SketchStyleId, SketchStyleDefinition> = {
   artist: {
     id: 'artist',
-    label: 'Artist sketch',
-    description: 'Clean contours, grouped masses, three line weights — a drawing to transfer.',
+    label: 'Pencil sketch',
+    description: 'Pencil-style line work: clean contours and three line weights.',
     params: ARTIST,
   },
-  outline: variant('outline', 'Outline', 'Boundaries only, one confident weight, no shading.', {
-    hierarchy: {
-      heavyQuantile: 0.35,
-      mediumQuantile: 0.34,
-      widthScale: { heavy: 1, medium: 0.85, light: 0.7 },
-      opacity: { heavy: 0.96, medium: 0.92, light: 0.86 },
-      taperDepth: 0.25,
-      pressure: 0.12,
+  vector: variant(
+    'vector',
+    'Vector trace',
+    'Clean black masses with crisp edges — a simplified illustration, ready for SVG.',
+    {
+      render: 'regions',
+      outline: { enabled: true, widthFrac: 0.0022, minLengthFrac: 0.07 },
+      shading: { amount: 0 },
+      // Only the structural and facial outlines ride on top of the masses.
+      // Anything below that would read as detected edges rather than drawing.
+      layers: {
+        structure: [3.2, 4.0, 4.6],
+        face: [0.8, 1.1, 1.4],
+        secondary: [0, 0, 0],
+        fine: [0, 0, 0],
+      },
+      hierarchy: {
+        // Flat, confident line: no pressure wobble, barely any taper. A vector
+        // illustration has no pencil in it.
+        widthScale: { heavy: 1, medium: 0.72, light: 0.55 },
+        opacity: { heavy: 1, medium: 1, light: 1 },
+        taperDepth: 0.15,
+        pressure: 0.1,
+      },
     },
-    layers: {
-      structure: [3.6, 4.8, 6.0],
-      face: [1.0, 1.4, 1.8],
-      secondary: [0, 0.8, 1.6],
-      fine: [0, 0, 0],
+  ),
+  poster: variant(
+    'poster',
+    'Poster',
+    'Bolder, flatter masses — fewer, larger shapes for a graphic block-in.',
+    {
+      render: 'regions',
+      outline: { enabled: false, widthFrac: 0.0022, minLengthFrac: 0.07 },
+      shading: { amount: 0 },
+      regions: {
+        coverage: [0.17, 0.2, 0.24],
+        cleanupFrac: 0.007,
+        minAreaFrac: [0.004, 0.002, 0.001],
+        simplifyFrac: 0.003,
+      },
+      layers: {
+        structure: [0, 0, 0],
+        face: [0, 0, 0],
+        secondary: [0, 0, 0],
+        fine: [0, 0, 0],
+      },
     },
-    shading: { amount: 0 },
-  }),
+  ),
   pencil: variant('pencil', 'Pencil', 'Softer, greyer line with visible tonal masses.', {
     hierarchy: {
       opacity: { heavy: 0.8, medium: 0.6, light: 0.36 },
@@ -185,7 +247,7 @@ export const SKETCH_STYLES: Record<SketchStyleId, SketchStyleDefinition> = {
   }),
 };
 
-export const DEFAULT_SKETCH_STYLE: SketchStyleId = 'artist';
+export const DEFAULT_SKETCH_STYLE: SketchStyleId = 'vector';
 
 export function styleParams(style: SketchStyleId): SketchParams {
   return (SKETCH_STYLES[style] ?? SKETCH_STYLES[DEFAULT_SKETCH_STYLE]).params;

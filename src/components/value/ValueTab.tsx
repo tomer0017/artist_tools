@@ -10,7 +10,8 @@ import {
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { dataUrlToBlob } from '@/lib/saveMedia';
 import {
-  buildSketchAnalysis, composeSketch, renderSketchToCanvas, type SketchAnalysis,
+  buildSketchAnalysis, composeSketch, renderSketchToCanvas, sketchToSvg,
+  type SketchAnalysis, type SketchDrawing,
 } from '@/lib/sketch';
 
 type Mode = 'grayscale' | 'color' | 'painter' | 'sketch';
@@ -182,6 +183,9 @@ export default function ValueTab() {
     image: string; contrast: number; brightness: number; w: number; h: number;
     analysis: SketchAnalysis;
   } | null>(null);
+  // Kept so "Save SVG" exports exactly the drawing on screen rather than
+  // re-deriving it.
+  const sketchDrawing = useRef<SketchDrawing | null>(null);
   const isMobile = useIsMobile();
 
   const activeImage = localImage || image;
@@ -428,6 +432,7 @@ export default function ValueTab() {
           detail: sketchDetail / 100,
           shading: sketchShading,
         });
+        sketchDrawing.current = drawing;
         renderSketchToCanvas(drawing, canvas);
         setProcessedUrl(canvas.toDataURL('image/png'));
         // Fall through below to build the value/dominant palettes (still useful
@@ -561,6 +566,19 @@ export default function ValueTab() {
     // the lines stay crisp for tracing / transferring.
     if (mode === 'sketch') saveDataUrl(processedUrl, 'sketch.png', 'image/png');
     else saveDataUrl(processedUrl, 'value-study.jpg', 'image/jpeg');
+  };
+
+  // The trace is polygons all the way down, so the SVG is the same drawing
+  // rather than a trace of the bitmap — scalable for large-format printing.
+  const exportSketchSvg = () => {
+    const drawing = sketchDrawing.current;
+    if (!drawing) return;
+    try {
+      const blob = new Blob([sketchToSvg(drawing)], { type: 'image/svg+xml' });
+      save({ blob, filename: 'sketch.svg', mime: 'image/svg+xml', title: 'Save SVG' });
+    } catch (error) {
+      console.error('[ValueTab] Failed to export sketch SVG:', error);
+    }
   };
 
   const exportPalette = () => {
@@ -771,9 +789,9 @@ export default function ValueTab() {
   const sketchDetailLabel =
     sketchDetail < 34 ? 'Simple' : sketchDetail > 66 ? 'Detailed' : 'Balanced';
   const sketchDetailHint =
-    sketchDetail < 34 ? 'Silhouette, contours and facial features'
-      : sketchDetail > 66 ? 'Adds hair strands, wrinkles and secondary folds'
-        : 'Adds hair masses, eyelids and major folds';
+    sketchDetail < 34 ? 'Largest shapes only — silhouette, hair, eyes, nose, lips'
+      : sketchDetail > 66 ? 'Adds smaller shadow shapes and hair/beard groups'
+        : 'Adds secondary features, shadow regions and folds';
 
   // Inline controls that live *permanently below the image* — the sliders a
   // painter reaches for constantly while studying, so they never require
@@ -841,6 +859,9 @@ export default function ValueTab() {
             <p className="text-[10px] text-muted-foreground mb-1.5">
               Tune the drawing with <span className="font-medium text-foreground">Sketch detail</span> below the image.
             </p>
+            {/* Pencil tone belongs to the line-work styles; the trace is pure
+                black and white by definition. Kept for when a pencil style is
+                exposed again. */}
             <button onClick={() => setValueSettings({ sketchShading: !sketchShading })}
               className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-medium transition-colors ${
                 sketchShading ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
@@ -888,6 +909,12 @@ export default function ValueTab() {
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
             <Download className="w-3 h-3" />Save processed image
           </button>
+          {isSketch && (
+            <button onClick={exportSketchSvg}
+              className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
+              <Download className="w-3 h-3" />Save as SVG (vector)
+            </button>
+          )}
           <button onClick={exportPalette}
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
             <Download className="w-3 h-3" />Save palette

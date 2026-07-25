@@ -39,6 +39,15 @@ import {
 } from './imageOps';
 import { buildAnalysisMaps, type AnalysisMaps } from './analysis';
 import {
+  closeMask,
+  dilateMask,
+  fillSmallHoles,
+  labelComponents,
+  maxFilter,
+  openMask,
+  traceMaskBoundaries,
+} from './regions';
+import {
   linkContours,
   polylineLength,
   simplify,
@@ -57,6 +66,7 @@ import {
   type SketchOptions,
   type SketchParams,
   type SketchShading,
+  type SketchShapes,
   type SketchSource,
   type SketchStroke,
   type SketchStyleId,
@@ -265,6 +275,10 @@ export function buildSketchAnalysis(
   const shading =
     params.shading.amount > 0.01 ? buildShading(shape, w, h, diag, params) : null;
 
+  // --- Tonal simplification for the trace styles ---------------------------
+  const darkness =
+    params.render === 'regions' ? buildDarknessField(shape, maps, w, h, diag, params) : null;
+
   return {
     width: w,
     height: h,
@@ -272,6 +286,9 @@ export function buildSketchAnalysis(
     params,
     strokes,
     shading,
+    darkness,
+    priority: maps.priority,
+    subject: maps.subject,
     stats: {
       traced: primary.length + fineRaw.length,
       eligible: eligible.length,
@@ -311,19 +328,220 @@ export function composeSketch(analysis: SketchAnalysis, opts: SketchOptions): Sk
     }
   }
 
+  const traced =
+    params.render === 'regions' && analysis.darkness
+      ? composeShapes(analysis, detail, params)
+      : null;
+  const shapes = traced ? traced.shapes : null;
+  const diagonal = Math.hypot(analysis.width, analysis.height);
+  const outlines = traced
+    ? params.outline.enabled
+      ? outlinesOutsideMasses(
+          kept.filter((s) => s.length >= params.outline.minLengthFrac * diagonal),
+          traced.mask,
+          analysis.width,
+          analysis.height,
+          diagonal,
+        )
+      : []
+    : kept;
+
   return {
     width: analysis.width,
     height: analysis.height,
-    strokes: kept,
+    strokes: outlines,
+    shapes,
     shading: opts.shading ? analysis.shading : null,
+    render: params.render,
     style: analysis.style,
     detail,
     paper: params.paper,
     ink: params.ink,
     opacity: params.hierarchy.opacity,
-    stats: { traced: analysis.stats.traced, kept: kept.length, weights, layers },
+    stats: {
+      traced: analysis.stats.traced,
+      kept: outlines.length,
+      weights,
+      layers,
+      coverage: shapes ? shapes.coverage : 0,
+      regions: shapes ? shapes.regions : 0,
+    },
   };
 }
+
+/**
+ * Turn the darkness field into black masses at this detail level.
+ *
+ *   threshold at the coverage target → morphological cleanup → hole filling
+ *   → connected regions → drop what is not worth drawing → trace boundaries
+ *
+ * Every step is *monotone* in Detail, which is the whole design: a higher
+ * coverage target can only lower the threshold, erosion/dilation preserve
+ * containment, and a mass kept once is absorbed into a larger mass that passes
+ * the same tests. Black area therefore only ever grows — no shape a painter has
+ * started reading can vanish or be restyled underneath them.
+ */
+function composeShapes(
+  analysis: SketchAnalysis,
+  detail: number,
+  params: SketchParams,
+): { shapes: SketchShapes; mask: Uint8Array } {
+  const { width: w, height: h, darkness, priority, subject } = analysis;
+  const n = w * h;
+  const diag = Math.hypot(w, h);
+  const cfg = params.regions;
+
+  // Threshold by ink coverage rather than by tone: the same slider position
+  // then means the same amount of drawing on a high-key studio portrait and on
+  // a murky snapshot.
+  const coverage = clamp01(resolveBudget(cfg.coverage, detail));
+  // The higher of the two bars: fill the coverage quota, but never below the
+  // absolute contrast floor. `max(non-increasing, constant)` is still
+  // non-increasing in Detail, so the cumulative guarantee is untouched.
+  const scale = darknessScale.get(darkness!) ?? 1;
+  const floor = clamp01(cfg.minStep / scale);
+  const threshold = Math.max(percentile(darkness!, 1 - coverage, true), floor);
+  // The core is thresholded at the *Simple* coverage and never moves.
+  const coreThreshold = Math.max(percentile(darkness!, 1 - cfg.coverage[0], true), floor);
+
+  // More detail must mean more *shapes*, not fatter ones. Lowering a threshold
+  // grows the masses that already exist, and on a portrait that is fatal: the
+  // hair creeps down over the brows, the brows close over the eyes, and the
+  // face collapses into one silhouette. So the extra darks are admitted only
+  // away from the masses already on the page — a fixed guard band around the
+  // fixed core — which lets a separate cheek or fold shape appear while every
+  // shape the artist has been reading stays exactly the size it was.
+  const core = new Uint8Array(n);
+  for (let p = 0; p < n; p++) if (darkness![p] >= coreThreshold && darkness![p] > 0) core[p] = 1;
+  const guard = dilateMask(core, w, h, Math.max(1, Math.round(cfg.growGuardFrac * diag)));
+  let mask = core;
+  if (threshold < coreThreshold) {
+    mask = Uint8Array.from(core);
+    for (let p = 0; p < n; p++) {
+      if (!guard[p] && darkness![p] >= threshold && darkness![p] > 0) mask[p] = 1;
+    }
+  }
+
+  // Opening first: this is where pores, grain, weave, foliage speckle and JPEG
+  // mush die, and they die by *size*, so no detail level can bring them back.
+  const cleanup = Math.max(1, Math.round(cfg.cleanupFrac * diag));
+  mask = openMask(mask, w, h, cleanup);
+  mask = closeMask(mask, w, h, cleanup);
+  mask = fillSmallHoles(mask, w, h, Math.max(4, cfg.holeAreaFrac * n));
+
+  const { labels, components } = labelComponents(mask, w, h, priority, subject);
+  const minArea = resolveBudget(cfg.minAreaFrac, detail) * n;
+  const accentArea = cfg.accentAreaFrac * n;
+  const keep = new Uint8Array(components.length);
+  for (const c of components) {
+    if (c.maxSubject < cfg.minSubject) continue; // backdrop: never black
+    const isAccent = c.maxPriority >= cfg.accentPriority && c.area >= accentArea;
+    if (c.area >= minArea || isAccent) keep[c.label] = 1;
+  }
+
+  const final = new Uint8Array(n);
+  let black = 0;
+  let regions = 0;
+  for (let i = 0; i < components.length; i++) if (keep[i]) regions++;
+  for (let p = 0; p < n; p++) {
+    if (labels[p] >= 0 && keep[labels[p]]) {
+      final[p] = 1;
+      black++;
+    }
+  }
+
+  const epsilon = cfg.simplifyFrac * diag;
+  const loops = traceMaskBoundaries(final, w, h)
+    .map((loop) => simplify(loop, epsilon))
+    .filter((loop) => loop.length >= 6);
+
+  return { shapes: { loops, coverage: black / n, regions }, mask: final };
+}
+
+/**
+ * Drop outlines that the masses already draw.
+ *
+ * A trace gets its silhouette from the black shapes themselves; a contour
+ * running along the edge of a mass adds a second, slightly-offset edge and
+ * reads as detection rather than drawing. What is worth keeping is the line in
+ * *white* territory — the jaw against a pale background, a fold across a lit
+ * cheek — so a stroke survives only if most of it lies outside the ink.
+ *
+ * A stroke lost this way has not gone missing: the mass now covers the pixels
+ * it used to draw, so the composite still only ever gains black.
+ */
+function outlinesOutsideMasses(
+  strokes: SketchStroke[],
+  mask: Uint8Array,
+  w: number,
+  h: number,
+  diag: number,
+): SketchStroke[] {
+  const covered = dilateMask(mask, w, h, Math.max(1, Math.round(diag * 0.004)));
+  return strokes.filter((stroke) => {
+    const n = stroke.points.length / 2;
+    let inside = 0;
+    for (let i = 0; i < n; i++) {
+      const x = Math.min(w - 1, Math.max(0, stroke.points[i * 2] | 0));
+      const y = Math.min(h - 1, Math.max(0, stroke.points[i * 2 + 1] | 0));
+      if (covered[y * w + x]) inside++;
+    }
+    return inside / n < 0.6;
+  });
+}
+
+/**
+ * How much darker than the surrounding lit surface each pixel is.
+ *
+ * The reference is a local *maximum*, not a local mean. A mean is dragged down
+ * by the very mass it is meant to measure, so a big dark shape reads as no
+ * darker than its own interior and comes out hollow — the standard
+ * adaptive-threshold failure on hair. A maximum estimates the lit surface
+ * behind the subject and leaves the whole mass measurably dark.
+ *
+ * Background and cluttered areas are damped here, once, rather than filtered
+ * later: it keeps the suppression detail-independent, so it cannot interact
+ * with the cumulative guarantee.
+ */
+function buildDarknessField(
+  shape: Float32Array,
+  maps: AnalysisMaps,
+  w: number,
+  h: number,
+  diag: number,
+  params: SketchParams,
+): Float32Array {
+  const cfg = params.regions;
+  const lit = gaussBlur(
+    maxFilter(shape, w, h, cfg.backgroundFrac * diag),
+    w,
+    h,
+    cfg.backgroundFrac * diag * 0.6,
+  );
+  const raw = new Float32Array(w * h);
+  for (let p = 0; p < raw.length; p++) {
+    const d = lit[p] - shape[p];
+    if (d <= 0) continue;
+    raw[p] =
+      d *
+      (1 - cfg.backgroundDamping + cfg.backgroundDamping * maps.subject[p]) *
+      (1 - cfg.clutterDamping * maps.clutter[p]);
+  }
+  const ref = Math.max(1e-3, percentile(raw, 0.99, true));
+  const out = new Float32Array(raw.length);
+  for (let p = 0; p < raw.length; p++) out[p] = clamp01(raw[p] / ref);
+  // Carry the scale so the absolute contrast floor can be expressed back in
+  // luminance units at compose time.
+  darknessScale.set(out, ref);
+  return out;
+}
+
+/**
+ * Luminance-unit scale of each darkness field, so `composeShapes` can convert
+ * `regions.minStep` into the field's normalised units. Keyed weakly on the
+ * field itself, so it disappears with the analysis that owns it.
+ */
+const darknessScale = new WeakMap<Float32Array, number>();
 
 /** Piecewise-linear across [Simple, Balanced, Detailed]. */
 export function resolveBudget(curve: BudgetCurve, detail: number): number {

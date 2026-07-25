@@ -19,6 +19,7 @@
 
 export { analyzeSketch, buildSketchAnalysis, composeSketch, resolveBudget } from './pipeline';
 export { renderSketchToCanvas, type RenderOptions } from './render';
+export { sketchToSvg } from './vector';
 export {
   SKETCH_STYLES,
   DEFAULT_SKETCH_STYLE,
@@ -35,6 +36,8 @@ export type {
   SketchLayer,
   SketchOptions,
   SketchParams,
+  SketchRenderMode,
+  SketchShapes,
   SketchShading,
   SketchSource,
   SketchStroke,

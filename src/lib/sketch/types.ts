@@ -18,7 +18,19 @@
  * Sketch styles are data, not code paths. Adding one means adding a definition
  * to the registry in `styles.ts` — the pipeline never branches on the id.
  */
-export type SketchStyleId = 'artist' | 'outline' | 'pencil' | 'construction' | 'ink';
+export type SketchStyleId = 'vector' | 'poster' | 'artist' | 'pencil' | 'construction' | 'ink';
+
+/**
+ * What a style actually draws.
+ *
+ *   regions — filled black masses (a vector trace), optionally with a few
+ *             structural outlines on top
+ *   strokes — line work only (the pencil/ink family)
+ *
+ * Both are derived from the same scene analysis; the split lives in the
+ * renderer, not in the reading of the photograph.
+ */
+export type SketchRenderMode = 'regions' | 'strokes';
 
 /**
  * A drawing has three line weights, in the order a painter would lay them in:
@@ -149,8 +161,64 @@ export interface SketchParams {
     /** How much local contrast modulates width — the "pencil pressure" feel. */
     pressure: number;
   };
-  /** Stage 6 — optional pencil shading in the deepest masses. */
+  /** Stage 6 — optional pencil shading in the deepest masses (stroke styles). */
   shading: { amount: number; bands: number; hatch: number; start: number };
+  render: SketchRenderMode;
+  /**
+   * Region tuning for the vector-trace styles.
+   *
+   * `coverage` is the fraction of the frame that should end up black, at
+   * [Simple, Balanced, Detailed]. Targeting coverage rather than a tonal
+   * threshold is what makes the result behave the same on a high-key studio
+   * portrait and a murky snapshot — and because a larger coverage target can
+   * only lower the threshold, the black area can only grow as Detail rises.
+   */
+  regions: {
+    coverage: BudgetCurve;
+    /** Radius of the background (lit-surface) estimate, as a fraction of the diagonal. */
+    backgroundFrac: number;
+    /** Morphological cleanup radius — the size below which nothing survives. */
+    cleanupFrac: number;
+    /**
+     * Width of the band around the established masses that extra detail may
+     * not add to, as a fraction of the diagonal. This is what stops "more
+     * detail" from turning into "thicker hair".
+     */
+    growGuardFrac: number;
+    /** Smallest mass worth drawing, as a fraction of the frame, per detail level. */
+    minAreaFrac: BudgetCurve;
+    /** …unless it is a facial accent: then this much smaller. */
+    accentAreaFrac: number;
+    /** Priority a small mass needs to count as an accent. */
+    accentPriority: number;
+    /** Subject-ness a mass needs at all, so backdrops never become black. */
+    minSubject: number;
+    /**
+     * How much darker than the lit surface a pixel must be, in luminance units,
+     * before it is eligible to become black — whatever the coverage target says.
+     * Coverage alone would always fill its quota: hand it a flat wall or a
+     * frame of sensor noise and it dutifully blacks in a fifth of the picture.
+     * This is the floor that lets the engine draw nothing when there is nothing
+     * to draw.
+     */
+    minStep: number;
+    /** Enclosed white pockets smaller than this fraction of the frame get filled. */
+    holeAreaFrac: number;
+    /** How hard low-subject and cluttered areas are pushed out of the darks. */
+    backgroundDamping: number;
+    clutterDamping: number;
+    /** Boundary simplification epsilon, as a fraction of the diagonal. */
+    simplifyFrac: number;
+  };
+  /**
+   * Structural outlines drawn on top of the masses (region styles only).
+   *
+   * `minLengthFrac` is the important one: a trace has no use for short contour
+   * fragments, because a fragment is precisely what "detected edge" looks like
+   * and what "drawn shape" never does. Only lines long enough to describe a
+   * silhouette or a fold earn a place beside the masses.
+   */
+  outline: { enabled: boolean; widthFrac: number; minLengthFrac: number };
   /** The only detail-dependent tuning in the engine. */
   layers: LayerMap<BudgetCurve>;
   /** Polyline simplification epsilon, as a fraction of the diagonal. */
@@ -177,6 +245,20 @@ export interface SketchStroke {
   closed: boolean;
 }
 
+/**
+ * The filled part of a vector trace: every black/white boundary as a closed
+ * loop. Fill them all in a single path with the **even-odd** rule — under it a
+ * loop inside a loop is a hole, so eyes, gaps and enclosed highlights come out
+ * right with no outer/inner bookkeeping.
+ */
+export interface SketchShapes {
+  loops: Float32Array[];
+  /** Fraction of the frame that is black. */
+  coverage: number;
+  /** How many connected black masses survived. */
+  regions: number;
+}
+
 /** Soft tonal pass rendered under the strokes. */
 export interface SketchShading {
   width: number;
@@ -200,6 +282,15 @@ export interface SketchAnalysis {
   /** Every stroke worth drawing, ordered by layer then by score, descending. */
   strokes: SketchStroke[];
   shading: SketchShading | null;
+  /**
+   * How much darker than the surrounding lit surface each pixel is, 0..1,
+   * already damped for background and texture. The vector styles threshold
+   * this at compose time; it is the shared, detail-independent reading of the
+   * photograph that every region style works from.
+   */
+  darkness: Float32Array | null;
+  priority: Float32Array;
+  subject: Float32Array;
   stats: {
     traced: number;
     eligible: number;
@@ -211,7 +302,9 @@ export interface SketchDrawing {
   width: number;
   height: number;
   strokes: SketchStroke[];
+  shapes: SketchShapes | null;
   shading: SketchShading | null;
+  render: SketchRenderMode;
   style: SketchStyleId;
   detail: number;
   paper: string;
@@ -222,6 +315,8 @@ export interface SketchDrawing {
     kept: number;
     weights: WeightMap<number>;
     layers: LayerMap<number>;
+    coverage: number;
+    regions: number;
   };
 }
 

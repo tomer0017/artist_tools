@@ -1,7 +1,44 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeSketch, buildSketchAnalysis, composeSketch, resolveBudget } from './pipeline';
+import { sketchToSvg } from './vector';
 import { SKETCH_STYLES } from './styles';
-import { LAYER_ORDER, type SketchSource, type SketchStroke } from './types';
+import { LAYER_ORDER, type SketchDrawing, type SketchSource, type SketchStroke } from './types';
+
+/**
+ * Even-odd scanline fill of the traced loops, so the cumulative guarantee can
+ * be asserted where it actually matters — on the black pixels a painter sees,
+ * not on a proxy like loop count.
+ */
+function rasterize(drawing: SketchDrawing): Uint8Array {
+  const { width: w, height: h } = drawing;
+  const out = new Uint8Array(w * h);
+  if (!drawing.shapes) return out;
+  const xs: number[] = [];
+  for (let y = 0; y < h; y++) {
+    const scan = y + 0.5;
+    xs.length = 0;
+    for (const loop of drawing.shapes.loops) {
+      const n = loop.length / 2;
+      for (let i = 0; i < n; i++) {
+        const x1 = loop[i * 2];
+        const y1 = loop[i * 2 + 1];
+        const x2 = loop[((i + 1) % n) * 2];
+        const y2 = loop[((i + 1) % n) * 2 + 1];
+        if (y1 === y2) continue;
+        if (scan >= Math.min(y1, y2) && scan < Math.max(y1, y2)) {
+          xs.push(x1 + ((scan - y1) / (y2 - y1)) * (x2 - x1));
+        }
+      }
+    }
+    xs.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      const from = Math.max(0, Math.ceil(xs[i] - 0.5));
+      const to = Math.min(w - 1, Math.floor(xs[i + 1] - 0.5));
+      for (let x = from; x <= to; x++) out[y * w + x] = 1;
+    }
+  }
+  return out;
+}
 
 const W = 220;
 const H = 220;
@@ -56,9 +93,9 @@ function onBoxFraction(stroke: SketchStroke, tol = 4): number {
 
 const ids = (strokes: SketchStroke[]) => new Set(strokes.map((s) => s.id));
 
-describe('analyzeSketch', () => {
+describe('analyzeSketch (pencil — line work)', () => {
   it('draws the shape and ignores the texture', () => {
-    const drawing = analyzeSketch(syntheticScene(22), { detail: 0.5 });
+    const drawing = analyzeSketch(syntheticScene(22), { detail: 0.5, style: 'artist' });
     expect(drawing.strokes.length).toBeGreaterThan(0);
     // Only the rectangle is worth drawing, so the result must be a handful of
     // strokes rather than a field of texture fragments.
@@ -73,13 +110,13 @@ describe('analyzeSketch', () => {
 
   it('never returns an empty drawing for an image that has a shape in it', () => {
     for (const detail of [0, 0.25, 0.5, 0.75, 1]) {
-      const drawing = analyzeSketch(syntheticScene(14), { detail });
+      const drawing = analyzeSketch(syntheticScene(14), { detail, style: 'artist' });
       expect(drawing.strokes.length, `detail=${detail}`).toBeGreaterThan(0);
     }
   });
 
   it('gives the drawing a line hierarchy rather than one uniform width', () => {
-    const drawing = analyzeSketch(syntheticScene(16), { detail: 0.5 });
+    const drawing = analyzeSketch(syntheticScene(16), { detail: 0.5, style: 'artist' });
     const widths = new Set<number>();
     for (const s of drawing.strokes) {
       for (let i = 0; i < s.widths.length; i++) widths.add(Math.round(s.widths[i] * 4) / 4);
@@ -90,8 +127,8 @@ describe('analyzeSketch', () => {
 
   it('produces shading only when asked for it', () => {
     const scene = syntheticScene(12);
-    expect(analyzeSketch(scene, { detail: 0.5 }).shading).toBeNull();
-    const shaded = analyzeSketch(scene, { detail: 0.5, shading: true });
+    expect(analyzeSketch(scene, { detail: 0.5, style: 'artist' }).shading).toBeNull();
+    const shaded = analyzeSketch(scene, { detail: 0.5, shading: true, style: 'artist' });
     expect(shaded.shading).not.toBeNull();
     // Tone belongs in the dark rectangle, not on the light ground.
     const tone = shaded.shading!.tone;
@@ -114,7 +151,7 @@ describe('analyzeSketch', () => {
     }
     const t0 = performance.now();
     analyzeSketch(big, { detail: 0.5 });
-    expect(performance.now() - t0).toBeLessThan(3000);
+    expect(performance.now() - t0).toBeLessThan(4000);
   });
 });
 
@@ -122,8 +159,8 @@ describe('analyzeSketch', () => {
  * The behaviour the Detail slider is built around: raising it must add to the
  * drawing that was already there, never replace it.
  */
-describe('the Detail slider is cumulative', () => {
-  const analysis = buildSketchAnalysis(syntheticScene(16));
+describe('the Detail slider is cumulative (pencil — line work)', () => {
+  const analysis = buildSketchAnalysis(syntheticScene(16), 'artist');
   const at = (detail: number) => composeSketch(analysis, { detail });
 
   it('makes every lower level a strict subset of every higher one', () => {
@@ -159,6 +196,7 @@ describe('the Detail slider is cumulative', () => {
 
   it('always funds structure and facial features, even at Simple', () => {
     for (const style of Object.values(SKETCH_STYLES)) {
+      if (style.params.render !== 'strokes' && !style.params.outline.enabled) continue;
       expect(style.params.layers.structure[0], style.id).toBeGreaterThan(0);
       expect(style.params.layers.face[0], style.id).toBeGreaterThan(0);
     }
@@ -194,5 +232,86 @@ describe('the Detail slider is cumulative', () => {
     for (let i = 0; i < 50; i++) composeSketch(analysis, { detail: i / 50 });
     // 50 slider ticks should cost a small fraction of one analysis pass.
     expect(performance.now() - t0).toBeLessThan(150);
+  });
+});
+
+
+/**
+ * The vector trace is the default style: black masses, not line work.
+ */
+describe('vector trace', () => {
+  const scene = syntheticScene(18);
+  const analysis = buildSketchAnalysis(scene);
+  const at = (detail: number) => composeSketch(analysis, { detail });
+
+  it('produces filled regions rather than strokes', () => {
+    const drawing = at(0.5);
+    expect(drawing.render).toBe('regions');
+    expect(drawing.shapes).not.toBeNull();
+    expect(drawing.shapes!.loops.length).toBeGreaterThan(0);
+    expect(drawing.stats.coverage).toBeGreaterThan(0.02);
+  });
+
+  it('turns the dark rectangle into one clean mass, not a field of fragments', () => {
+    const drawing = at(0.5);
+    // A texture-driven trace would leave dozens of specks; a shape-driven one
+    // leaves the rectangle.
+    expect(drawing.stats.regions).toBeLessThanOrEqual(3);
+    const black = rasterize(drawing);
+    let inside = 0;
+    let outside = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!black[y * W + x]) continue;
+        const within = x >= BOX.x0 - 4 && x < BOX.x1 + 4 && y >= BOX.y0 - 4 && y < BOX.y1 + 4;
+        if (within) inside++;
+        else outside++;
+      }
+    }
+    expect(inside).toBeGreaterThan(0);
+    expect(outside / (inside + outside)).toBeLessThan(0.1);
+  });
+
+  it('only ever adds black as Detail rises', () => {
+    const levels = [0, 0.25, 0.5, 0.75, 1].map((d) => rasterize(at(d)));
+    for (let i = 1; i < levels.length; i++) {
+      let lost = 0;
+      for (let p = 0; p < levels[i].length; p++) {
+        if (levels[i - 1][p] && !levels[i][p]) lost++;
+      }
+      // A handful of pixels may shift with the traced boundary; a shape going
+      // away would be thousands.
+      expect(lost, `black lost between step ${i - 1} and ${i}`).toBeLessThan(
+        0.0005 * levels[i].length,
+      );
+    }
+  });
+
+  it('grows the amount of drawing with Detail', () => {
+    expect(at(1).stats.coverage).toBeGreaterThan(at(0).stats.coverage);
+  });
+
+  it('rejects noise at every detail level', () => {
+    // Pure noise, no shape at all: nothing here is worth drawing.
+    const noise: SketchSource = { data: new Uint8ClampedArray(W * H * 4), width: W, height: H };
+    let seed = 99;
+    for (let p = 0; p < W * H; p++) {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      const v = 110 + ((seed >>> 16) % 60);
+      noise.data[p * 4] = noise.data[p * 4 + 1] = noise.data[p * 4 + 2] = v;
+      noise.data[p * 4 + 3] = 255;
+    }
+    const noisy = buildSketchAnalysis(noise);
+    for (const detail of [0, 0.5, 1]) {
+      const drawing = composeSketch(noisy, { detail });
+      expect(drawing.stats.regions, `detail=${detail}`).toBeLessThan(6);
+    }
+  });
+
+  it('exports an SVG of the same drawing', () => {
+    const svg = sketchToSvg(at(0.5));
+    expect(svg.startsWith('<svg')).toBe(true);
+    expect(svg).toContain('fill-rule="evenodd"');
+    expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
   });
 });

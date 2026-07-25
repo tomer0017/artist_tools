@@ -6,6 +6,7 @@
  * touching how they were chosen.
  */
 
+import { loopPath } from './vector';
 import { WEIGHT_ORDER, type LineWeight, type SketchDrawing, type SketchStroke } from './types';
 
 /** Upper bound on the rendered bitmap, so a phone never allocates a huge canvas. */
@@ -40,6 +41,16 @@ export function renderSketchToCanvas(
   ctx.fillRect(0, 0, W, H);
 
   if (drawing.shading) drawShading(ctx, drawing, W, H);
+
+  // Filled masses first — the drawing *is* the masses in a trace style; the
+  // outlines that follow only firm up the silhouette. One path, even-odd, so
+  // every enclosed loop becomes a hole (eyes, gaps, catchlights) for free.
+  if (drawing.shapes && drawing.shapes.loops.length) {
+    ctx.beginPath();
+    for (const loop of drawing.shapes.loops) loopPath(loop, scale, ctx);
+    ctx.fillStyle = drawing.ink;
+    ctx.fill('evenodd');
+  }
 
   // Each weight class is drawn opaque onto a scratch layer and then composited
   // at its own alpha. Drawing directly at alpha would darken every crossing and
