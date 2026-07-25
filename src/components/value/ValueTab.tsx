@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { dataUrlToBlob } from '@/lib/saveMedia';
+import { analyzeSketch, renderSketchToCanvas } from '@/lib/sketch';
 
 type Mode = 'grayscale' | 'color' | 'painter' | 'sketch';
 type Focus = 'none' | 'shadow' | 'highlight' | 'squint';
@@ -183,6 +184,7 @@ export default function ValueTab() {
   const contrast = valueSettings.contrast;
   const brightness = valueSettings.brightness;
   const sketchDetail = valueSettings.sketchDetail ?? 50;
+  const sketchShading = valueSettings.sketchShading ?? false;
 
   const updateMode = (m: Mode) => setValueSettings({ mode: m, grayscale: m === 'grayscale' });
   const updateLevels = (l: number) => setValueSettings({ levels: l, posterize: l });
@@ -207,12 +209,10 @@ export default function ValueTab() {
       const ctx = canvas.getContext('2d')!;
 
       // Pre-blur reduces noisy speckle so palette quantization yields clean masses.
-      // Sketch gets a stronger, detail-dependent blur so fabric/fur/wall texture
-      // and photographic noise don't survive as spurious edges. Toward "Simple"
-      // we blur more (only major boundaries remain); toward "Detailed" we blur
-      // less (finer secondary contours are allowed through).
-      const sketchBlur = 1.0 + (1 - sketchDetail / 100) * 1.8; // detailed→1.0, simple→2.8
-      const blur = focus === 'squint' ? 5 : mode === 'painter' ? 2.5 : mode === 'sketch' ? sketchBlur : mode === 'color' ? 1.2 : 0;
+      // Sketch deliberately gets none: the sketch engine runs its own
+      // edge-preserving denoise, and a plain Gaussian here would soften exactly
+      // the boundaries it needs to keep sharp.
+      const blur = focus === 'squint' ? 5 : mode === 'painter' ? 2.5 : mode === 'sketch' ? 0 : mode === 'color' ? 1.2 : 0;
       // NOTE: iOS Safari historically ignores ctx.filter for contrast()/brightness(),
       // so applying them via CSS filter silently no-ops on iPhone. Apply them
       // manually below to guarantee identical behavior across desktop and mobile.
@@ -393,63 +393,22 @@ export default function ValueTab() {
       };
 
       if (mode === 'sketch') {
-        // === Sketch mode: clean construction line drawing ===
-        // A Sobel edge pass over the (blurred, contrast/brightness-adjusted)
-        // luminance. Because every line is derived directly from the source
-        // gradients, composition / proportion / placement are preserved exactly —
-        // nothing is invented. An adaptive threshold (mean + k·std) keeps only the
-        // strong contours and major internal boundaries, dropping texture/noise so
-        // the result reads as a first construction drawing, not a pencil filter.
-        const lum = new Float32Array(total);
-        for (let p = 0, i = 0; p < total; p++, i += 4) {
-          lum[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        }
-        const mag = new Float32Array(total);
-        let sum = 0, sumSq = 0, cnt = 0;
-        for (let y = 1; y < h - 1; y++) {
-          for (let x = 1; x < w - 1; x++) {
-            const o = y * w + x;
-            const tl = lum[o - w - 1], tc = lum[o - w], tr = lum[o - w + 1];
-            const ml = lum[o - 1], mr = lum[o + 1];
-            const bl = lum[o + w - 1], bc = lum[o + w], br = lum[o + w + 1];
-            const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl);
-            const gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
-            const m = Math.sqrt(gx * gx + gy * gy);
-            mag[o] = m; sum += m; sumSq += m * m; cnt++;
-          }
-        }
-        const mean = cnt ? sum / cnt : 0;
-        const variance = cnt ? Math.max(0, sumSq / cnt - mean * mean) : 0;
-        const std = Math.sqrt(variance);
-        // Adaptive threshold: mean + k·std. "Simple" raises k so only the
-        // strongest silhouettes / object boundaries survive; "Detailed" lowers
-        // k so more internal + secondary contours are kept. Painter never sees
-        // k — only the Sketch Detail slider.
-        const detail = sketchDetail / 100; // 0 (simple) .. 1 (detailed)
-        const kThresh = 1.15 - detail * 1.0; // simple→1.15, detailed→0.15
-        const thresh = mean + kThresh * std;
-        const band = Math.max(6, std * 0.6);
-        const lower = thresh - band;
-        const span = 2 * band;
-        // Absolute floor: gradients this weak are texture/noise, never a
-        // construction line. Eased down as detail rises so fine edges can pass.
-        const hardFloor = mean * (0.9 - detail * 0.55);
-        for (let p = 0, i = 0; p < total; p++, i += 4) {
-          const mp = mag[p];
-          let t: number;
-          if (mp < hardFloor) {
-            t = 0; // suppress texture/noise outright
-          } else {
-            // Smoothstep across [thresh-band, thresh+band] → soft-but-clean edges.
-            t = (mp - lower) / span;
-            if (t < 0) t = 0; else if (t > 1) t = 1;
-            t = t * t * (3 - 2 * t);
-          }
-          const v = 255 * (1 - t); // white paper, dark construction lines
-          data[i] = v; data[i + 1] = v; data[i + 2] = v;
-        }
-        ctx.putImageData(imageData, 0, 0);
-        setProcessedUrl(canvas.toDataURL('image/jpeg', 0.9));
+        // === Sketch mode: a real drawing, not an edge filter ===
+        // The engine in src/lib/sketch runs a semantic pipeline — noise
+        // reduction → large-shape detection → contour extraction → feature
+        // prioritisation → variable line weight → optional pencil shading —
+        // and returns strokes, which are then drawn. Every line is still
+        // derived from this image's own gradients, so composition, proportion
+        // and placement are preserved exactly; nothing is invented.
+        //
+        // Rendered as PNG: JPEG ringing around black lines on white paper is
+        // very visible and would read as noise the artist has to filter out.
+        const drawing = analyzeSketch(
+          { data, width: w, height: h },
+          { detail: sketchDetail / 100, shading: sketchShading },
+        );
+        renderSketchToCanvas(drawing, canvas);
+        setProcessedUrl(canvas.toDataURL('image/png'));
         // Fall through below to build the value/dominant palettes (still useful
         // reference while drawing), then skip the palette-quantization loop.
       } else {
@@ -552,9 +511,15 @@ export default function ValueTab() {
       }
     };
     img.src = activeImage;
-  }, [activeImage, mode, levels, focus, contrast, brightness, sketchDetail, isolatedIdx]);
+  }, [activeImage, mode, levels, focus, contrast, brightness, sketchDetail, sketchShading, isolatedIdx]);
 
-  useEffect(() => { processImage(); }, [processImage]);
+  // Coalesce the burst of events a slider drag produces into one pass. The
+  // delay is short enough to still feel like the image updates as you drag,
+  // but stops the (heavier) sketch pipeline from queuing up per-pixel ticks.
+  useEffect(() => {
+    const id = window.setTimeout(processImage, 60);
+    return () => window.clearTimeout(id);
+  }, [processImage]);
 
   const dominantWarmth = useMemo(() => {
     if (!groups.length) return 'neutral';
@@ -571,7 +536,10 @@ export default function ValueTab() {
 
   const exportProcessed = () => {
     if (!processedUrl) return;
-    saveDataUrl(processedUrl, 'value-study.jpg', 'image/jpeg');
+    // Sketch output is line art on white — it is rendered and saved as PNG so
+    // the lines stay crisp for tracing / transferring.
+    if (mode === 'sketch') saveDataUrl(processedUrl, 'sketch.png', 'image/png');
+    else saveDataUrl(processedUrl, 'value-study.jpg', 'image/jpeg');
   };
 
   const exportPalette = () => {
@@ -776,8 +744,14 @@ export default function ValueTab() {
     </div>
   );
 
+  // The slider moves through three named stages of a drawing, not through edge
+  // sensitivity — each one adds a *kind* of information rather than more lines.
   const sketchDetailLabel =
     sketchDetail < 34 ? 'Simple' : sketchDetail > 66 ? 'Detailed' : 'Balanced';
+  const sketchDetailHint =
+    sketchDetail < 34 ? 'Silhouette and large contours'
+      : sketchDetail > 66 ? 'Adds hair, folds and fine detail'
+        : 'Contours, features and major folds';
 
   // Inline controls that live *permanently below the image* — the sliders a
   // painter reaches for constantly while studying, so they never require
@@ -799,6 +773,7 @@ export default function ValueTab() {
               className="flex-1 accent-primary" aria-label="Sketch detail" />
             <span className="text-[9px] text-muted-foreground shrink-0 w-10">Detailed</span>
           </div>
+          <p className="text-[9px] text-muted-foreground mt-1">{sketchDetailHint}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-6">
@@ -840,9 +815,21 @@ export default function ValueTab() {
         </p>
         {isColorFamily && PainterToggle}
         {isSketch && (
-          <p className="text-[10px] text-muted-foreground">
-            Tune the drawing with <span className="font-medium text-foreground">Sketch detail</span> below the image.
-          </p>
+          <>
+            <p className="text-[10px] text-muted-foreground mb-1.5">
+              Tune the drawing with <span className="font-medium text-foreground">Sketch detail</span> below the image.
+            </p>
+            <button onClick={() => setValueSettings({ sketchShading: !sketchShading })}
+              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-medium transition-colors ${
+                sketchShading ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+              }`}>
+              <PencilLine className="w-3.5 h-3.5" />
+              Pencil shading {sketchShading ? 'on' : 'off'}
+            </button>
+            <p className="text-[9px] text-muted-foreground mt-1">
+              Adds a light tone in the darkest masses. Off gives pure line work for tracing.
+            </p>
+          </>
         )}
       </div>
       <div>

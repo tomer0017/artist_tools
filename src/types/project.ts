@@ -35,10 +35,14 @@ export interface ValueSettings {
   mode?: 'grayscale' | 'color' | 'painter' | 'sketch';
   levels?: number;
   focus?: 'none' | 'shadow' | 'highlight' | 'squint';
-  // Sketch mode only: 0 = simple (few strong contours) → 100 = detailed
-  // (more secondary edges). A painter-facing control that hides the underlying
-  // edge threshold / blur tuning. Default 50 = balanced construction drawing.
+  // Sketch mode only: 0 = simple (silhouette + large contours) → 100 = detailed
+  // (hair, folds, secondary detail). A painter-facing control: it moves the
+  // sketch engine between three tuned drawing stages rather than changing an
+  // edge threshold. Default 50 = balanced construction drawing.
   sketchDetail?: number;
+  // Sketch mode only: subtle pencil tone in the darkest masses. Off by default
+  // so the default output is pure line work that can be traced/transferred.
+  sketchShading?: boolean;
 }
 
 export interface SampledColor {
@@ -124,6 +128,7 @@ export const DEFAULT_VALUE_SETTINGS: ValueSettings = {
   levels: 9,
   focus: 'none',
   sketchDetail: 50,
+  sketchShading: false,
 };
 
 export const genId = () => Math.random().toString(36).slice(2, 10);

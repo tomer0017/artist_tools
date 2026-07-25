@@ -50,7 +50,7 @@ refresh restores the last session. The app is deployed to GitHub Pages under
     │   ├── NavLink.tsx         Thin react-router NavLink wrapper (currently unused by pages)
     │   ├── common/ImageUploader.tsx   File picker / drag-drop → data URL
     │   ├── measure/            Measure tool (canvas, toolbar, panel, mobile, tab)
-    │   ├── value/ValueTab.tsx  Value study + palette extraction
+    │   ├── value/ValueTab.tsx  Value study + palette extraction + Sketch mode
     │   ├── color/ColorTab.tsx  Color wheel, recipes, skin tones
     │   ├── grid/GridTab.tsx    Drawing grid overlay + export
     │   └── ui/                 shadcn/ui (Radix) primitives — vendored, mostly unused
@@ -230,7 +230,9 @@ Processing runs on an offscreen `<canvas>` and is capped at `MAX_PROCESS_DIM`
 (900px on the long edge) for mobile performance. The pipeline:
 
 1. **Pre-blur** proportional to mode (squint > painter > color > grayscale) so
-   palette quantization yields clean color masses instead of speckle.
+   palette quantization yields clean color masses instead of speckle. Sketch
+   mode gets **no** pre-blur — the sketch engine runs its own edge-preserving
+   denoise and a plain Gaussian would soften exactly the boundaries it needs.
 2. **Contrast** via a per-channel LUT around 127.5. **Brightness** is
    *hue-preserving*: it converts each pixel to HSL, moves lightness toward 0 or
    1, preserves hue, and only eases saturation near white — so bright greens stay
@@ -257,12 +259,113 @@ Processing runs on an offscreen `<canvas>` and is capped at `MAX_PROCESS_DIM`
      softens saturation for a gouache-like look (`hslToRgb`).
    - *Focus modes:* shadows/highlights fade the non-focus bins toward mid-gray;
      "squint" just increases blur. **Isolation** hides all but one selected bin.
+   - *Sketch mode:* delegates entirely to the sketch engine (`lib/sketch/`,
+     below) and renders PNG rather than JPEG — JPEG ringing around black lines
+     on white paper reads as noise the artist has to filter out. Focus and
+     isolation don't apply; the value/dominant palettes are still built,
+     because they remain useful reference while drawing.
 6. **Value groups** (the distribution strip / palette rows) are rebuilt from the
    per-bin averages with percentage coverage, hex, warmth, and paint hint.
 
 `brightnessLabel` (darkest→highlight) and the warmth/family classifiers are
 reused across the strip, palette rows, and the exported study sheet so labels
 stay consistent.
+
+### Sketch engine (`lib/sketch/`)
+
+Sketch mode produces a **drawing**, not an edge-detected image. The benchmark
+is not "more edges" — it is "less information, but better information": every
+line should be one a painter would actually draw, so the result can be
+transferred to canvas without mentally filtering out noise.
+
+The engine is pure TypeScript, runs client-side in ~0.3–0.6s on a 900px frame,
+and is split so the analysis is testable without a canvas:
+
+```
+analyzeSketch(imageData, { detail, shading }) -> SketchDrawing   (pure)
+renderSketchToCanvas(drawing, canvas)                            (canvas)
+```
+
+| File | Role |
+| --- | --- |
+| `types.ts` | `SketchParams`, `SketchStroke`, `SketchDrawing`, line weights |
+| `imageOps.ts` | luminance, box/Gaussian blur, domain transform, structure-tensor gradient, NMS, hysteresis, percentiles |
+| `analysis.ts` | the clutter / subject / feature maps |
+| `contours.ts` | edge map → polylines, fragment linking, RDP simplification |
+| `pipeline.ts` | the six stages + prioritisation and line weighting |
+| `render.ts` | strokes → canvas (variable width, taper, shading) |
+| `styles.ts` | the style registry (see "adding a style") |
+
+**The pipeline**
+
+1. **Noise reduction** — a domain-transform recursive filter (Gastal &
+   Oliveira). Unlike a Gaussian it flattens texture (fabric weave, pores,
+   foliage speckle, sensor noise) while leaving real boundaries exactly where
+   the camera put them, so the image can be simplified without the drawing
+   drifting off the subject. Table-driven per-pixel coefficients keep it fast
+   enough for a phone.
+2. **Large shape detection** — a much coarser pass of the same filter. Anything
+   still showing an edge here is a mass boundary rather than surface incident;
+   this becomes the *persistence* term.
+3. **Contour extraction** — structure-tensor gradient (value **and** colour, so
+   a blue shirt against green foliage at the same value still gets a line),
+   non-maximum suppression, hysteresis, tracing into polylines, then
+   **fragment linking**: collinear endpoints are rejoined, but only across
+   ground where the image still shows edge evidence, so a jawline broken by a
+   highlight is repaired while a head outline is never welded to a background
+   twig. Thresholds are deliberately generous — the engine **extracts liberally
+   and selects strictly**, because no global threshold can separate a weak-but-
+   important shoulder line from a strong-but-worthless fabric edge.
+4. **Feature prioritisation** — each contour is scored on contrast,
+   persistence, length, subject-ness and facial-accent membership, minus
+   background suppression. Contours are then taken best-first against an **ink
+   budget** (total line length, in multiples of the image diagonal) rather than
+   a score threshold, so the Detail slider controls *how much drawing* there is
+   independently of how contrasty the photo happens to be. Part of the budget
+   is reserved for short high-priority accent marks — spending it purely
+   best-first is length-greedy and exhausts it before a single eye is reached.
+5. **Variable line weight** — three weights assigned by quantiles of a
+   *structural* score, so every image gets a real hierarchy: heavy for
+   silhouette/major boundaries, medium for features and clothing edges, light
+   for wrinkles and fine detail. Strokes taper at the ends and vary in width
+   with local contrast ("pencil pressure").
+6. **Optional pencil shading** — banded tone taken from the large-shape image,
+   gated to the darks, with a diagonal hatch. Off by default so the default
+   output is pure line work for tracing.
+
+**Background suppression** rests on three maps in `analysis.ts`:
+
+- **clutter** — fine detail with no large-scale structure behind it (weave,
+  pores, grass, foliage, gravel, wall stipple). Relaxed by persistence, so a
+  compositionally important background element (a horizon, a doorway, a tree
+  trunk) survives while the foliage around it does not.
+- **subject** — large-scale structure density + a mild centre prior + the
+  inverse of clutter.
+- **feature** — compact dark accents (eyes, pupils, nostrils, the lip gap). A
+  component must be small *and* blobby: a strand or wrinkle is also small, and
+  the mask is eroded by a pixel first so a lash line can't bridge the iris to
+  the eyebrow into one long component. These marks are exempted from most
+  suppression and from the length gate.
+
+**The Detail slider** interpolates between three tuned anchor parameter sets —
+Simple (silhouette and large contours), Balanced (contours, facial features,
+major folds), Detailed (adds hair, folds, secondary detail). Detailed's extra
+information comes from a *separate* fine extraction pass gated on subject-ness
+and contour length, not from a lowered threshold: a hair strand and a fabric
+weave look identical to a threshold, but the strand is a long coherent chain
+and the weave is a field of 3-pixel fragments.
+
+**Adding a style.** Styles are data. `SKETCH_STYLES` maps an id to three anchor
+`SketchParams`; `pipeline.ts` and `render.ts` never branch on the id. `artist`
+is the full definition and the only one the UI exposes; `outline`, `pencil`,
+`construction` and `ink` exist as short derivations (`variant()` patches only
+what differs) and are ready for a future style picker.
+
+**Known limitation.** A boundary that is both low-contrast and buried in
+texture (a mid-value shirt against a similar-value background with heavy
+weave) can still be fragmented below the length gate and dropped. Widening the
+link gap recovers it but starts inventing background structure, which costs
+more than the missing edge does.
 
 ### Grid & Measure geometry
 - **Grid** math (`GridTab`) computes a fit scale so the image fills the chosen
@@ -395,6 +498,9 @@ experience is consistent and iOS-optimised. A browser cannot force a save to the
 Photos library or choose which share targets iOS shows, so the flow opens the
 best native path and guides the user.
 
+- `src/lib/sketch/` — the Sketch-mode engine (see "Sketch engine" above).
+  Pure TypeScript; `analyzeSketch()` needs no DOM, `renderSketchToCanvas()` is
+  the only part that touches a canvas. Tests: `src/lib/sketch/pipeline.test.ts`.
 - `src/lib/saveMedia.ts` — pure helpers: `mimeForFilename`/`extForMime`,
   `makeShareFile`, `canShareFile` (wraps `navigator.canShare({files:[file]})`),
   `shareFile` (calls `navigator.share({files:[file]})` — **file only**, no
@@ -556,3 +662,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-07-20 | Compare Art UI/UX polish sprint: (1) **pre-comparison crop** — a touch-first crop screen (pan/pinch, Free-mode resize handles, presets Free/Square/Circle/4:3/3:4/16:9/Original) shown after picking each image and re-editable from the Align sheet; non-destructive (stores original + normalised rect); the whole engine consumes the cropped image with no renderer changes. (2) **2-point alignment magnifier** — a loupe (faithful copy of the Measure magnifier) follows the finger and commits the point on release, not touch-down. (3) **Overlay quick workflow** — an always-visible opacity slider + one-tap "Create Opacity GIF" with inline progress/cancel; Export screen unchanged. New files: CompareCropScreen.tsx, compareArtCrop.ts, compareArtMagnifier.ts, CompareOverlayBar.tsx, useCompareGif.ts. Extended session (artwork/reference Original + Crop) + applyImageCrop store action. Existing tools + Compare rendering/difference/GIF pipeline unchanged. | src/features/compare-art/compareArtTypes.ts, compareArtState.tsx, CompareArt.tsx, CompareUploadStep.tsx, CompareSheets.tsx, CompareCanvas.tsx, compareArtCrop.ts (new), CompareCropScreen.tsx (new), compareArtMagnifier.ts (new), CompareOverlayBar.tsx (new), useCompareGif.ts (new), compareArt.test.ts, compareArtState.test.tsx, e2e/compare-art.spec.ts, PROJECT.md |
 | 2026-07-20 | Added the **Compare Art** workspace (5th tool, Hebrew השוואת ציור): isolated `src/features/compare-art/` feature (own `CompareProvider` + `compare-art-session` localStorage key, undo/redo, autosave). Artwork/reference upload, one canonical resolution-independent scene renderer shared by screen + still + GIF, reference move/scale/rotate/flip/opacity with gesture + precision nudges + fit/fill/match/reset + optional 2-point align, layer lock, non-destructive crop, grid overlay, Overlay/Blink/Split/Difference modes + grayscale, OKLab value/color difference with sensitivity + legend, still/difference/GIF export (opacity-pulse/blink/compare-diff) with progress + cancel. Added `gifenc` dependency; code-split the workspace via `React.lazy`. Additive nav wiring only; existing tools unchanged. Added unit tests (`compareArt.test.ts`, `compareArtState.test.tsx`) and an e2e workflow test (`e2e/compare-art.spec.ts`). | src/types/project.ts, src/components/layout/Header.tsx, src/pages/Index.tsx, src/features/compare-art/* (new), e2e/compare-art.spec.ts (new), package.json, package-lock.json, README.md, PROJECT.md |
 | 2026-06-17 | Made Measure layers dynamic/user-extensible: a new project now starts with one "General Lines" layer instead of 6 fixed anatomical layers; added `addLayer`/`deleteLayer` store actions (palette-cycling colors, delete reassigns orphaned lines to the general/first layer, last layer protected); add/delete UI in the desktop panel (inline name input) and mobile layers sheet. Existing saved projects load untouched (no migration). Added a mobile "New line color" picker in the Selected/Lines sheet reusing the desktop `lineColor`/`setLineColor` state; extracted the shared `LINE_COLORS`/`LAYER_COLORS` palettes into `types/project.ts`. No changes to calibration, undo/redo, autosave, export, eyedropper, pan/zoom, or other tools. | src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureToolbar.tsx, src/components/measure/MeasureMobile.tsx, PROJECT.md |
+| 2026-07-25 | **Rebuilt Sketch mode as a painter-first drawing engine** (`src/lib/sketch/`), replacing the inline Sobel + adaptive-threshold edge filter in `ValueTab`. New semantic pipeline: edge-preserving noise reduction (domain transform) → large-shape detection → colour-aware contour extraction (structure tensor) with fragment linking → feature prioritisation against an *ink budget* (not a threshold) → three-level variable line weight → optional pencil shading. Background suppression via clutter / subject / compact-accent maps; "Detailed" adds a separate subject-gated fine pass rather than a lower threshold. The Detail slider now interpolates three tuned anchor param sets (Simple / Balanced / Detailed) instead of moving one threshold. Styles are data (`SKETCH_STYLES`) so new ones need no pipeline changes; UI still exposes only "Artist sketch". UI changes kept minimal: a per-level hint under the slider and an off-by-default "Pencil shading" toggle (`valueSettings.sketchShading`). Sketch output now renders/exports PNG (JPEG ringing was visible noise on line art) and processing is debounced ~60ms so slider drags coalesce. Tests: `src/lib/sketch/pipeline.test.ts`. | src/lib/sketch/* (new), src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
