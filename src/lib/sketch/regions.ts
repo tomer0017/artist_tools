@@ -188,6 +188,22 @@ export function labelComponents(mask: Uint8Array, w: number, h: number): Labelle
   return { labels, components };
 }
 
+export interface HoleOptions {
+  /**
+   * Keep a pocket that looks like a *feature* — roughly as wide as it is tall
+   * and solidly filled — even when it is below `minArea`.
+   *
+   * This is the difference between a portrait and a silhouette. An eye white,
+   * the slot between a brow and a lid, the gap between a moustache and a lip
+   * are all small, compact pockets; a threshold artifact is a thin sliver or a
+   * ragged smear. Judging on shape as well as size lets the cleanup remove the
+   * second without ever touching the first.
+   */
+  protectShaped?: boolean;
+  /** Below this a pocket is filled regardless of shape — dust, not anatomy. */
+  tinyArea?: number;
+}
+
 /**
  * Fill enclosed white pockets smaller than `minArea`.
  *
@@ -199,18 +215,24 @@ export function fillSmallHoles(
   w: number,
   h: number,
   minArea: number,
+  options: HoleOptions = {},
 ): Uint8Array {
   const n = w * h;
   const out = Uint8Array.from(mask);
   const seen = new Uint8Array(n);
   const stack = new Int32Array(n);
   const members = new Int32Array(n);
+  const tiny = options.tinyArea ?? 0;
 
   for (let seed = 0; seed < n; seed++) {
     if (mask[seed] || seen[seed]) continue;
     let top = 0;
     let count = 0;
     let touchesEdge = false;
+    let minX = w;
+    let maxX = -1;
+    let minY = h;
+    let maxY = -1;
     stack[top++] = seed;
     seen[seed] = 1;
     while (top > 0) {
@@ -219,6 +241,10 @@ export function fillSmallHoles(
       const x = p % w;
       const y = (p / w) | 0;
       if (x === 0 || y === 0 || x === w - 1 || y === h - 1) touchesEdge = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
       // 4-connectivity for the background, the dual of 8 for the foreground —
       // mixing them would let a diagonal chain of black leak a hole open.
       if (x > 0 && !mask[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; stack[top++] = p - 1; }
@@ -227,10 +253,20 @@ export function fillSmallHoles(
       if (y < h - 1 && !mask[p + w] && !seen[p + w]) { seen[p + w] = 1; stack[top++] = p + w; }
     }
     if (touchesEdge || count >= minArea) continue;
+    if (options.protectShaped && count > tiny) {
+      const bw = maxX - minX + 1;
+      const bh = maxY - minY + 1;
+      const elongation = Math.max(bw, bh) / Math.max(1, Math.min(bw, bh));
+      if (elongation <= MAX_HOLE_ELONGATION && count / (bw * bh) >= MIN_HOLE_FILL) continue;
+    }
     for (let i = 0; i < count; i++) out[members[i]] = 1;
   }
   return out;
 }
+
+/** A pocket this round and this solid is a feature, not a defect. */
+const MAX_HOLE_ELONGATION = 4;
+const MIN_HOLE_FILL = 0.4;
 
 /* -------------------------------------------------------- boundary tracing -- */
 

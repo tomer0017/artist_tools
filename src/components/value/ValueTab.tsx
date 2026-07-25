@@ -5,7 +5,7 @@ import ImageUploader from '@/components/common/ImageUploader';
 import {
   Sun, Moon, Eye, Palette as PaletteIcon, Brush, Layers,
   SlidersHorizontal, X, Maximize2, Minimize2, Download, Image as ImageIcon,
-  Contrast, PencilLine,
+  Contrast, PencilLine, ChevronDown, RotateCcw, Replace,
 } from 'lucide-react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { dataUrlToBlob } from '@/lib/saveMedia';
@@ -14,6 +14,7 @@ import {
   TRACE_PRESETS, type TraceSource, type TraceResult,
 } from '@/lib/sketch';
 import { DEFAULT_SKETCH_TRACE, type SketchTraceSettings } from '@/types/project';
+import Slider from '@/components/common/Slider';
 
 type Mode = 'grayscale' | 'color' | 'painter' | 'sketch';
 type Focus = 'none' | 'shadow' | 'highlight' | 'squint';
@@ -176,6 +177,12 @@ export default function ValueTab() {
   const [showCompare, setShowCompare] = useState(false);
   const [compareMode, setCompareMode] = useState<'slider' | 'side'>('slider');
   const [fullscreen, setFullscreen] = useState(false);
+  const [showMoreTrace, setShowMoreTrace] = useState(false);
+  // True only while a slider thumb is down. Drives the interactive (lower
+  // resolution) render so the preview keeps up with the finger; the moment the
+  // finger lifts, the same composition is re-rendered at full quality.
+  const [scrubbing, setScrubbing] = useState(false);
+  const [traceStats, setTraceStats] = useState({ threshold: 0, minShapePx: 0 });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Grayscale conversion depends only on the pixels, so it is cached across
   // control changes; the trace itself re-runs on every one of them.
@@ -424,7 +431,12 @@ export default function ValueTab() {
         traceCache.current = { image: activeImage, contrast, brightness, w, h, source };
         const result = traceImage(source, trace);
         traceResult.current = result;
-        renderTraceToCanvas(result, canvas);
+        setTraceStats({ threshold: result.stats.threshold, minShapePx: result.stats.minShapePx });
+        // While a control is under the finger the preview is rendered at 1×;
+        // on release the same paths are re-rendered at 2×. Only the resolution
+        // changes, never the composition, so the picture does not appear to
+        // shift as the drag ends.
+        renderTraceToCanvas(result, canvas, { scale: scrubbing ? 1 : 2 });
         setProcessedUrl(canvas.toDataURL('image/png'));
         // Fall through below to build the value/dominant palettes (still useful
         // reference while drawing), then skip the palette-quantization loop.
@@ -530,8 +542,8 @@ export default function ValueTab() {
     img.src = activeImage;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeImage, mode, levels, focus, contrast, brightness, isolatedIdx,
-    trace.threshold, trace.adaptive, trace.smoothing, trace.noise, trace.simplify,
-    trace.corners, trace.invert]);
+    trace.ink, trace.detail, trace.separation, trace.invert, trace.smoothing,
+    trace.local, trace.simplify, trace.corners, scrubbing]);
 
   // Coalesce the burst of events a slider drag produces into one pass. The
   // delay is short enough to still feel like the image updates as you drag,
@@ -778,23 +790,34 @@ export default function ValueTab() {
     </div>
   );
 
-  // One reusable numeric control, so every trace parameter is presented (and
-  // read back) the same way. The value is always shown: these are settings the
-  // operator is expected to dial in and reproduce, not vague amounts.
-  const TraceSlider = ({ label, value, min, max, step = 1, suffix = '', hint, onChange }: {
-    label: string; value: number; min: number; max: number; step?: number;
-    suffix?: string; hint?: string; onChange: (v: number) => void;
-  }) => (
-    <div>
-      <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between mb-1">
-        <span>{label}</span>
-        <span className="tabular-nums text-foreground">{value}{suffix}</span>
-      </label>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-primary" aria-label={label} />
-      {hint && <p className="text-[9px] text-muted-foreground mt-0.5">{hint}</p>}
-    </div>
+  // Words, not numbers. A painter setting Ink is judging the picture, not
+  // reproducing a level — the raw threshold is available under More controls
+  // for anyone who does want to reproduce one.
+  const bandLabel = (v: number, bands: string[]) =>
+    bands[Math.min(bands.length - 1, Math.floor((v / 100) * bands.length))];
+  const inkLabel = bandLabel(trace.ink, ['Minimal', 'Light', 'Medium', 'Heavy', 'Solid']);
+  const detailLabel = bandLabel(trace.detail, ['Everything', 'Fine', 'Clean', 'Simple', 'Bold']);
+  const separationLabel = bandLabel(trace.separation, ['Off', 'Gentle', 'Medium', 'Strong', 'Extreme']);
+
+  // A slider that keeps the preview moving with the finger: `onChange` fires on
+  // every pointermove and `onCommit` when it lifts, which is when the
+  // full-quality render happens.
+  const traceSlider = (
+    key: keyof SketchTraceSettings,
+    label: string,
+    readout: string,
+    hint: string,
+  ) => (
+    <Slider
+      label={label}
+      value={trace[key] as number}
+      min={0}
+      max={key === 'local' ? 50 : 100}
+      readout={readout}
+      hint={hint}
+      onChange={(v) => { setScrubbing(true); setTrace({ [key]: v } as Partial<SketchTraceSettings>); }}
+      onCommit={() => setScrubbing(false)}
+    />
   );
 
   // Inline controls that live *permanently below the image* — the sliders a
@@ -803,40 +826,28 @@ export default function ValueTab() {
   // (visibility), while Sketch swaps in a single painter-facing "Sketch detail"
   // control that speaks to the artistic result rather than edge thresholds.
   const InlineImageControls = (
-    <div data-onboarding="value-inline" className="w-full px-3 py-2.5 border-t border-border toolbar-surface shrink-0">
+    <div data-onboarding="value-inline" className="w-full px-3 py-2 border-t border-border toolbar-surface shrink-0">
       {mode === 'sketch' ? (
-        // Threshold is the control that decides how much black, so it lives
-        // permanently under the image like Photoshop's; the rest of the trace
-        // settings are in the panel.
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-6">
+        // Ink and Detail are the two controls a vector trace is actually
+        // steered with, so they live permanently under the image and never
+        // require opening a panel.
+        <div className="flex flex-col sm:flex-row sm:gap-6">
           <div className="flex-1 min-w-0">
-            <TraceSlider label="Threshold" value={trace.threshold} min={0} max={255}
-              onChange={(v) => setTrace({ threshold: v })}
-              hint={trace.adaptive > 0 ? 'Relative to the local highlight' : 'Absolute level, whole frame'} />
+            {traceSlider('ink', 'Ink', inkLabel, 'How much of the image becomes black')}
           </div>
           <div className="flex-1 min-w-0">
-            <TraceSlider label="Noise" value={trace.noise} min={0} max={200} suffix=" px"
-              onChange={(v) => setTrace({ noise: v })}
-              hint="Smallest shape or hole that may exist" />
+            {traceSlider('detail', 'Detail', detailLabel, 'Removes tiny shapes, keeps the main forms clean')}
           </div>
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-6">
           <div className="flex-1 min-w-0">
-            <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between mb-1">
-              <span>Contrast</span><span className="tabular-nums">{contrast}%</span>
-            </label>
-            <input type="range" min={50} max={200} value={contrast}
-              onChange={(e) => setValueSettings({ contrast: Number(e.target.value) })}
-              className="w-full accent-primary" aria-label="Contrast" />
+            <Slider label="Contrast" value={contrast} min={50} max={200} readout={`${contrast}%`}
+              onChange={(v) => setValueSettings({ contrast: v })} />
           </div>
           <div className="flex-1 min-w-0">
-            <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between mb-1">
-              <span>Brightness</span><span className="tabular-nums">{brightness}%</span>
-            </label>
-            <input type="range" min={50} max={200} value={brightness}
-              onChange={(e) => setValueSettings({ brightness: Number(e.target.value) })}
-              className="w-full accent-primary" aria-label="Brightness" />
+            <Slider label="Brightness" value={brightness} min={50} max={200} readout={`${brightness}%`}
+              onChange={(v) => setValueSettings({ brightness: v })} />
           </div>
         </div>
       )}
@@ -861,48 +872,69 @@ export default function ValueTab() {
         {isColorFamily && PainterToggle}
         {isSketch && (
           <p className="text-[10px] text-muted-foreground">
-            A deterministic black &amp; white vector trace. Threshold and Noise are
-            below the image; the rest are here.
+            A deterministic black &amp; white vector trace. Ink and Detail are below
+            the image.
           </p>
         )}
       </div>
       {isSketch ? (
         <>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Presets</p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Presets</p>
+              <button onClick={() => setTrace(DEFAULT_SKETCH_TRACE)}
+                className="flex items-center gap-1 text-[10px] text-primary hover:underline min-h-[44px] px-1">
+                <RotateCcw className="w-3 h-3" />Reset
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-1.5">
               {TRACE_PRESETS.map((preset) => (
                 <button key={preset.id} onClick={() => setTrace(preset.settings)}
-                  className="py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
+                  className="py-2 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
                   {preset.label}
                 </button>
               ))}
             </div>
-            <p className="text-[9px] text-muted-foreground mt-1">
-              A starting point only — every control stays yours afterwards.
-            </p>
           </div>
-          <div className="space-y-3">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Trace</p>
-            <TraceSlider label="Local threshold radius" value={trace.adaptive} min={0} max={50} suffix={trace.adaptive === 0 ? ' · off' : '%'}
-              onChange={(v) => setTrace({ adaptive: v })}
-              hint="0 = one level for the whole frame. Raise it when the lighting is uneven." />
-            <TraceSlider label="Smoothing" value={trace.smoothing} min={0} max={100}
-              onChange={(v) => setTrace({ smoothing: v })}
-              hint="How much fine texture reaches the threshold." />
-            <TraceSlider label="Simplify" value={trace.simplify} min={0} max={100}
-              onChange={(v) => setTrace({ simplify: v })}
-              hint="How tightly the paths follow the pixels." />
-            <TraceSlider label="Corners" value={trace.corners} min={0} max={100}
-              onChange={(v) => setTrace({ corners: v })}
-              hint="Sharp polygon corners → fully rounded curves." />
-            <button onClick={() => setTrace({ invert: !trace.invert })}
-              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-medium transition-colors ${
-                trace.invert ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-              }`}>
-              <Contrast className="w-3.5 h-3.5" />
-              Invert {trace.invert ? 'on' : 'off'}
+
+          <div>
+            <button onClick={() => setShowMoreTrace((v) => !v)}
+              aria-expanded={showMoreTrace}
+              className="w-full flex items-center justify-between py-2 min-h-[44px] text-[11px] font-medium text-foreground">
+              <span>More controls</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${showMoreTrace ? 'rotate-180' : ''}`} />
             </button>
+            {showMoreTrace && (
+              <div className="space-y-2 pt-1">
+                {traceSlider('separation', 'Separation', separationLabel,
+                  'Makes light and dark areas easier to tell apart')}
+                <button onClick={() => setTrace({ invert: !trace.invert })}
+                  className={`w-full flex items-center justify-center gap-1.5 min-h-[44px] rounded-md text-[11px] font-medium transition-colors ${
+                    trace.invert ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                  }`}>
+                  <Contrast className="w-3.5 h-3.5" />
+                  Invert black / white {trace.invert ? 'on' : 'off'}
+                </button>
+                <button onClick={exportSketchSvg}
+                  className="w-full flex items-center justify-center gap-1.5 min-h-[44px] rounded-md text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
+                  <Download className="w-3.5 h-3.5" />Save as SVG (vector)
+                </button>
+
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold pt-2">Advanced</p>
+                {traceSlider('smoothing', 'Smoothing', String(trace.smoothing),
+                  'How much fine texture reaches the threshold')}
+                {traceSlider('local', 'Local threshold', trace.local === 0 ? 'Global' : `${trace.local}%`,
+                  '0 = one level for the whole frame. Raise it when the lighting is uneven.')}
+                {traceSlider('simplify', 'Simplify', String(trace.simplify),
+                  'How tightly the paths follow the pixels')}
+                {traceSlider('corners', 'Corners', String(trace.corners),
+                  'Sharp corners to fully rounded curves')}
+                <p className="text-[9px] text-muted-foreground">
+                  Ink resolves to threshold {traceStats.threshold}
+                  {trace.local > 0 ? ' (of the local highlight)' : ''} · smallest shape {traceStats.minShapePx} px
+                </p>
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -1074,6 +1106,25 @@ export default function ValueTab() {
     </div>
   );
 
+  // Replacing the source is a frequent, fundamental action — it belongs on the
+  // image, not in an overflow menu. Uses the shared ImageUploader flow (its
+  // compact variant is an icon button), so there is exactly one upload
+  // implementation in the app.
+  const replaceImage = (dataUrl: string) => {
+    // Drop every cached derivation of the previous photo before the new one is
+    // processed, so nothing stale can survive into the next trace.
+    traceCache.current = null;
+    traceResult.current = null;
+    setLocalImage(dataUrl);
+  };
+  const ReplaceImageButton = (
+    <div className="flex items-center justify-center min-h-[44px] min-w-[44px] rounded-full
+                    bg-card/90 backdrop-blur-sm border border-border shadow-lg"
+      title="Replace image">
+      <ImageUploader onImageLoad={replaceImage} compact />
+    </div>
+  );
+
   const maxImgH = fullscreen ? 'max-h-[88vh]' : 'max-h-full';
   const ProcessedImage = (
     <div className={`relative w-full h-full flex items-center justify-center ${fullscreen ? 'p-1' : 'p-3'}`}>
@@ -1106,27 +1157,37 @@ export default function ValueTab() {
       <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
         {StudyModeSwitcher}
       </div>
-      <button onClick={() => setFullscreen(v => !v)}
-        className="absolute top-2 right-2 btn-tool bg-card/90 backdrop-blur-sm border border-border"
-        title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-        {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-      </button>
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
+        {ReplaceImageButton}
+        <button onClick={() => setFullscreen(v => !v)}
+          className="btn-tool bg-card/90 backdrop-blur-sm border border-border min-h-[44px] min-w-[44px]"
+          title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+          {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
+      </div>
     </div>
   );
 
   // === Mobile layout ===
   if (isMobile) {
+    // A colour palette has nothing to say about a strictly black-and-white
+    // trace, so Sketch drops the whole palette surface — the strip, the tab and
+    // the analysis pane — and the preview takes the space back.
+    const mobilePane = isSketch && mobileView === 'palette' ? 'processed' : mobileView;
     return (
       <div className="relative flex-1 flex flex-col min-h-0 canvas-area">
-        {mobileView !== 'palette' && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
-            {StudyModeSwitcher}
-          </div>
+        {mobilePane !== 'palette' && (
+          <>
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
+              {StudyModeSwitcher}
+            </div>
+            <div className="absolute top-2 right-2 z-20">{ReplaceImageButton}</div>
+          </>
         )}
         <div className="flex-1 min-h-0 overflow-hidden flex items-center justify-center">
-          {mobileView === 'original' && <img src={activeImage} alt="Original" className="max-h-full max-w-full object-contain" />}
-          {mobileView === 'processed' && processedUrl && <img src={processedUrl} alt="Processed" className="max-h-full max-w-full object-contain" />}
-          {mobileView === 'palette' && (
+          {mobilePane === 'original' && <img src={activeImage} alt="Original" className="max-h-full max-w-full object-contain" />}
+          {mobilePane === 'processed' && processedUrl && <img src={processedUrl} alt="Processed" className="max-h-full max-w-full object-contain" />}
+          {mobilePane === 'palette' && (
             <div className="w-full h-full overflow-y-auto p-3 space-y-3">
               <div className="flex items-center justify-between">
                 {PaletteTabs}
@@ -1143,10 +1204,10 @@ export default function ValueTab() {
         </div>
 
         {/* Always-accessible controls directly below the image (context-aware) */}
-        {mobileView !== 'palette' && InlineImageControls}
+        {mobilePane !== 'palette' && InlineImageControls}
 
-        {/* Top: distribution strip always visible (compact) when not on palette view */}
-        {mobileView !== 'palette' && groups.length > 0 && (
+        {/* Value distribution strip — meaningless for a black-and-white trace. */}
+        {!isSketch && mobilePane !== 'palette' && groups.length > 0 && (
           <div className="px-3 py-2 border-t border-border toolbar-surface">
             {DistributionStrip}
           </div>
@@ -1154,10 +1215,10 @@ export default function ValueTab() {
 
         {/* Mobile swipe-style tab bar */}
         <div className="flex border-t border-border toolbar-surface shrink-0">
-          {(['original', 'processed', 'palette'] as const).map(v => (
+          {(isSketch ? (['original', 'processed'] as const) : (['original', 'processed', 'palette'] as const)).map(v => (
             <button key={v} onClick={() => setMobileView(v)}
-              className={`flex-1 py-2.5 text-xs font-medium capitalize transition-colors ${
-                mobileView === v ? 'text-primary border-t-2 border-primary -mt-px' : 'text-muted-foreground'
+              className={`flex-1 min-h-[44px] text-xs font-medium capitalize transition-colors ${
+                mobilePane === v ? 'text-primary border-t-2 border-primary -mt-px' : 'text-muted-foreground'
               }`}>{v}</button>
           ))}
           <button onClick={() => setShowMobileControls(true)}
@@ -1193,16 +1254,19 @@ export default function ValueTab() {
         {ControlsBlock}
       </aside>
 
-      {/* Center: image dominates ~70% */}
+      {/* Center: image dominates. In Sketch it takes the palette's space too. */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex-[7] canvas-area flex items-center justify-center min-h-0 overflow-hidden">
+        <div className={`${isSketch ? 'flex-1' : 'flex-[7]'} canvas-area flex items-center justify-center min-h-0 overflow-hidden`}>
           {ProcessedImage}
         </div>
 
         {/* Always-accessible visibility controls, permanently below the image */}
         {InlineImageControls}
 
-        {/* Compact palette analysis — fixed footprint, internal scroll */}
+        {/* Compact palette analysis — fixed footprint, internal scroll. A
+            black-and-white trace has no palette to analyse, so Sketch drops the
+            whole pane rather than leaving an empty shelf under the image. */}
+        {!isSketch && (
         <div className="flex-[3] min-h-[180px] max-h-[34vh] border-t border-border panel-surface px-3 py-2 flex flex-col gap-2 overflow-hidden">
           <div className="flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
@@ -1221,6 +1285,7 @@ export default function ValueTab() {
           <div className="shrink-0">{paletteView === 'value' ? DistributionStrip : DominantStrip}</div>
           <div className="flex-1 overflow-y-auto">{ActivePaletteContent}</div>
         </div>
+        )}
       </div>
 
       <canvas ref={canvasRef} className="hidden" />

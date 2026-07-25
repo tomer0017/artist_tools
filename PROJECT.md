@@ -304,22 +304,54 @@ traceToSvg(result)                               (the same paths, scalable)
 
 #### Controls
 
-| Control | Range | What it does |
-| --- | --- | --- |
-| **Threshold** | 0–255 | How much black. In global mode this is exactly Photoshop's Threshold: darker than this becomes black. |
-| **Local threshold radius** | 0–50% | 0 = one level for the whole frame. Above 0, the threshold is taken against the local highlight instead of absolute black — the standard answer to uneven lighting, which otherwise sinks one whole side of a frame. |
-| **Smoothing** | 0–100 | Edge-preserving pre-blur; how much fine texture reaches the threshold. |
-| **Noise** | px | Minimum feature area, in processing pixels. Black specks and white pinholes below it are removed. Illustrator calls this Noise. |
-| **Simplify** | 0–100 | Path fitting: 0 follows the pixel mask exactly, 100 is very loose. |
-| **Corners** | 0–100 | 0 leaves polygon corners sharp, 100 replaces every turn with an arc through the segment midpoints. |
-| **Invert** | — | Trace the lights instead of the darks. |
+Two primary controls live permanently under the image; the rest are behind
+**More controls**, with a **Reset** back to the recommended default. All values
+are 0–100 and resolution-independent, so a saved project reproduces the same
+drawing at any processing size — raw pixel counts mean nothing to a painter and
+mean something different on every image size.
 
-Presets (Balanced / High contrast / Poster / Fine detail) are nothing but sets
-of these values — picking one fills the controls in, and every one of them
-stays adjustable afterwards.
+| Control | What it does |
+| --- | --- |
+| **Ink** | How much of the image becomes black. |
+| **Detail** | Removes tiny shapes and keeps the main forms clean. |
+| **Separation** | Makes light and dark areas easier to tell apart (black/white point stretch + S-curve, applied before thresholding). |
+| **Invert** | Trace the lights instead of the darks. |
+| *Advanced:* Smoothing | How much fine texture reaches the threshold. |
+| *Advanced:* Local threshold | 0 = one level for the whole frame; above 0, a local reference radius. Raise it when the lighting is uneven. |
+| *Advanced:* Simplify / Corners | Path fitting, and sharp corners → rounded curves. |
+
+Read-outs are words (`Medium`, `Clean`) rather than numbers, because the
+painter is judging the picture, not reproducing a level. The raw threshold and
+the resolved minimum shape size are shown at the bottom of Advanced for anyone
+who does want to reproduce one.
+
+**The mappings are measured, not guessed**, and both were wrong on the first
+attempt in instructive ways:
+
+- **Ink → threshold ratio, 0.30–0.62.** Sweeping a portrait: ~0.32 keeps only
+  the darkest accents, 0.46 is a clean readable portrait, 0.56 is a bold
+  stencil, past 0.65 the face floods. The first mapping spanned 0.44–0.96 and
+  put that entire band inside the first tenth of the slider — the other nine
+  tenths produced a black mask. Getting the *band* right matters more than the
+  curve on top of it.
+- **Detail → smallest surviving shape, up to 0.05% of the frame.** The ceiling
+  is set by anatomy: an iris covers roughly 0.12% of a frame-filling portrait,
+  a nostril 0.02%, and texture speckle sits below 0.01%. The first ceiling of
+  0.6% cleared backgrounds beautifully and took both eyes with it.
+
+A consequence worth knowing: **an area threshold cannot separate a clump of
+foliage from an iris** — they are the same number of pixels. Texture is
+therefore removed by *Smoothing*, before the threshold, where it is still
+distinguishable. That is why the default leans on Smoothing (55) more than it
+looks like it should.
 
 #### The pipeline
 
+0. **Separation** — an optional black/white point stretch (from the image's own
+   2nd/98th percentiles) plus a gentle S-curve, applied after smoothing and
+   before thresholding. Deliberately *not* a local-contrast method: CLAHE and
+   friends pull skin texture and JPEG blocking back out of the noise floor that
+   the smoothing pass just removed.
 1. **Smoothing** — a domain-transform recursive filter rather than a Gaussian.
    It flattens texture while leaving real boundaries where they were; a Gaussian
    strong enough to remove the texture also drags every edge with it, and the
@@ -335,6 +367,15 @@ stays adjustable afterwards.
    with the corner treatment. Every loop goes into one **even-odd** path: under
    that rule a loop inside a loop *is* a hole, so eyes, gaps and enclosed
    highlights come out right with no outer/inner bookkeeping.
+
+**White holes are cleaned independently of black shapes**, and far more
+conservatively. An eye white, the slot between a brow and a lid, the gap
+between a moustache and a lip are all small — judging them by size alone closes
+the eyes. A pocket is filled only if it is well below the black threshold *and*
+the wrong shape: a thin sliver is an artifact, something roughly round and
+solidly filled is a feature. The morphological closing is likewise held to half
+the opening radius, because closing is the operation that swallows the gap
+between a brow and an eye.
 
 Grayscale conversion is cached per image, and the smoothing and local-reference
 passes are memoised on their own setting, so dragging Threshold, Noise, Simplify
@@ -650,3 +691,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-07-25 | **Sketch Detail slider made cumulative.** Split the engine into `buildSketchAnalysis()` (detail-INdependent: denoise, thresholds, contour geometry, stroke widths, weight classes, ranking — all fixed) and `composeSketch()` (pure per-layer budget selection). Simple ⊂ Balanced ⊂ Detailed is now guaranteed by construction, and a stroke is geometrically identical wherever it appears — the slider adds to the drawing instead of regenerating it. Introduced four drawing layers (`structure` / `face` / `secondary` / `fine`) with independent non-decreasing budget curves, so Simple is a usable construction sketch *including* eyes/brows/nose/nostrils/lips, and hair strands + wrinkles are held back for Detailed. Added a face/hands `priority` map (YCbCr skin mask OR'd with accent clustering) to implement the Face → subject → objects priority order; categorical texture rejection (weave/pores/JPEG mush leave the pool entirely); and background contours dropped unless strongly structural, so trees/grass/walls almost disappear at every level. Weight cuts now taken within a layer (across the pool they were degenerate — every silhouette line came out heavy). Style anchors collapsed from 3 param sets to 1 + budget curves. `ValueTab` caches the analysis on `[image, contrast, brightness, size]` so slider drags only re-select. Tests: 12 in `pipeline.test.ts`, including the subset property and budget-curve monotonicity. | src/lib/sketch/{types,styles,pipeline,analysis,index,pipeline.test}.ts, src/components/value/ValueTab.tsx, PROJECT.md |
 | 2026-07-25 | **Replaced Sketch mode's line engine with a black-and-white vector trace.** New region pipeline (`regions.ts`, `vector.ts`): edge-preserving smoothing → a *darkness* field measured against a local **maximum** (a local mean hollows out big masses) → coverage-targeted thresholding with an absolute contrast floor (coverage alone blacks in a fifth of a noise frame) → morphological open/close, which kills pores/weave/JPEG mush **by size** so no detail level can readmit them → connected components filtered on area, accent priority and subject-ness → marching-squares boundaries → RDP + quadratic smoothing → one `evenodd` fill. Detail now controls **shape complexity**: mostly via minimum shape size, with only a small coverage rise and a fixed guard band around established masses, because lowering a threshold inflates existing masses until the hair swallows the brows and the face collapses. Cumulativity is now asserted at the pixel level (the test rasterises the loops); every component test uses a peak rather than a mean so a merged mass still passes. Added `sketchToSvg()` + a "Save as SVG (vector)" button — the export is the same polygons as the screen, not a re-trace. New default style `vector` (plus `poster`); the stroke styles (`artist`/`pencil`/`construction`/`ink`) remain and reuse the identical scene analysis. | src/lib/sketch/{regions,vector}.ts (new), src/lib/sketch/{types,styles,pipeline,render,index,pipeline.test}.ts, src/components/value/ValueTab.tsx, PROJECT.md |
 | 2026-07-25 | **Replaced Sketch mode with a deterministic vector-trace filter** (`src/lib/sketch/trace.ts`) and deleted the contour/heuristic engine. The previous versions decided for the user what was worth drawing (subject/priority/feature maps, contour scoring, ink budgets); this one decides nothing. Professional control set instead: Threshold (Photoshop semantics), Local threshold radius (0 = global), Smoothing, Noise (min feature area, Illustrator semantics), Simplify (RDP), Corners (sharp ↔ rounded), Invert — plus presets that are just sets of those values. Pipeline: edge-preserving smoothing → global or local-max threshold → morphological open/close + connected-component noise floor → marching squares → RDP → one even-odd path. Grayscale cached per image; smoothing and local reference memoised per setting. SVG export emits the same polygons as the canvas. Removed `pipeline.ts`, `styles.ts`, `analysis.ts`, `types.ts`, `contours.ts` and the stroke renderer (~1600 lines); `sketchDetail`/`sketchShading` kept in `ValueSettings` only so old saved projects still load. Tests: `trace.test.ts` — determinism, order-independence, threshold monotonicity, extremes, noise, invert, uneven lighting, clamping. | src/lib/sketch/{trace,trace.test}.ts (new), src/lib/sketch/{imageOps,regions,vector,render,index}.ts, src/lib/sketch/{pipeline,styles,analysis,types,contours,pipeline.test}.ts (deleted), src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
+| 2026-07-25 | **Vector trace: painter-facing controls and a mobile-usable slider.** (1) Replaced every `input[type=range]` in Value/Sketch with `src/components/common/Slider.tsx` — pointer events + `setPointerCapture` (in a try/catch, so a capture failure can never abort a drag) + `touch-action: pan-y` + a 44px touch target + full ARIA and keyboard support. Verified on **WebKit/iPhone 13**: one continuous drag produced 14 distinct values, page scrollY stayed 0, and a second drag started immediately. (2) Renamed the controls for what the painter sees: Threshold→**Ink**, Noise→**Detail**, plus a new **Separation** (percentile levels stretch + S-curve before thresholding). Both primary mappings are non-linear and were tuned by visual sweep — Ink spans threshold ratio 0.30–0.62, Detail tops out at 0.05% of the frame (an iris is 0.12%). Advanced controls, Invert, Save-SVG and Reset live behind a **More controls** disclosure. (3) White holes are now cleaned independently of black shapes and protected by shape, so eye whites and brow/lid gaps survive maximum Detail. (4) Sketch mode drops the colour palette entirely (strip, tab and pane) and the preview takes the space; **Replace image** is a visible 44×44 button over the preview using the shared uploader, clearing all cached analysis. (5) Preview renders at 1× while a control is under the finger and 2× on release — same composition, no reframing. Regression captured across bearded/female/light-hair/low-contrast/high-contrast/animal/object scenes. | src/components/common/Slider.tsx (new), src/lib/sketch/{trace,trace.test,regions}.ts, src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |

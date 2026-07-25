@@ -45,31 +45,38 @@ export interface ValueSettings {
   sketchShading?: boolean;
 }
 
+// Mirrors TraceSettings in src/lib/sketch/trace.ts. All values are 0–100 and
+// resolution-independent, so a saved project reproduces the same drawing at any
+// processing size.
 export interface SketchTraceSettings {
-  /** 0–255. How much black. */
-  threshold: number;
-  /** 0 = one global level; 1–50 = local reference radius, % of the diagonal. */
-  adaptive: number;
-  /** 0–100. Pre-blur; how much fine texture reaches the threshold. */
-  smoothing: number;
-  /** Minimum feature area in processing pixels — the noise floor. */
-  noise: number;
-  /** 0–100. How tightly the paths follow the pixels. */
-  simplify: number;
-  /** 0–100. Sharp polygon corners → fully rounded curves. */
-  corners: number;
+  /** How much of the image becomes black. */
+  ink: number;
+  /** How small a shape is allowed to remain. */
+  detail: number;
+  /** How far apart the lights and darks are pushed before thresholding. */
+  separation: number;
   /** Trace the lights instead of the darks. */
   invert: boolean;
+  /** Advanced: edge-preserving pre-blur. */
+  smoothing: number;
+  /** Advanced: 0 = one global threshold; 1–50 = local reference radius (% of diagonal). */
+  local: number;
+  /** Advanced: how tightly the paths follow the pixels. */
+  simplify: number;
+  /** Advanced: sharp polygon corners → fully rounded curves. */
+  corners: number;
 }
 
+// Mirrors DEFAULT_TRACE in src/lib/sketch/trace.ts.
 export const DEFAULT_SKETCH_TRACE: SketchTraceSettings = {
-  threshold: 128,
-  adaptive: 8,
-  smoothing: 35,
-  noise: 12,
+  ink: 45,
+  detail: 60,
+  separation: 30,
+  invert: false,
+  smoothing: 55,
+  local: 8,
   simplify: 40,
   corners: 60,
-  invert: false,
 };
 
 export interface SampledColor {
