@@ -1,23 +1,27 @@
 /**
  * Sketch engine — style registry.
  *
- * A style is *data*: three anchor parameter sets describing what the drawing
- * should be at Simple, Balanced and Detailed. The Detail slider interpolates
- * between them, so every position on the slider is a deliberately-tuned
- * drawing rather than "the same drawing with a different threshold".
+ * A style is *data*: one detail-independent parameter set describing how the
+ * photograph is read, plus four ink-budget curves describing how much of each
+ * drawing layer to include at Simple / Balanced / Detailed.
+ *
+ * That separation is deliberate. Everything that decides *what a line is* —
+ * denoise scale, thresholds, linking, geometry, stroke width — is fixed, so a
+ * line looks identical at every position of the slider. Only the budgets move.
+ * The slider therefore adds to the drawing rather than regenerating it, which
+ * is what "more detail" means to an artist.
  *
  * Adding a style means adding one entry here — `pipeline.ts` and `render.ts`
  * never branch on the style id.
  */
 
-import type { SketchParams, SketchStyleId } from './types';
+import type { BudgetCurve, LayerMap, SketchParams, SketchStyleId } from './types';
 
 export interface SketchStyleDefinition {
   id: SketchStyleId;
   label: string;
   description: string;
-  /** [simple, balanced, detailed] */
-  anchors: [SketchParams, SketchParams, SketchParams];
+  params: SketchParams;
 }
 
 const PAPER = '#ffffff';
@@ -26,72 +30,47 @@ const INK = '#131316';
 /* ---------------------------------------------------------------- artist -- */
 
 /**
- * Simple — silhouette, large contours, almost no internal lines.
+ * Ink budgets, in multiples of the image diagonal, at [Simple, Balanced,
+ * Detailed]. Each curve must be non-decreasing — that is what makes the slider
+ * cumulative.
  *
- * Heavy stage-1 smoothing plus a long minimum contour length means only the
- * boundaries that survive being blurred at 1.6% of the image diagonal make it
- * through. Persistence and length dominate the score: this level is asking
- * "what is the shape of the thing?".
+ * Simple is a *usable tracing guide*, not a minimum: structure and face are
+ * both funded from the start, because a construction sketch without eyes,
+ * brows, nose and lips is not something a painter can transfer. What Simple
+ * withholds is everything in `secondary` and `fine` — masses, folds, strands,
+ * wrinkles — which is exactly the material that reads as noise when it arrives
+ * before the drawing underneath it is established.
  */
-const ARTIST_SIMPLE: SketchParams = {
-  denoise: { spatialFrac: 0.016, range: 34 },
-  shape: { spatialFrac: 0.045, range: 60 },
-  contour: { highPercentile: 0.86, lowRatio: 0.4 },
-  link: { gapFrac: 0.02, minCos: 0.7 },
-  fine: { budgetFrac: 0, floorRatio: 1, crowdTolerance: 0, highPercentile: 0.985, minSubject: 0.7, minLengthFrac: 0.05 },
-  priority: {
-    minLengthFrac: 0.06,
-    budgetFrac: 2.5,
-    scoreFloor: 0.1,
-    accentShare: 0.18,
-    clutterPenalty: 0.6,
-    crowdPenalty: 0.2,
-    weights: { contrast: 0.18, persistence: 0.34, length: 0.3, subject: 0.12, feature: 0.06 },
-  },
-  hierarchy: {
-    heavyQuantile: 0.72,
-    mediumQuantile: 0.3,
-    baseWidthFrac: 0.0034,
-    widthScale: { heavy: 1, medium: 0.6, light: 0.36 },
-    opacity: { heavy: 0.96, medium: 0.8, light: 0.52 },
-    taper: 0.16,
-    taperDepth: 0.5,
-    pressure: 0.3,
-  },
-  shading: { amount: 0.22, bands: 2, hatch: 0.35, start: 0.55 },
-  simplifyFrac: 0.0022,
-  maxStrokes: 3000,
-  paper: PAPER,
-  ink: INK,
+const ARTIST_LAYERS: LayerMap<BudgetCurve> = {
+  structure: [3.6, 4.6, 5.4],
+  face: [1.4, 2.2, 3.0],
+  secondary: [0, 4.0, 6.5],
+  fine: [0, 0.5, 5.0],
 };
 
-/**
- * Balanced — contours, facial features, major folds, important structure.
- *
- * The fine pass switches partially on and the feature map starts to carry
- * weight, which is what brings eyes, nostrils and the lip line in. Minimum
- * length drops to roughly an eyebrow.
- */
-const ARTIST_BALANCED: SketchParams = {
-  denoise: { spatialFrac: 0.01, range: 26 },
+const ARTIST: SketchParams = {
+  denoise: { spatialFrac: 0.009, range: 24 },
   shape: { spatialFrac: 0.038, range: 55 },
-  contour: { highPercentile: 0.76, lowRatio: 0.38 },
+  contour: { highPercentile: 0.78, lowRatio: 0.38 },
   link: { gapFrac: 0.016, minCos: 0.72 },
-  fine: { budgetFrac: 0.8, floorRatio: 0.8, crowdTolerance: 0.3, highPercentile: 0.965, minSubject: 0.5, minLengthFrac: 0.035 },
+  fine: { highPercentile: 0.95, minSubject: 0.45, minLengthFrac: 0.03, crowdTolerance: 0.4 },
   priority: {
-    minLengthFrac: 0.02,
-    budgetFrac: 5.5,
-    scoreFloor: 0.08,
-    accentShare: 0.35,
-    // Note this *rises* with detail: the more lines we let through, the harder
-    // background texture has to be pushed down to keep the drawing readable.
+    minLengthFrac: 0.016,
+    scoreFloor: 0.07,
+    relativeFloor: 0.3,
     clutterPenalty: 0.8,
     crowdPenalty: 0.25,
-    weights: { contrast: 0.22, persistence: 0.28, length: 0.2, subject: 0.18, feature: 0.12 },
+    weights: { contrast: 0.2, persistence: 0.26, length: 0.18, subject: 0.16, feature: 0.2 },
+    texture: { clutter: 0.72, persistence: 0.3 },
+    structureQuantile: 0.72,
+    backgroundSubject: 0.45,
+    compositionQuantile: 0.93,
+    faceRegion: 0.5,
+    faceContrast: 0.35,
   },
   hierarchy: {
-    heavyQuantile: 0.8,
-    mediumQuantile: 0.4,
+    heavyQuantile: 0.62,
+    mediumQuantile: 0.35,
     baseWidthFrac: 0.003,
     widthScale: { heavy: 1, medium: 0.58, light: 0.34 },
     opacity: { heavy: 0.95, medium: 0.78, light: 0.5 },
@@ -100,47 +79,8 @@ const ARTIST_BALANCED: SketchParams = {
     pressure: 0.34,
   },
   shading: { amount: 0.32, bands: 3, hatch: 0.4, start: 0.5 },
+  layers: ARTIST_LAYERS,
   simplifyFrac: 0.0018,
-  maxStrokes: 4500,
-  paper: PAPER,
-  ink: INK,
-};
-
-/**
- * Detailed — hair strands, wrinkles, clothing folds, secondary detail.
- *
- * The extra information comes from the fine pass, which is gated on
- * subject-ness *and* on contour length. That distinction matters: a hair
- * strand and a fabric weave look identical to a threshold, but the strand is
- * a long coherent chain and the weave is a field of 3-pixel fragments.
- */
-const ARTIST_DETAILED: SketchParams = {
-  denoise: { spatialFrac: 0.006, range: 18 },
-  shape: { spatialFrac: 0.032, range: 50 },
-  contour: { highPercentile: 0.72, lowRatio: 0.35 },
-  link: { gapFrac: 0.012, minCos: 0.75 },
-  fine: { budgetFrac: 5, floorRatio: 0.32, crowdTolerance: 0.45, highPercentile: 0.93, minSubject: 0.4, minLengthFrac: 0.025 },
-  priority: {
-    minLengthFrac: 0.01,
-    budgetFrac: 12,
-    scoreFloor: 0.06,
-    accentShare: 0.34,
-    clutterPenalty: 1.0,
-    crowdPenalty: 0.3,
-    weights: { contrast: 0.26, persistence: 0.18, length: 0.14, subject: 0.24, feature: 0.18 },
-  },
-  hierarchy: {
-    heavyQuantile: 0.86,
-    mediumQuantile: 0.5,
-    baseWidthFrac: 0.0026,
-    widthScale: { heavy: 1, medium: 0.55, light: 0.3 },
-    opacity: { heavy: 0.94, medium: 0.76, light: 0.46 },
-    taper: 0.12,
-    taperDepth: 0.6,
-    pressure: 0.38,
-  },
-  shading: { amount: 0.4, bands: 4, hatch: 0.45, start: 0.46 },
-  simplifyFrac: 0.0014,
   maxStrokes: 6000,
   paper: PAPER,
   ink: INK,
@@ -156,32 +96,27 @@ function merge<T>(base: T, patch: DeepPartial<T> | undefined): T {
   for (const key of Object.keys(patch) as (keyof T)[]) {
     const value = patch[key as keyof DeepPartial<T>] as unknown;
     const current = base[key];
+    // Budget curves are arrays and must be replaced wholesale, never merged.
     out[key] =
-      value && typeof value === 'object' && current && typeof current === 'object'
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      current &&
+      typeof current === 'object'
         ? merge(current, value as DeepPartial<typeof current>)
         : (value as T[keyof T]);
   }
   return out;
 }
 
-/** Derive a style from the artist anchors by patching only what differs. */
+/** Derive a style from the artist params by patching only what differs. */
 function variant(
   id: SketchStyleId,
   label: string,
   description: string,
-  patch: DeepPartial<SketchParams> | [DeepPartial<SketchParams>, DeepPartial<SketchParams>, DeepPartial<SketchParams>],
+  patch: DeepPartial<SketchParams>,
 ): SketchStyleDefinition {
-  const patches = Array.isArray(patch) ? patch : ([patch, patch, patch] as const);
-  return {
-    id,
-    label,
-    description,
-    anchors: [
-      merge(ARTIST_SIMPLE, patches[0]),
-      merge(ARTIST_BALANCED, patches[1]),
-      merge(ARTIST_DETAILED, patches[2]),
-    ],
-  };
+  return { id, label, description, params: merge(ARTIST, patch) };
 }
 
 export const SKETCH_STYLES: Record<SketchStyleId, SketchStyleDefinition> = {
@@ -189,7 +124,7 @@ export const SKETCH_STYLES: Record<SketchStyleId, SketchStyleDefinition> = {
     id: 'artist',
     label: 'Artist sketch',
     description: 'Clean contours, grouped masses, three line weights — a drawing to transfer.',
-    anchors: [ARTIST_SIMPLE, ARTIST_BALANCED, ARTIST_DETAILED],
+    params: ARTIST,
   },
   outline: variant('outline', 'Outline', 'Boundaries only, one confident weight, no shading.', {
     hierarchy: {
@@ -200,7 +135,12 @@ export const SKETCH_STYLES: Record<SketchStyleId, SketchStyleDefinition> = {
       taperDepth: 0.25,
       pressure: 0.12,
     },
-    fine: { budgetFrac: 0 },
+    layers: {
+      structure: [3.6, 4.8, 6.0],
+      face: [1.0, 1.4, 1.8],
+      secondary: [0, 0.8, 1.6],
+      fine: [0, 0, 0],
+    },
     shading: { amount: 0 },
   }),
   pencil: variant('pencil', 'Pencil', 'Softer, greyer line with visible tonal masses.', {
@@ -219,11 +159,16 @@ export const SKETCH_STYLES: Record<SketchStyleId, SketchStyleDefinition> = {
     {
       priority: {
         weights: { contrast: 0.12, persistence: 0.38, length: 0.36, subject: 0.1, feature: 0.04 },
-        budgetFrac: 4,
+        structureQuantile: 0.55,
+        compositionQuantile: 0.88,
       },
-      link: { gapFrac: 0.03 },
+      layers: {
+        structure: [4.5, 6.0, 7.5],
+        face: [0.8, 1.2, 1.6],
+        secondary: [0, 1.5, 3.0],
+        fine: [0, 0, 0],
+      },
       simplifyFrac: 0.006,
-      fine: { budgetFrac: 0 },
       shading: { amount: 0 },
       hierarchy: { taperDepth: 0.2, pressure: 0.15 },
     },
@@ -242,34 +187,6 @@ export const SKETCH_STYLES: Record<SketchStyleId, SketchStyleDefinition> = {
 
 export const DEFAULT_SKETCH_STYLE: SketchStyleId = 'artist';
 
-/** Deep numeric interpolation between two anchors; strings snap at the midpoint. */
-function lerpDeep<T>(a: T, b: T, t: number): T {
-  if (typeof a === 'number' && typeof b === 'number') {
-    return (a + (b - a) * t) as unknown as T;
-  }
-  if (a && b && typeof a === 'object' && typeof b === 'object') {
-    const out = {} as T;
-    for (const key of Object.keys(a as object) as (keyof T)[]) {
-      out[key] = lerpDeep(a[key], b[key], t);
-    }
-    return out;
-  }
-  return t < 0.5 ? a : b;
-}
-
-/**
- * Resolve the parameters for a detail position.
- *
- * 0 → 0.5 interpolates Simple → Balanced, 0.5 → 1 Balanced → Detailed. Values
- * that must stay whole (band counts) are rounded on the way out.
- */
-export function resolveParams(style: SketchStyleId, detail: number): SketchParams {
-  const def = SKETCH_STYLES[style] ?? SKETCH_STYLES[DEFAULT_SKETCH_STYLE];
-  const d = detail < 0 ? 0 : detail > 1 ? 1 : detail;
-  const [simple, balanced, detailed] = def.anchors;
-  const params =
-    d <= 0.5 ? lerpDeep(simple, balanced, d / 0.5) : lerpDeep(balanced, detailed, (d - 0.5) / 0.5);
-  params.shading = { ...params.shading, bands: Math.max(2, Math.round(params.shading.bands)) };
-  params.maxStrokes = Math.round(params.maxStrokes);
-  return params;
+export function styleParams(style: SketchStyleId): SketchParams {
+  return (SKETCH_STYLES[style] ?? SKETCH_STYLES[DEFAULT_SKETCH_STYLE]).params;
 }

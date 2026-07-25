@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeSketch } from './pipeline';
-import type { SketchSource, SketchStroke } from './types';
+import { analyzeSketch, buildSketchAnalysis, composeSketch, resolveBudget } from './pipeline';
+import { SKETCH_STYLES } from './styles';
+import { LAYER_ORDER, type SketchSource, type SketchStroke } from './types';
 
 const W = 220;
 const H = 220;
@@ -8,8 +9,8 @@ const BOX = { x0: 60, y0: 55, x1: 160, y1: 175 };
 
 /**
  * A dark rectangle on a light ground, buried in fine texture. This is the
- * benchmark the redesign is aimed at: an edge detector reports the texture,
- * a drawing reports the rectangle.
+ * benchmark the engine is aimed at: an edge detector reports the texture, a
+ * drawing reports the rectangle.
  */
 function syntheticScene(noise: number): SketchSource {
   const data = new Uint8ClampedArray(W * H * 4);
@@ -53,6 +54,8 @@ function onBoxFraction(stroke: SketchStroke, tol = 4): number {
   return n ? hits / n : 0;
 }
 
+const ids = (strokes: SketchStroke[]) => new Set(strokes.map((s) => s.id));
+
 describe('analyzeSketch', () => {
   it('draws the shape and ignores the texture', () => {
     const drawing = analyzeSketch(syntheticScene(22), { detail: 0.5 });
@@ -75,15 +78,6 @@ describe('analyzeSketch', () => {
     }
   });
 
-  it('reveals progressively more of the drawing as detail rises', () => {
-    const scene = syntheticScene(10);
-    const simple = analyzeSketch(scene, { detail: 0 });
-    const detailed = analyzeSketch(scene, { detail: 1 });
-    const length = (d: typeof simple) =>
-      d.strokes.reduce((n, s) => n + s.points.length / 2, 0);
-    expect(length(detailed)).toBeGreaterThanOrEqual(length(simple));
-  });
-
   it('gives the drawing a line hierarchy rather than one uniform width', () => {
     const drawing = analyzeSketch(syntheticScene(16), { detail: 0.5 });
     const widths = new Set<number>();
@@ -101,9 +95,7 @@ describe('analyzeSketch', () => {
     expect(shaded.shading).not.toBeNull();
     // Tone belongs in the dark rectangle, not on the light ground.
     const tone = shaded.shading!.tone;
-    const inside = tone[(115 * W + 110)];
-    const outside = tone[(20 * W + 20)];
-    expect(inside).toBeGreaterThan(outside);
+    expect(tone[115 * W + 110]).toBeGreaterThan(tone[20 * W + 20]);
   });
 
   it('stays interactive on a full-size frame', () => {
@@ -122,6 +114,85 @@ describe('analyzeSketch', () => {
     }
     const t0 = performance.now();
     analyzeSketch(big, { detail: 0.5 });
-    expect(performance.now() - t0).toBeLessThan(2500);
+    expect(performance.now() - t0).toBeLessThan(3000);
+  });
+});
+
+/**
+ * The behaviour the Detail slider is built around: raising it must add to the
+ * drawing that was already there, never replace it.
+ */
+describe('the Detail slider is cumulative', () => {
+  const analysis = buildSketchAnalysis(syntheticScene(16));
+  const at = (detail: number) => composeSketch(analysis, { detail });
+
+  it('makes every lower level a strict subset of every higher one', () => {
+    const levels = [0, 0.2, 0.4, 0.5, 0.7, 0.9, 1].map(at);
+    for (let i = 1; i < levels.length; i++) {
+      const lower = ids(levels[i - 1].strokes);
+      const higher = ids(levels[i].strokes);
+      for (const id of lower) {
+        expect(higher.has(id), `stroke ${id} disappeared between step ${i - 1} and ${i}`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps a stroke visually identical wherever it appears', () => {
+    const simple = at(0);
+    const detailed = at(1);
+    const byId = new Map(detailed.strokes.map((s) => [s.id, s]));
+    for (const s of simple.strokes) {
+      const later = byId.get(s.id)!;
+      // Same geometry, same weight class, same widths — the slider must not
+      // restyle a line the artist has already been looking at.
+      expect(later.weightClass).toBe(s.weightClass);
+      expect(later.points).toEqual(s.points);
+      expect(later.widths).toEqual(s.widths);
+    }
+  });
+
+  it('adds information rather than swapping it', () => {
+    const simple = at(0);
+    const detailed = at(1);
+    expect(detailed.strokes.length).toBeGreaterThan(simple.strokes.length);
+  });
+
+  it('always funds structure and facial features, even at Simple', () => {
+    for (const style of Object.values(SKETCH_STYLES)) {
+      expect(style.params.layers.structure[0], style.id).toBeGreaterThan(0);
+      expect(style.params.layers.face[0], style.id).toBeGreaterThan(0);
+    }
+  });
+
+  it('holds fine detail back until the top of the slider', () => {
+    // Simple is a clean construction sketch: no strands, no wrinkles.
+    expect(SKETCH_STYLES.artist.params.layers.fine[0]).toBe(0);
+    expect(SKETCH_STYLES.artist.params.layers.secondary[0]).toBe(0);
+    expect(at(0).stats.layers.fine).toBe(0);
+    expect(at(1).stats.layers.fine).toBeGreaterThanOrEqual(at(0.5).stats.layers.fine);
+  });
+
+  it('uses budget curves that never decrease', () => {
+    for (const style of Object.values(SKETCH_STYLES)) {
+      for (const layer of LAYER_ORDER) {
+        const curve = style.params.layers[layer];
+        expect(curve[1], `${style.id}/${layer}`).toBeGreaterThanOrEqual(curve[0]);
+        expect(curve[2], `${style.id}/${layer}`).toBeGreaterThanOrEqual(curve[1]);
+        // …and so does the interpolation between them.
+        let previous = -Infinity;
+        for (let d = 0; d <= 1.0001; d += 0.05) {
+          const value = resolveBudget(curve, d);
+          expect(value, `${style.id}/${layer} @ ${d.toFixed(2)}`).toBeGreaterThanOrEqual(previous);
+          previous = value;
+        }
+      }
+    }
+  });
+
+  it('re-composes far faster than it analyses', () => {
+    const t0 = performance.now();
+    for (let i = 0; i < 50; i++) composeSketch(analysis, { detail: i / 50 });
+    // 50 slider ticks should cost a small fraction of one analysis pass.
+    expect(performance.now() - t0).toBeLessThan(150);
   });
 });

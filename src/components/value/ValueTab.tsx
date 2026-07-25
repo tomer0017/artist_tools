@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { dataUrlToBlob } from '@/lib/saveMedia';
-import { analyzeSketch, renderSketchToCanvas } from '@/lib/sketch';
+import {
+  buildSketchAnalysis, composeSketch, renderSketchToCanvas, type SketchAnalysis,
+} from '@/lib/sketch';
 
 type Mode = 'grayscale' | 'color' | 'painter' | 'sketch';
 type Focus = 'none' | 'shadow' | 'highlight' | 'squint';
@@ -173,6 +175,13 @@ export default function ValueTab() {
   const [compareMode, setCompareMode] = useState<'slider' | 'side'>('slider');
   const [fullscreen, setFullscreen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // The sketch analysis depends only on the pixels fed to it, never on the
+  // Detail slider — so it is cached across slider drags and only the (free)
+  // stroke selection re-runs. Keyed on everything that changes those pixels.
+  const sketchCache = useRef<{
+    image: string; contrast: number; brightness: number; w: number; h: number;
+    analysis: SketchAnalysis;
+  } | null>(null);
   const isMobile = useIsMobile();
 
   const activeImage = localImage || image;
@@ -403,10 +412,22 @@ export default function ValueTab() {
         //
         // Rendered as PNG: JPEG ringing around black lines on white paper is
         // very visible and would read as noise the artist has to filter out.
-        const drawing = analyzeSketch(
-          { data, width: w, height: h },
-          { detail: sketchDetail / 100, shading: sketchShading },
-        );
+        //
+        // The analysis is detail-independent, so moving the slider re-selects
+        // strokes from the cached analysis instead of re-reading the photo —
+        // which is both instant and the reason a higher detail level shows the
+        // same drawing with more in it rather than a different one.
+        const cached = sketchCache.current;
+        const analysis =
+          cached && cached.image === activeImage && cached.contrast === contrast &&
+          cached.brightness === brightness && cached.w === w && cached.h === h
+            ? cached.analysis
+            : buildSketchAnalysis({ data, width: w, height: h });
+        sketchCache.current = { image: activeImage, contrast, brightness, w, h, analysis };
+        const drawing = composeSketch(analysis, {
+          detail: sketchDetail / 100,
+          shading: sketchShading,
+        });
         renderSketchToCanvas(drawing, canvas);
         setProcessedUrl(canvas.toDataURL('image/png'));
         // Fall through below to build the value/dominant palettes (still useful
@@ -745,13 +766,14 @@ export default function ValueTab() {
   );
 
   // The slider moves through three named stages of a drawing, not through edge
-  // sensitivity — each one adds a *kind* of information rather than more lines.
+  // sensitivity. It is cumulative: each stage keeps every line of the one
+  // before it and adds a new *kind* of information, so the hints say "adds".
   const sketchDetailLabel =
     sketchDetail < 34 ? 'Simple' : sketchDetail > 66 ? 'Detailed' : 'Balanced';
   const sketchDetailHint =
-    sketchDetail < 34 ? 'Silhouette and large contours'
-      : sketchDetail > 66 ? 'Adds hair, folds and fine detail'
-        : 'Contours, features and major folds';
+    sketchDetail < 34 ? 'Silhouette, contours and facial features'
+      : sketchDetail > 66 ? 'Adds hair strands, wrinkles and secondary folds'
+        : 'Adds hair masses, eyelids and major folds';
 
   // Inline controls that live *permanently below the image* — the sliders a
   // painter reaches for constantly while studying, so they never require

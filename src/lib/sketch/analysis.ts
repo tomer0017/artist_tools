@@ -33,9 +33,23 @@ export interface AnalysisMaps {
    * places early, so they get to outrank their own (short) length.
    */
   feature: Float32Array;
+  /**
+   * 0..1 — where the drawing should spend its attention first: faces and
+   * hands. Built from a skin-tone mask (which covers both) and from where
+   * compact dark accents *cluster*, since a dense knot of accents is
+   * overwhelmingly a face. Contours here get their own reserved ink budget, so
+   * a portrait never loses its eyes to a long coat contour.
+   *
+   * This is a heuristic, not a detector: it has no notion of "hand" as such,
+   * and a wooden door or an orange wall will register some skin response. It
+   * is only ever used to *boost* priority, never to gate a line, so the cost of
+   * a false positive is a slightly differently-ranked drawing.
+   */
+  priority: Float32Array;
 }
 
 export function buildAnalysisMaps(
+  rgba: Uint8ClampedArray,
   base: Float32Array,
   shape: Float32Array,
   fineGrad: Gradient,
@@ -77,11 +91,66 @@ export function buildAnalysisMaps(
     }
   }
 
+  const feature = buildFeatureMap(base, shape, w, h, diag);
+  const smoothSubject = gaussBlur(subject, w, h, diag * 0.02);
+
   return {
     clutter,
-    subject: gaussBlur(subject, w, h, diag * 0.02),
-    feature: buildFeatureMap(base, shape, w, h, diag),
+    subject: smoothSubject,
+    feature,
+    priority: buildPriorityMap(rgba, feature, smoothSubject, w, h, diag),
   };
+}
+
+/**
+ * Where the drawing's attention belongs: faces and hands first.
+ *
+ * Two cheap signals, combined with an OR because either alone is enough:
+ *   • skin tone in YCbCr — the classic chroma box, which covers faces *and*
+ *     hands without needing to recognise either;
+ *   • accent clustering — a dense knot of compact dark marks (two eyes, two
+ *     nostrils, a lip gap, within a head's width of each other) is a face
+ *     almost regardless of lighting or skin tone.
+ *
+ * The result is damped by subject-ness so a skin-coloured wall in the
+ * background does not claim the face budget.
+ */
+function buildPriorityMap(
+  rgba: Uint8ClampedArray,
+  feature: Float32Array,
+  subject: Float32Array,
+  w: number,
+  h: number,
+  diag: number,
+): Float32Array {
+  const n = w * h;
+  const skin = new Float32Array(n);
+  for (let p = 0, i = 0; p < n; p++, i += 4) {
+    const r = rgba[i];
+    const g = rgba[i + 1];
+    const b = rgba[i + 2];
+    const y = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (y < 40) continue; // too dark to judge hue reliably
+    const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+    const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+    if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) skin[p] = 1;
+  }
+  const skinRegion = gaussBlur(skin, w, h, diag * 0.02);
+
+  // Cluster the accents at head scale, then normalise against the strongest
+  // cluster in the frame rather than a percentile — in a photo with no face at
+  // all this correctly stays near zero instead of stretching noise to 1.
+  const cluster = gaussBlur(feature, w, h, diag * 0.05);
+  let peak = 0;
+  for (let p = 0; p < n; p++) if (cluster[p] > peak) peak = cluster[p];
+  const clusterScale = peak > 1e-4 ? 1 / peak : 0;
+
+  const out = new Float32Array(n);
+  for (let p = 0; p < n; p++) {
+    const raw = Math.max(skinRegion[p], clamp01(cluster[p] * clusterScale));
+    out[p] = clamp01(raw * (0.45 + 0.55 * subject[p]));
+  }
+  return gaussBlur(out, w, h, diag * 0.015);
 }
 
 /**

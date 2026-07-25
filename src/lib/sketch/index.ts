@@ -1,23 +1,38 @@
 /**
  * Sketch engine — public API.
  *
- * Two calls, deliberately split so the analysis is pure (and unit-testable)
- * and the canvas work is isolated:
+ * The analysis is split from the selection so that dragging the Detail slider
+ * costs nothing and, more importantly, so that Detail can only ever *add* to
+ * the drawing:
  *
- *   const drawing = analyzeSketch(imageData, { detail: 0.5 });
+ *   const analysis = buildSketchAnalysis(imageData);      // once per image
+ *   const drawing  = composeSketch(analysis, { detail }); // per slider tick
  *   renderSketchToCanvas(drawing, canvas);
+ *
+ * `analyzeSketch()` does both in one call for callers that don't need the
+ * cache. Everything except `renderSketchToCanvas` is pure and DOM-free.
  *
  * See `styles.ts` for how to add a new sketch style (Outline / Pencil /
  * Construction / Ink already exist as data; the UI currently exposes only
  * "Artist sketch").
  */
 
-export { analyzeSketch } from './pipeline';
+export { analyzeSketch, buildSketchAnalysis, composeSketch, resolveBudget } from './pipeline';
 export { renderSketchToCanvas, type RenderOptions } from './render';
-export { SKETCH_STYLES, DEFAULT_SKETCH_STYLE, resolveParams, type SketchStyleDefinition } from './styles';
+export {
+  SKETCH_STYLES,
+  DEFAULT_SKETCH_STYLE,
+  styleParams,
+  type SketchStyleDefinition,
+} from './styles';
+export { LAYER_ORDER, WEIGHT_ORDER } from './types';
 export type {
+  BudgetCurve,
+  LayerMap,
   LineWeight,
+  SketchAnalysis,
   SketchDrawing,
+  SketchLayer,
   SketchOptions,
   SketchParams,
   SketchShading,

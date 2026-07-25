@@ -260,7 +260,9 @@ Processing runs on an offscreen `<canvas>` and is capped at `MAX_PROCESS_DIM`
    - *Focus modes:* shadows/highlights fade the non-focus bins toward mid-gray;
      "squint" just increases blur. **Isolation** hides all but one selected bin.
    - *Sketch mode:* delegates entirely to the sketch engine (`lib/sketch/`,
-     below) and renders PNG rather than JPEG — JPEG ringing around black lines
+     below). The engine's analysis is cached on `[image, contrast, brightness,
+     size]` in a ref, so dragging the Detail slider only re-selects strokes.
+     Renders PNG rather than JPEG — JPEG ringing around black lines
      on white paper reads as noise the artist has to filter out. Focus and
      isolation don't apply; the value/dominant palettes are still built,
      because they remain useful reference while drawing.
@@ -278,25 +280,63 @@ is not "more edges" — it is "less information, but better information": every
 line should be one a painter would actually draw, so the result can be
 transferred to canvas without mentally filtering out noise.
 
-The engine is pure TypeScript, runs client-side in ~0.3–0.6s on a 900px frame,
-and is split so the analysis is testable without a canvas:
+The engine is pure TypeScript, runs client-side in ~0.4–0.7s on a 900px frame,
+and is split in two — which is the most important thing about it:
 
 ```
-analyzeSketch(imageData, { detail, shading }) -> SketchDrawing   (pure)
-renderSketchToCanvas(drawing, canvas)                            (canvas)
+buildSketchAnalysis(imageData) -> SketchAnalysis     (pure, detail-INdependent)
+composeSketch(analysis, { detail }) -> SketchDrawing (pure, ~microseconds)
+renderSketchToCanvas(drawing, canvas)                (canvas)
 ```
+
+`analyzeSketch()` does both in one call for callers that don't need the cache;
+`ValueTab` keeps the analysis and re-composes on every slider tick.
 
 | File | Role |
 | --- | --- |
-| `types.ts` | `SketchParams`, `SketchStroke`, `SketchDrawing`, line weights |
-| `imageOps.ts` | luminance, box/Gaussian blur, domain transform, structure-tensor gradient, NMS, hysteresis, percentiles |
-| `analysis.ts` | the clutter / subject / feature maps |
+| `types.ts` | `SketchParams`, `SketchStroke`, `SketchAnalysis`, layers, line weights |
+| `imageOps.ts` | luminance, box/Gaussian blur, domain transform, structure-tensor gradient, value+colour gradient combination, NMS, hysteresis, percentiles |
+| `analysis.ts` | the clutter / subject / feature / priority maps |
 | `contours.ts` | edge map → polylines, fragment linking, RDP simplification |
-| `pipeline.ts` | the six stages + prioritisation and line weighting |
+| `pipeline.ts` | the six stages, layer classification, and the budget selection |
 | `render.ts` | strokes → canvas (variable width, taper, shading) |
 | `styles.ts` | the style registry (see "adding a style") |
 
-**The pipeline**
+#### The Detail slider is cumulative
+
+The whole analysis — denoise scale, thresholds, contour geometry, stroke widths,
+weight classes, ranking — is **detail-independent** and runs once. Detail
+controls only the ink budget of each drawing layer. So:
+
+- Simple ⊂ Balanced ⊂ Detailed, as sets of strokes, by construction.
+- A stroke that appears at Simple has identical geometry, width and weight at
+  Detailed. The slider never restyles a line the artist is already looking at.
+- Every budget curve is non-decreasing, and `pipeline.test.ts` asserts both the
+  subset property and the monotonicity.
+
+This is what a painter means by "more detail": the same drawing, richer — not a
+new drawing. Re-running extraction at a different threshold per level is what
+makes a sketch feel machine-generated, and the structure rules it out.
+
+#### The four layers
+
+Each has its own budget curve `[Simple, Balanced, Detailed]`, so detail added to
+one never costs another — a face is never crowded out by a long coat contour.
+
+| Layer | Contents | Artist budget |
+| --- | --- | --- |
+| `structure` | silhouette, head outline, jaw, ears, neck, shoulders, major clothing/object contours | `3.6 → 4.6 → 5.4` |
+| `face` | eyes, brows, nose, nostrils, lips, other priority accents | `1.4 → 2.2 → 3.0` |
+| `secondary` | eyelids, iris, hair/beard masses, major folds, important shadow boundaries | `0 → 4.0 → 6.5` |
+| `fine` | hair/beard strands, wrinkles, secondary folds | `0 → 0.5 → 5.0` |
+
+Budgets are total drawn line length in multiples of the image diagonal.
+Structure **and face** are both funded at Simple: a construction sketch without
+eyes, brows, nose and lips is not usable as a tracing guide. What Simple
+withholds is `secondary` and `fine` — exactly the material that reads as noise
+when it arrives before the drawing underneath it is established.
+
+#### The pipeline
 
 1. **Noise reduction** — a domain-transform recursive filter (Gastal &
    Oliveira). Unlike a Gaussian it flattens texture (fabric weave, pores,
@@ -307,65 +347,69 @@ renderSketchToCanvas(drawing, canvas)                            (canvas)
 2. **Large shape detection** — a much coarser pass of the same filter. Anything
    still showing an edge here is a mass boundary rather than surface incident;
    this becomes the *persistence* term.
-3. **Contour extraction** — structure-tensor gradient (value **and** colour, so
-   a blue shirt against green foliage at the same value still gets a line),
-   non-maximum suppression, hysteresis, tracing into polylines, then
-   **fragment linking**: collinear endpoints are rejoined, but only across
-   ground where the image still shows edge evidence, so a jawline broken by a
-   highlight is repaired while a head outline is never welded to a background
-   twig. Thresholds are deliberately generous — the engine **extracts liberally
-   and selects strictly**, because no global threshold can separate a weak-but-
-   important shoulder line from a strong-but-worthless fabric edge.
+3. **Contour extraction** — structure-tensor gradient over value **and** colour
+   (a blue shirt against green foliage at the same value still gets a line;
+   each field is normalised against its own reference first, or the smooth
+   chroma channel would measure an order of magnitude weaker), non-maximum
+   suppression, hysteresis, tracing into polylines, then **fragment linking**:
+   collinear endpoints are rejoined, but only across ground where the image
+   still shows edge evidence, so a jawline broken by a highlight is repaired
+   while a head outline is never welded to a background twig. Thresholds are
+   deliberately generous — the engine **extracts liberally and selects
+   strictly**, because no global threshold can separate a weak-but-important
+   shoulder line from a strong-but-worthless fabric edge.
+   A **second, finer extraction** supplies the `fine` layer and runs at every
+   detail level, so Detailed can add strands to the drawing Simple showed.
 4. **Feature prioritisation** — each contour is scored on contrast,
    persistence, length, subject-ness and facial-accent membership, minus
-   background suppression. Contours are then taken best-first against an **ink
-   budget** (total line length, in multiples of the image diagonal) rather than
-   a score threshold, so the Detail slider controls *how much drawing* there is
-   independently of how contrasty the photo happens to be. Part of the budget
-   is reserved for short high-priority accent marks — spending it purely
-   best-first is length-greedy and exhausts it before a single eye is reached.
-5. **Variable line weight** — three weights assigned by quantiles of a
-   *structural* score, so every image gets a real hierarchy: heavy for
-   silhouette/major boundaries, medium for features and clothing edges, light
-   for wrinkles and fine detail. Strokes taper at the ends and vary in width
-   with local contrast ("pencil pressure").
+   background suppression; then assigned to a layer and ranked within it.
+5. **Variable line weight** — heavy for silhouette, medium for features and
+   clothing edges, light for wrinkles and fine detail. The heavy/medium cut is
+   a quantile taken *within* a layer, not across the pool: against the pool it
+   is degenerate, because `structure` is by definition the most structural
+   slice of it, and the silhouette comes out at one uniform weight. Strokes
+   taper at the ends and vary in width with local contrast ("pencil pressure").
 6. **Optional pencil shading** — banded tone taken from the large-shape image,
    gated to the darks, with a diagonal hatch. Off by default so the default
    output is pure line work for tracing.
 
-**Background suppression** rests on three maps in `analysis.ts`:
+#### Suppression and priority
 
 - **clutter** — fine detail with no large-scale structure behind it (weave,
   pores, grass, foliage, gravel, wall stipple). Relaxed by persistence, so a
-  compositionally important background element (a horizon, a doorway, a tree
-  trunk) survives while the foliage around it does not.
+  compositionally important background element survives while the foliage
+  around it does not. Above `priority.texture` thresholds a contour is removed
+  from the pool **entirely** rather than merely out-ranked — a hard rule, so
+  that raising Detail can add information without ever opening the door to
+  fabric weave, pores or JPEG mush.
 - **subject** — large-scale structure density + a mild centre prior + the
-  inverse of clutter.
+  inverse of clutter. Off the subject, only a strongly structural line survives
+  (`compositionQuantile`), and it survives as `structure`: that is how a
+  horizon or a doorway stays while the trees beside it go. Everything else with
+  low subject-ness is dropped, so the background almost disappears.
 - **feature** — compact dark accents (eyes, pupils, nostrils, the lip gap). A
-  component must be small *and* blobby: a strand or wrinkle is also small, and
-  the mask is eroded by a pixel first so a lash line can't bridge the iris to
-  the eyebrow into one long component. These marks are exempted from most
-  suppression and from the length gate.
+  component must be small *and* blobby, and the mask is eroded by a pixel first
+  so a lash line can't bridge the iris to the eyebrow into one long component.
+- **priority** — where attention belongs first: a YCbCr skin-tone mask (which
+  covers faces *and* hands without recognising either) OR'd with accent
+  *clustering* (a dense knot of compact dark marks is a face almost regardless
+  of lighting), damped by subject-ness. Only ever boosts a contour's ranking,
+  never gates it, so a false positive costs a slightly differently-ranked
+  drawing and nothing more.
 
-**The Detail slider** interpolates between three tuned anchor parameter sets —
-Simple (silhouette and large contours), Balanced (contours, facial features,
-major folds), Detailed (adds hair, folds, secondary detail). Detailed's extra
-information comes from a *separate* fine extraction pass gated on subject-ness
-and contour length, not from a lowered threshold: a hair strand and a fabric
-weave look identical to a threshold, but the strand is a long coherent chain
-and the weave is a field of 3-pixel fragments.
+**Adding a style.** Styles are data. `SKETCH_STYLES` maps an id to one
+detail-independent `SketchParams` plus four budget curves; `pipeline.ts` and
+`render.ts` never branch on the id. `artist` is the full definition and the only
+one the UI exposes; `outline`, `pencil`, `construction` and `ink` exist as short
+derivations (`variant()` patches only what differs) and are ready for a future
+style picker.
 
-**Adding a style.** Styles are data. `SKETCH_STYLES` maps an id to three anchor
-`SketchParams`; `pipeline.ts` and `render.ts` never branch on the id. `artist`
-is the full definition and the only one the UI exposes; `outline`, `pencil`,
-`construction` and `ink` exist as short derivations (`variant()` patches only
-what differs) and are ready for a future style picker.
-
-**Known limitation.** A boundary that is both low-contrast and buried in
-texture (a mid-value shirt against a similar-value background with heavy
-weave) can still be fragmented below the length gate and dropped. Widening the
-link gap recovers it but starts inventing background structure, which costs
-more than the missing edge does.
+**Known limitations.** A boundary that is both low-contrast and buried in
+texture (a mid-value shirt against a similar-value background with heavy weave)
+can still be fragmented below the length gate and dropped; widening the link gap
+recovers it but starts inventing background structure, which costs more. And
+`priority` has no notion of a hand as such — hands are covered only insofar as
+they are skin-toned and on the subject.
 
 ### Grid & Measure geometry
 - **Grid** math (`GridTab`) computes a fit scale so the image fills the chosen
@@ -663,3 +707,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-07-20 | Added the **Compare Art** workspace (5th tool, Hebrew השוואת ציור): isolated `src/features/compare-art/` feature (own `CompareProvider` + `compare-art-session` localStorage key, undo/redo, autosave). Artwork/reference upload, one canonical resolution-independent scene renderer shared by screen + still + GIF, reference move/scale/rotate/flip/opacity with gesture + precision nudges + fit/fill/match/reset + optional 2-point align, layer lock, non-destructive crop, grid overlay, Overlay/Blink/Split/Difference modes + grayscale, OKLab value/color difference with sensitivity + legend, still/difference/GIF export (opacity-pulse/blink/compare-diff) with progress + cancel. Added `gifenc` dependency; code-split the workspace via `React.lazy`. Additive nav wiring only; existing tools unchanged. Added unit tests (`compareArt.test.ts`, `compareArtState.test.tsx`) and an e2e workflow test (`e2e/compare-art.spec.ts`). | src/types/project.ts, src/components/layout/Header.tsx, src/pages/Index.tsx, src/features/compare-art/* (new), e2e/compare-art.spec.ts (new), package.json, package-lock.json, README.md, PROJECT.md |
 | 2026-06-17 | Made Measure layers dynamic/user-extensible: a new project now starts with one "General Lines" layer instead of 6 fixed anatomical layers; added `addLayer`/`deleteLayer` store actions (palette-cycling colors, delete reassigns orphaned lines to the general/first layer, last layer protected); add/delete UI in the desktop panel (inline name input) and mobile layers sheet. Existing saved projects load untouched (no migration). Added a mobile "New line color" picker in the Selected/Lines sheet reusing the desktop `lineColor`/`setLineColor` state; extracted the shared `LINE_COLORS`/`LAYER_COLORS` palettes into `types/project.ts`. No changes to calibration, undo/redo, autosave, export, eyedropper, pan/zoom, or other tools. | src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/measure/MeasurePanel.tsx, src/components/measure/MeasureToolbar.tsx, src/components/measure/MeasureMobile.tsx, PROJECT.md |
 | 2026-07-25 | **Rebuilt Sketch mode as a painter-first drawing engine** (`src/lib/sketch/`), replacing the inline Sobel + adaptive-threshold edge filter in `ValueTab`. New semantic pipeline: edge-preserving noise reduction (domain transform) → large-shape detection → colour-aware contour extraction (structure tensor) with fragment linking → feature prioritisation against an *ink budget* (not a threshold) → three-level variable line weight → optional pencil shading. Background suppression via clutter / subject / compact-accent maps; "Detailed" adds a separate subject-gated fine pass rather than a lower threshold. The Detail slider now interpolates three tuned anchor param sets (Simple / Balanced / Detailed) instead of moving one threshold. Styles are data (`SKETCH_STYLES`) so new ones need no pipeline changes; UI still exposes only "Artist sketch". UI changes kept minimal: a per-level hint under the slider and an off-by-default "Pencil shading" toggle (`valueSettings.sketchShading`). Sketch output now renders/exports PNG (JPEG ringing was visible noise on line art) and processing is debounced ~60ms so slider drags coalesce. Tests: `src/lib/sketch/pipeline.test.ts`. | src/lib/sketch/* (new), src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
+| 2026-07-25 | **Sketch Detail slider made cumulative.** Split the engine into `buildSketchAnalysis()` (detail-INdependent: denoise, thresholds, contour geometry, stroke widths, weight classes, ranking — all fixed) and `composeSketch()` (pure per-layer budget selection). Simple ⊂ Balanced ⊂ Detailed is now guaranteed by construction, and a stroke is geometrically identical wherever it appears — the slider adds to the drawing instead of regenerating it. Introduced four drawing layers (`structure` / `face` / `secondary` / `fine`) with independent non-decreasing budget curves, so Simple is a usable construction sketch *including* eyes/brows/nose/nostrils/lips, and hair strands + wrinkles are held back for Detailed. Added a face/hands `priority` map (YCbCr skin mask OR'd with accent clustering) to implement the Face → subject → objects priority order; categorical texture rejection (weave/pores/JPEG mush leave the pool entirely); and background contours dropped unless strongly structural, so trees/grass/walls almost disappear at every level. Weight cuts now taken within a layer (across the pool they were degenerate — every silhouette line came out heavy). Style anchors collapsed from 3 param sets to 1 + budget curves. `ValueTab` caches the analysis on `[image, contrast, brightness, size]` so slider drags only re-select. Tests: 12 in `pipeline.test.ts`, including the subset property and budget-curve monotonicity. | src/lib/sketch/{types,styles,pipeline,analysis,index,pipeline.test}.ts, src/components/value/ValueTab.tsx, PROJECT.md |
