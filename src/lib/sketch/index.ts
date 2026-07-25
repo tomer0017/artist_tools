@@ -1,45 +1,24 @@
 /**
- * Sketch engine — public API.
+ * Deterministic black & white vector trace.
  *
- * The analysis is split from the selection so that dragging the Detail slider
- * costs nothing and, more importantly, so that Detail can only ever *add* to
- * the drawing:
+ *   const source = buildTraceSource(imageData);   // once per image
+ *   const result = traceImage(source, settings);  // per control change
+ *   renderTraceToCanvas(result, canvas);
+ *   traceToSvg(result);                           // the same paths, scalable
  *
- *   const analysis = buildSketchAnalysis(imageData);      // once per image
- *   const drawing  = composeSketch(analysis, { detail }); // per slider tick
- *   renderSketchToCanvas(drawing, canvas);
- *
- * `analyzeSketch()` does both in one call for callers that don't need the
- * cache. Everything except `renderSketchToCanvas` is pure and DOM-free.
- *
- * See `styles.ts` for how to add a new sketch style (Outline / Pencil /
- * Construction / Ink already exist as data; the UI currently exposes only
- * "Artist sketch").
+ * The filter makes no editorial decisions: how much black, how much
+ * simplification and how much detail survives are set by the operator. See
+ * `trace.ts` for what each control does.
  */
 
-export { analyzeSketch, buildSketchAnalysis, composeSketch, resolveBudget } from './pipeline';
-export { renderSketchToCanvas, type RenderOptions } from './render';
-export { sketchToSvg } from './vector';
 export {
-  SKETCH_STYLES,
-  DEFAULT_SKETCH_STYLE,
-  styleParams,
-  type SketchStyleDefinition,
-} from './styles';
-export { LAYER_ORDER, WEIGHT_ORDER } from './types';
-export type {
-  BudgetCurve,
-  LayerMap,
-  LineWeight,
-  SketchAnalysis,
-  SketchDrawing,
-  SketchLayer,
-  SketchOptions,
-  SketchParams,
-  SketchRenderMode,
-  SketchShapes,
-  SketchShading,
-  SketchSource,
-  SketchStroke,
-  SketchStyleId,
-} from './types';
+  buildTraceSource,
+  traceImage,
+  DEFAULT_TRACE,
+  TRACE_PRESETS,
+  type TraceSettings,
+  type TraceSource,
+  type TraceResult,
+} from './trace';
+export { renderTraceToCanvas, type RenderOptions } from './render';
+export { traceToSvg, loopPath, simplify, type PathSink } from './vector';

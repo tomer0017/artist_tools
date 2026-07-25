@@ -10,9 +10,10 @@ import {
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { dataUrlToBlob } from '@/lib/saveMedia';
 import {
-  buildSketchAnalysis, composeSketch, renderSketchToCanvas, sketchToSvg,
-  type SketchAnalysis, type SketchDrawing,
+  buildTraceSource, traceImage, renderTraceToCanvas, traceToSvg,
+  TRACE_PRESETS, type TraceSource, type TraceResult,
 } from '@/lib/sketch';
+import { DEFAULT_SKETCH_TRACE, type SketchTraceSettings } from '@/types/project';
 
 type Mode = 'grayscale' | 'color' | 'painter' | 'sketch';
 type Focus = 'none' | 'shadow' | 'highlight' | 'squint';
@@ -176,16 +177,14 @@ export default function ValueTab() {
   const [compareMode, setCompareMode] = useState<'slider' | 'side'>('slider');
   const [fullscreen, setFullscreen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // The sketch analysis depends only on the pixels fed to it, never on the
-  // Detail slider — so it is cached across slider drags and only the (free)
-  // stroke selection re-runs. Keyed on everything that changes those pixels.
-  const sketchCache = useRef<{
+  // Grayscale conversion depends only on the pixels, so it is cached across
+  // control changes; the trace itself re-runs on every one of them.
+  const traceCache = useRef<{
     image: string; contrast: number; brightness: number; w: number; h: number;
-    analysis: SketchAnalysis;
+    source: TraceSource;
   } | null>(null);
-  // Kept so "Save SVG" exports exactly the drawing on screen rather than
-  // re-deriving it.
-  const sketchDrawing = useRef<SketchDrawing | null>(null);
+  // Kept so "Save SVG" exports exactly the paths on screen.
+  const traceResult = useRef<TraceResult | null>(null);
   const isMobile = useIsMobile();
 
   const activeImage = localImage || image;
@@ -196,8 +195,9 @@ export default function ValueTab() {
   const focus: Focus = (valueSettings.focus as Focus) || 'none';
   const contrast = valueSettings.contrast;
   const brightness = valueSettings.brightness;
-  const sketchDetail = valueSettings.sketchDetail ?? 50;
-  const sketchShading = valueSettings.sketchShading ?? false;
+  const trace: SketchTraceSettings = { ...DEFAULT_SKETCH_TRACE, ...valueSettings.sketchTrace };
+  const setTrace = (patch: Partial<SketchTraceSettings>) =>
+    setValueSettings({ sketchTrace: { ...trace, ...patch } });
 
   const updateMode = (m: Mode) => setValueSettings({ mode: m, grayscale: m === 'grayscale' });
   const updateLevels = (l: number) => setValueSettings({ levels: l, posterize: l });
@@ -406,34 +406,25 @@ export default function ValueTab() {
       };
 
       if (mode === 'sketch') {
-        // === Sketch mode: a real drawing, not an edge filter ===
-        // The engine in src/lib/sketch runs a semantic pipeline — noise
-        // reduction → large-shape detection → contour extraction → feature
-        // prioritisation → variable line weight → optional pencil shading —
-        // and returns strokes, which are then drawn. Every line is still
-        // derived from this image's own gradients, so composition, proportion
-        // and placement are preserved exactly; nothing is invented.
+        // === Sketch mode: a deterministic black & white vector trace ===
+        // src/lib/sketch/trace.ts is a filter, not an interpretation: the same
+        // pixels and the same settings always produce the same paths. It makes
+        // no judgement about faces, subjects or importance — how much black,
+        // how much simplification and how much detail survives are the
+        // operator's calls, on the controls below the image.
         //
-        // Rendered as PNG: JPEG ringing around black lines on white paper is
+        // Rendered as PNG: JPEG ringing along a hard black/white boundary is
         // very visible and would read as noise the artist has to filter out.
-        //
-        // The analysis is detail-independent, so moving the slider re-selects
-        // strokes from the cached analysis instead of re-reading the photo —
-        // which is both instant and the reason a higher detail level shows the
-        // same drawing with more in it rather than a different one.
-        const cached = sketchCache.current;
-        const analysis =
+        const cached = traceCache.current;
+        const source =
           cached && cached.image === activeImage && cached.contrast === contrast &&
           cached.brightness === brightness && cached.w === w && cached.h === h
-            ? cached.analysis
-            : buildSketchAnalysis({ data, width: w, height: h });
-        sketchCache.current = { image: activeImage, contrast, brightness, w, h, analysis };
-        const drawing = composeSketch(analysis, {
-          detail: sketchDetail / 100,
-          shading: sketchShading,
-        });
-        sketchDrawing.current = drawing;
-        renderSketchToCanvas(drawing, canvas);
+            ? cached.source
+            : buildTraceSource({ data, width: w, height: h });
+        traceCache.current = { image: activeImage, contrast, brightness, w, h, source };
+        const result = traceImage(source, trace);
+        traceResult.current = result;
+        renderTraceToCanvas(result, canvas);
         setProcessedUrl(canvas.toDataURL('image/png'));
         // Fall through below to build the value/dominant palettes (still useful
         // reference while drawing), then skip the palette-quantization loop.
@@ -537,7 +528,10 @@ export default function ValueTab() {
       }
     };
     img.src = activeImage;
-  }, [activeImage, mode, levels, focus, contrast, brightness, sketchDetail, sketchShading, isolatedIdx]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeImage, mode, levels, focus, contrast, brightness, isolatedIdx,
+    trace.threshold, trace.adaptive, trace.smoothing, trace.noise, trace.simplify,
+    trace.corners, trace.invert]);
 
   // Coalesce the burst of events a slider drag produces into one pass. The
   // delay is short enough to still feel like the image updates as you drag,
@@ -568,13 +562,14 @@ export default function ValueTab() {
     else saveDataUrl(processedUrl, 'value-study.jpg', 'image/jpeg');
   };
 
-  // The trace is polygons all the way down, so the SVG is the same drawing
-  // rather than a trace of the bitmap — scalable for large-format printing.
+  // The trace is polygons all the way down, so the SVG is the same paths as the
+  // screen rather than a re-trace of the bitmap — scalable for large-format
+  // printing.
   const exportSketchSvg = () => {
-    const drawing = sketchDrawing.current;
-    if (!drawing) return;
+    const result = traceResult.current;
+    if (!result) return;
     try {
-      const blob = new Blob([sketchToSvg(drawing)], { type: 'image/svg+xml' });
+      const blob = new Blob([traceToSvg(result)], { type: 'image/svg+xml' });
       save({ blob, filename: 'sketch.svg', mime: 'image/svg+xml', title: 'Save SVG' });
     } catch (error) {
       console.error('[ValueTab] Failed to export sketch SVG:', error);
@@ -783,15 +778,24 @@ export default function ValueTab() {
     </div>
   );
 
-  // The slider moves through three named stages of a drawing, not through edge
-  // sensitivity. It is cumulative: each stage keeps every line of the one
-  // before it and adds a new *kind* of information, so the hints say "adds".
-  const sketchDetailLabel =
-    sketchDetail < 34 ? 'Simple' : sketchDetail > 66 ? 'Detailed' : 'Balanced';
-  const sketchDetailHint =
-    sketchDetail < 34 ? 'Largest shapes only — silhouette, hair, eyes, nose, lips'
-      : sketchDetail > 66 ? 'Adds smaller shadow shapes and hair/beard groups'
-        : 'Adds secondary features, shadow regions and folds';
+  // One reusable numeric control, so every trace parameter is presented (and
+  // read back) the same way. The value is always shown: these are settings the
+  // operator is expected to dial in and reproduce, not vague amounts.
+  const TraceSlider = ({ label, value, min, max, step = 1, suffix = '', hint, onChange }: {
+    label: string; value: number; min: number; max: number; step?: number;
+    suffix?: string; hint?: string; onChange: (v: number) => void;
+  }) => (
+    <div>
+      <label className="text-[11px] text-muted-foreground font-medium flex items-center justify-between mb-1">
+        <span>{label}</span>
+        <span className="tabular-nums text-foreground">{value}{suffix}</span>
+      </label>
+      <input type="range" min={min} max={max} step={step} value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-primary" aria-label={label} />
+      {hint && <p className="text-[9px] text-muted-foreground mt-0.5">{hint}</p>}
+    </div>
+  );
 
   // Inline controls that live *permanently below the image* — the sliders a
   // painter reaches for constantly while studying, so they never require
@@ -801,19 +805,20 @@ export default function ValueTab() {
   const InlineImageControls = (
     <div data-onboarding="value-inline" className="w-full px-3 py-2.5 border-t border-border toolbar-surface shrink-0">
       {mode === 'sketch' ? (
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-[11px] text-muted-foreground font-medium">Sketch detail</label>
-            <span className="text-[10px] font-semibold text-foreground">{sketchDetailLabel}</span>
+        // Threshold is the control that decides how much black, so it lives
+        // permanently under the image like Photoshop's; the rest of the trace
+        // settings are in the panel.
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-6">
+          <div className="flex-1 min-w-0">
+            <TraceSlider label="Threshold" value={trace.threshold} min={0} max={255}
+              onChange={(v) => setTrace({ threshold: v })}
+              hint={trace.adaptive > 0 ? 'Relative to the local highlight' : 'Absolute level, whole frame'} />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] text-muted-foreground shrink-0 w-10 text-right">Simple</span>
-            <input type="range" min={0} max={100} value={sketchDetail}
-              onChange={(e) => setValueSettings({ sketchDetail: Number(e.target.value) })}
-              className="flex-1 accent-primary" aria-label="Sketch detail" />
-            <span className="text-[9px] text-muted-foreground shrink-0 w-10">Detailed</span>
+          <div className="flex-1 min-w-0">
+            <TraceSlider label="Noise" value={trace.noise} min={0} max={200} suffix=" px"
+              onChange={(v) => setTrace({ noise: v })}
+              hint="Smallest shape or hole that may exist" />
           </div>
-          <p className="text-[9px] text-muted-foreground mt-1">{sketchDetailHint}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-6">
@@ -855,30 +860,57 @@ export default function ValueTab() {
         </p>
         {isColorFamily && PainterToggle}
         {isSketch && (
-          <>
-            <p className="text-[10px] text-muted-foreground mb-1.5">
-              Tune the drawing with <span className="font-medium text-foreground">Sketch detail</span> below the image.
-            </p>
-            {/* Pencil tone belongs to the line-work styles; the trace is pure
-                black and white by definition. Kept for when a pencil style is
-                exposed again. */}
-            <button onClick={() => setValueSettings({ sketchShading: !sketchShading })}
-              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-medium transition-colors ${
-                sketchShading ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-              }`}>
-              <PencilLine className="w-3.5 h-3.5" />
-              Pencil shading {sketchShading ? 'on' : 'off'}
-            </button>
-            <p className="text-[9px] text-muted-foreground mt-1">
-              Adds a light tone in the darkest masses. Off gives pure line work for tracing.
-            </p>
-          </>
+          <p className="text-[10px] text-muted-foreground">
+            A deterministic black &amp; white vector trace. Threshold and Noise are
+            below the image; the rest are here.
+          </p>
         )}
       </div>
-      <div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Value groups</p>
-        {LevelButtons}
-      </div>
+      {isSketch ? (
+        <>
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Presets</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {TRACE_PRESETS.map((preset) => (
+                <button key={preset.id} onClick={() => setTrace(preset.settings)}
+                  className="py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px] text-muted-foreground mt-1">
+              A starting point only — every control stays yours afterwards.
+            </p>
+          </div>
+          <div className="space-y-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Trace</p>
+            <TraceSlider label="Local threshold radius" value={trace.adaptive} min={0} max={50} suffix={trace.adaptive === 0 ? ' · off' : '%'}
+              onChange={(v) => setTrace({ adaptive: v })}
+              hint="0 = one level for the whole frame. Raise it when the lighting is uneven." />
+            <TraceSlider label="Smoothing" value={trace.smoothing} min={0} max={100}
+              onChange={(v) => setTrace({ smoothing: v })}
+              hint="How much fine texture reaches the threshold." />
+            <TraceSlider label="Simplify" value={trace.simplify} min={0} max={100}
+              onChange={(v) => setTrace({ simplify: v })}
+              hint="How tightly the paths follow the pixels." />
+            <TraceSlider label="Corners" value={trace.corners} min={0} max={100}
+              onChange={(v) => setTrace({ corners: v })}
+              hint="Sharp polygon corners → fully rounded curves." />
+            <button onClick={() => setTrace({ invert: !trace.invert })}
+              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-medium transition-colors ${
+                trace.invert ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+              }`}>
+              <Contrast className="w-3.5 h-3.5" />
+              Invert {trace.invert ? 'on' : 'off'}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Value groups</p>
+          {LevelButtons}
+        </div>
+      )}
       {!isSketch && (
         <div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Focus</p>

@@ -35,15 +35,42 @@ export interface ValueSettings {
   mode?: 'grayscale' | 'color' | 'painter' | 'sketch';
   levels?: number;
   focus?: 'none' | 'shadow' | 'highlight' | 'squint';
-  // Sketch mode only: 0 = simple (silhouette + large contours) → 100 = detailed
-  // (hair, folds, secondary detail). A painter-facing control: it moves the
-  // sketch engine between three tuned drawing stages rather than changing an
-  // edge threshold. Default 50 = balanced construction drawing.
+  // Sketch mode only. The vector-trace controls, owned entirely by the user —
+  // the engine makes no editorial decisions about what to keep. See
+  // src/lib/sketch/trace.ts for what each one does.
+  sketchTrace?: SketchTraceSettings;
+  // Legacy Sketch fields, kept so older saved projects still load. The trace
+  // ignores them.
   sketchDetail?: number;
-  // Sketch mode only: subtle pencil tone in the darkest masses. Off by default
-  // so the default output is pure line work that can be traced/transferred.
   sketchShading?: boolean;
 }
+
+export interface SketchTraceSettings {
+  /** 0–255. How much black. */
+  threshold: number;
+  /** 0 = one global level; 1–50 = local reference radius, % of the diagonal. */
+  adaptive: number;
+  /** 0–100. Pre-blur; how much fine texture reaches the threshold. */
+  smoothing: number;
+  /** Minimum feature area in processing pixels — the noise floor. */
+  noise: number;
+  /** 0–100. How tightly the paths follow the pixels. */
+  simplify: number;
+  /** 0–100. Sharp polygon corners → fully rounded curves. */
+  corners: number;
+  /** Trace the lights instead of the darks. */
+  invert: boolean;
+}
+
+export const DEFAULT_SKETCH_TRACE: SketchTraceSettings = {
+  threshold: 128,
+  adaptive: 8,
+  smoothing: 35,
+  noise: 12,
+  simplify: 40,
+  corners: 60,
+  invert: false,
+};
 
 export interface SampledColor {
   id: string;
@@ -127,8 +154,7 @@ export const DEFAULT_VALUE_SETTINGS: ValueSettings = {
   // users can still drop to 3/5/7 for composition/block-in or push to 11/13.
   levels: 9,
   focus: 'none',
-  sketchDetail: 50,
-  sketchShading: false,
+  sketchTrace: DEFAULT_SKETCH_TRACE,
 };
 
 export const genId = () => Math.random().toString(36).slice(2, 10);

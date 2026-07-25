@@ -1,11 +1,11 @@
 /**
  * Sketch engine — binary regions.
  *
- * The vector-trace styles think in *areas*, not edges: the question is not
- * "where are the contours?" but "which parts of this photograph should become
- * black?". Everything here operates on binary masks — morphology to clean them
- * up, connected components to judge them, and boundary tracing to turn them
- * into polygons that a fill (or an SVG path) can draw.
+ * The trace thinks in *areas*, not edges: the question is not "where are the
+ * contours?" but "which pixels are black?". Everything here operates on binary
+ * masks — morphology to clean them up, connected components to size them, and
+ * boundary tracing to turn them into polygons that a fill (or an SVG path) can
+ * draw.
  */
 
 /* ---------------------------------------------------------- grayscale max -- */
@@ -13,11 +13,11 @@
 /**
  * Sliding-window maximum, separable, O(n) via a monotonic deque.
  *
- * Used to estimate the "lit surface" behind the subject. A plain blur is no
- * good for that: a large dark mass drags the average down with it, the mass
- * measures as no darker than its own surroundings, and the hair comes out
- * hollow — the classic adaptive-threshold failure on portraits. A local
- * maximum is not pulled down by the very region it is meant to measure.
+ * Used by the local threshold to estimate the lit surface. A mean is no good
+ * for that: a large dark area drags the average down with it, measures as no
+ * darker than its own interior, and comes out hollow — the classic
+ * adaptive-threshold failure. A maximum is not pulled down by the very region
+ * it is meant to measure.
  */
 export function maxFilter(src: Float32Array, w: number, h: number, radius: number): Float32Array {
   const r = Math.max(1, Math.round(radius));
@@ -132,14 +132,6 @@ export interface Component {
   minY: number;
   maxX: number;
   maxY: number;
-  /**
-   * Peak, never mean. As the mask grows a component absorbs its neighbours, and
-   * a mean would be diluted by the merge — a face shape kept at Simple could
-   * then fail the same test at Detailed and blink out. A peak can only rise, so
-   * anything kept once stays kept, which is what makes the slider cumulative.
-   */
-  maxPriority: number;
-  maxSubject: number;
 }
 
 export interface LabelledMask {
@@ -147,14 +139,8 @@ export interface LabelledMask {
   components: Component[];
 }
 
-/** 8-connected labelling with per-component statistics. */
-export function labelComponents(
-  mask: Uint8Array,
-  w: number,
-  h: number,
-  priority: Float32Array,
-  subject: Float32Array,
-): LabelledMask {
+/** 8-connected labelling with per-component area and bounds. */
+export function labelComponents(mask: Uint8Array, w: number, h: number): LabelledMask {
   const n = w * h;
   const labels = new Int32Array(n).fill(-1);
   const components: Component[] = [];
@@ -170,8 +156,6 @@ export function labelComponents(
       minY: h,
       maxX: -1,
       maxY: -1,
-      maxPriority: 0,
-      maxSubject: 0,
     };
     let top = 0;
     stack[top++] = seed;
@@ -185,8 +169,6 @@ export function labelComponents(
       if (x > comp.maxX) comp.maxX = x;
       if (y < comp.minY) comp.minY = y;
       if (y > comp.maxY) comp.maxY = y;
-      if (priority[p] > comp.maxPriority) comp.maxPriority = priority[p];
-      if (subject[p] > comp.maxSubject) comp.maxSubject = subject[p];
       for (let dy = -1; dy <= 1; dy++) {
         const ny = y + dy;
         if (ny < 0 || ny >= h) continue;
@@ -209,9 +191,8 @@ export function labelComponents(
 /**
  * Fill enclosed white pockets smaller than `minArea`.
  *
- * A vector illustration wants solid masses, not masses full of pinholes from
- * catchlights and compression. Pockets that touch the frame are background and
- * are left alone.
+ * A trace wants solid masses, not masses full of pinholes from catchlights and
+ * compression. Pockets that touch the frame are background and are left alone.
  */
 export function fillSmallHoles(
   mask: Uint8Array,
