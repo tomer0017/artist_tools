@@ -46,7 +46,13 @@ refresh restores the last session. The app is deployed to GitHub Pages under
     │   ├── Index.tsx           The whole app: ProjectProvider + tab Workspace
     │   └── NotFound.tsx        404 catch-all route
     ├── components/
-    │   ├── layout/Header.tsx   Top bar + tab switcher
+    │   ├── shell/              App shell: Home hub, navigation, shared tool chrome
+    │   │   ├── tools.ts        Tool registry (titles, descriptions, icons, URL slugs)
+    │   │   ├── HomeScreen.tsx  Home / Tool Hub (five illustrated tool cards)
+    │   │   ├── AppNav.tsx      BottomNav (phones) + TopNav (tablet/desktop) + BrandMark
+    │   │   ├── ToolHeader.tsx  ToolHeader, ToolHelpButton, HeaderIconButton, StepIndicator
+    │   │   ├── ToolEmptyState.tsx  First screen of an image tool (art + steps + upload)
+    │   │   └── ToolArt.tsx     SVG illustrations (portrait in photo/flat/values/sketch, hero eye)
     │   ├── NavLink.tsx         Thin react-router NavLink wrapper (currently unused by pages)
     │   ├── common/ImageUploader.tsx   File picker / drag-drop → data URL
     │   ├── measure/            Measure tool (canvas, toolbar, panel, mobile, tab)
@@ -69,19 +75,33 @@ exists only to serve that page and a 404 fallback from GitHub Pages.
 
 ## Pages
 
-### Workspace — route `/` (`src/pages/Index.tsx`)
-- **Purpose:** The entire application. Hosts the four tools behind a single
-  tab bar.
+### Workspace — route `/:view?` (`src/pages/Index.tsx`)
+- **Purpose:** The entire application: the Home / Tool Hub and the five tools.
+  One route serves every view (`#/`, `#/measure`, `#/study`, `#/color`,
+  `#/grid`, `#/compare`), so switching tools never remounts the workspace and
+  the browser / iOS back gesture moves between tools. Unknown segments
+  redirect to Home.
 - **Features & functionality:**
-  - Renders `<Header />` (title + tab switcher) above a `<main>` that shows
-    exactly one tool based on `activeTab` (`measure` | `value` | `color` |
-    `grid`).
+  - `useViewRouting` keeps the URL and the store's `activeTab` (`ViewId` =
+    `'home' | TabId`, default `'home'`) in sync both ways — nav links change
+    the URL; tools can still hand off with `setActiveTab` (Measure → Color).
+  - Phones (<768px) get a labelled six-item `BottomNav` (hidden while a text
+    field is focused, so it never sits on the keyboard); wider screens get
+    `TopNav`. Safe-area insets are applied top and bottom.
+  - `KeepAlive` mounts Study, Color and Compare on first visit and keeps them
+    alive while hidden, so in-memory work survives tool switches (a Study-only
+    image, Compare's full-res images + undo, the colour being explored).
+    Measure and Grid mount only while visible (fully persisted; Measure listens
+    for keys on `window`).
+  - The `<main>` children get `min-width: 0` — without it a tool's flex root
+    grows to its image's width and pushes controls off-screen on phones.
   - Maintains a CSS custom property `--app-height` tracking
     `visualViewport.height`, so iOS Safari/Chrome toolbars and the on-screen
     keyboard don't cause `100vh` layout jumps. The root element uses
     `height: var(--app-height, 100vh)`.
-- **Key components used:** `Header`, `MeasureTab`, `ValueTab`, `ColorTab`,
-  `GridTab`, all wrapped in `ProjectProvider`.
+- **Key components used:** `HomeScreen`, `TopNav`/`BottomNav`, `MeasureTab`,
+  `ValueTab`, `ColorTab`, `GridTab`, `CompareArt` (lazy), all wrapped in
+  `ProjectProvider` + `OnboardingProvider`.
 - **State & data:** Reads `activeTab` from the project store. All tool state
   lives in the store or in each tool's local component state.
 
@@ -95,14 +115,28 @@ exists only to serve that page and a 404 fallback from GitHub Pages.
 ## Core Components
 
 ### Layout & shared
-- **Header** (`layout/Header.tsx`) — Sticky top bar showing the "Studio
-  Companion" title and the four tab buttons (Measure / Value / Color / Grid).
-  Reads/sets `activeTab` from the store.
+- **Tool registry** (`shell/tools.ts`) — single source of every tool's
+  goal-first title ("Measure & Plan", "Study & Simplify", "Color & Mixing",
+  "Create a Grid", "Compare & Correct"), nav label, description, chips, icon
+  and URL slug. Home, both navs and every tool header read from it.
+- **HomeScreen** (`shell/HomeScreen.tsx`) — hero + "What do you want to work
+  on?" + five fully-clickable cards, each with an outcome illustration
+  (`ToolArt`). One column of wide cards on phone/tablet; 2 + 3 grid on desktop.
+- **ToolHeader** (`shell/ToolHeader.tsx`) — every tool's first row: icon,
+  title, one-line current task, tool actions, and `ToolHelpButton` (replays
+  the Measure/Compare intros or the generic tour). `StepIndicator` is the
+  numbered step row (Measure: Set scale → Measure; Compare: Images → Align →
+  Compare → Save) with an optional trailing action (e.g. "Change" scale); on
+  phones, rows with >2 steps show only the current step's label (others stay
+  in the accessibility tree via `sr-only`).
+- **ToolEmptyState** (`shell/ToolEmptyState.tsx`) — the no-image screen for
+  Measure / Study / Grid: illustration, 3 numbered steps, primary upload.
 - **NavLink** (`NavLink.tsx`) — `forwardRef` wrapper around react-router's
   `NavLink` adding `activeClassName`/`pendingClassName` compatibility props.
   Present but not used by the current single-page UI.
 - **ImageUploader** (`common/ImageUploader.tsx`) — Reusable uploader with a full
-  drop-zone variant and a `compact` icon-button variant. Validates the MIME
+  drop-zone variant, a `compact` icon-button variant and a `primary`
+  full-width call-to-action button variant (also accepts drops). Validates the MIME
   type, reads the file as a data URL via `FileReader`, and fires
   `onUploadStart` / `onImageLoad` / `onUploadError`. Contains iOS-specific
   workarounds (input must be appended to the DOM for `.click()` to open the
@@ -692,3 +726,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-07-25 | **Replaced Sketch mode's line engine with a black-and-white vector trace.** New region pipeline (`regions.ts`, `vector.ts`): edge-preserving smoothing → a *darkness* field measured against a local **maximum** (a local mean hollows out big masses) → coverage-targeted thresholding with an absolute contrast floor (coverage alone blacks in a fifth of a noise frame) → morphological open/close, which kills pores/weave/JPEG mush **by size** so no detail level can readmit them → connected components filtered on area, accent priority and subject-ness → marching-squares boundaries → RDP + quadratic smoothing → one `evenodd` fill. Detail now controls **shape complexity**: mostly via minimum shape size, with only a small coverage rise and a fixed guard band around established masses, because lowering a threshold inflates existing masses until the hair swallows the brows and the face collapses. Cumulativity is now asserted at the pixel level (the test rasterises the loops); every component test uses a peak rather than a mean so a merged mass still passes. Added `sketchToSvg()` + a "Save as SVG (vector)" button — the export is the same polygons as the screen, not a re-trace. New default style `vector` (plus `poster`); the stroke styles (`artist`/`pencil`/`construction`/`ink`) remain and reuse the identical scene analysis. | src/lib/sketch/{regions,vector}.ts (new), src/lib/sketch/{types,styles,pipeline,render,index,pipeline.test}.ts, src/components/value/ValueTab.tsx, PROJECT.md |
 | 2026-07-25 | **Replaced Sketch mode with a deterministic vector-trace filter** (`src/lib/sketch/trace.ts`) and deleted the contour/heuristic engine. The previous versions decided for the user what was worth drawing (subject/priority/feature maps, contour scoring, ink budgets); this one decides nothing. Professional control set instead: Threshold (Photoshop semantics), Local threshold radius (0 = global), Smoothing, Noise (min feature area, Illustrator semantics), Simplify (RDP), Corners (sharp ↔ rounded), Invert — plus presets that are just sets of those values. Pipeline: edge-preserving smoothing → global or local-max threshold → morphological open/close + connected-component noise floor → marching squares → RDP → one even-odd path. Grayscale cached per image; smoothing and local reference memoised per setting. SVG export emits the same polygons as the canvas. Removed `pipeline.ts`, `styles.ts`, `analysis.ts`, `types.ts`, `contours.ts` and the stroke renderer (~1600 lines); `sketchDetail`/`sketchShading` kept in `ValueSettings` only so old saved projects still load. Tests: `trace.test.ts` — determinism, order-independence, threshold monotonicity, extremes, noise, invert, uneven lighting, clamping. | src/lib/sketch/{trace,trace.test}.ts (new), src/lib/sketch/{imageOps,regions,vector,render,index}.ts, src/lib/sketch/{pipeline,styles,analysis,types,contours,pipeline.test}.ts (deleted), src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
 | 2026-07-25 | **Vector trace: painter-facing controls and a mobile-usable slider.** (1) Replaced every `input[type=range]` in Value/Sketch with `src/components/common/Slider.tsx` — pointer events + `setPointerCapture` (in a try/catch, so a capture failure can never abort a drag) + `touch-action: pan-y` + a 44px touch target + full ARIA and keyboard support. Verified on **WebKit/iPhone 13**: one continuous drag produced 14 distinct values, page scrollY stayed 0, and a second drag started immediately. (2) Renamed the controls for what the painter sees: Threshold→**Ink**, Noise→**Detail**, plus a new **Separation** (percentile levels stretch + S-curve before thresholding). Both primary mappings are non-linear and were tuned by visual sweep — Ink spans threshold ratio 0.30–0.62, Detail tops out at 0.05% of the frame (an iris is 0.12%). Advanced controls, Invert, Save-SVG and Reset live behind a **More controls** disclosure. (3) White holes are now cleaned independently of black shapes and protected by shape, so eye whites and brow/lid gaps survive maximum Detail. (4) Sketch mode drops the colour palette entirely (strip, tab and pane) and the preview takes the space; **Replace image** is a visible 44×44 button over the preview using the shared uploader, clearing all cached analysis. (5) Preview renders at 1× while a control is under the finger and 2× on release — same composition, no reframing. Regression captured across bearded/female/light-hair/low-contrast/high-contrast/animal/object scenes. | src/components/common/Slider.tsx (new), src/lib/sketch/{trace,trace.test,regions}.ts, src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
+| 2026-11-02 | **UX/IA redesign: Home hub, global navigation, shared tool chrome, step-based tools.** New `src/components/shell/` (tool registry, Home / Tool Hub with SVG outcome illustrations, labelled BottomNav/TopNav, ToolHeader + StepIndicator + ToolHelpButton, ToolEmptyState). Routing: one `/:view?` route with per-tool URLs synced to `activeTab` (now `ViewId`, default `'home'`); `Header.tsx` removed. KeepAlive for Study/Color/Compare. Tutorials no longer auto-open (`AUTO_START_TUTORIALS = false` in onboardingConfig; Help replays everything). **Measure:** step row with always-visible scale + "Change", instruction card and result card ("Draw this distance as X on your artwork") below the canvas instead of floating, explicit pan badge, Save image in header; **TapCoach is now a button that arms selection without placing a point** (mobile + desktop); cancelling a re-scale returns to measuring. **Study:** Color/Values/Sketch picture cards replace the floating switcher; Save is the primary action. **Color:** four sections (Color Wheel / Harmonies / Mixing / Skin Tones) each with a purpose line; selected colour carried across. **Grid:** 3×3 / 4×4 (recommended) / 8×8 presets, Fit/Fill/Center, primary "Save grid image", full settings under Customize. **Compare:** Images → Align → Compare → Save flow; Smart Align (recommended) / Manual; during Smart Align the canvas shows only the image being tapped and the instruction panel has a fixed height (a resizing panel shifted the image under the finger between taps); Artwork / 50-50 / Reference + opacity + grid + more views; Save step = one-tap comparison GIF + still/advanced export. No calculation, image-processing, export or storage-format changes. Tests: rewrote `e2e/onboarding.spec.ts` + `e2e/compare-art.spec.ts` for the new flows; new `e2e/navigation.spec.ts`; Playwright `iphone-webkit` project runs the mobile tests on WebKit. | src/components/shell/* (new), src/pages/Index.tsx, src/App.tsx, src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/layout/Header.tsx (deleted), src/components/common/ImageUploader.tsx, src/components/measure/{MeasureTab,MeasureMobile,MeasureCanvas}.tsx, src/components/measure/onboarding/{TapCoach.tsx,useMeasureIntro.ts}, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/grid/GridTab.tsx, src/features/compare-art/{CompareArt,CompareCanvas,CompareOverlayBar,CompareUploadStep}.tsx, src/features/compare-art/onboarding/useCompareIntro.ts, src/onboarding/{OnboardingHost.tsx,onboardingConfig.ts,index.ts}, e2e/*, playwright.config.ts, PROJECT.md |

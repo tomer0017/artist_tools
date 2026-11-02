@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import zlib from 'node:zlib';
 
-const SHOTS =
-  '/private/tmp/claude-501/-Users-tomercohen-Downloads-Art-Studio-Companion/79b68966-60c8-421f-9325-8bccc54a0a49/scratchpad';
+// Evidence screenshots land in this test's own output folder.
+const shot = (name: string) => test.info().outputPath(name);
 
 // ── Minimal PNG encoder (avoids a fixture dependency) ────────────────────────
 function crc32(buf: Buffer): number {
@@ -45,68 +45,79 @@ function makePng(w: number, h: number, rgb: [number, number, number]): Buffer {
 const artwork = { name: 'artwork.png', mimeType: 'image/png', buffer: makePng(200, 160, [200, 120, 90]) };
 const reference = { name: 'reference.png', mimeType: 'image/png', buffer: makePng(200, 160, [90, 120, 200]) };
 
-test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
-  // Isolate this workflow test from the first-run guided onboarding, which
-  // otherwise auto-shows its preview over the Compare tab. (Onboarding has its
-  // own dedicated spec in e2e/onboarding.spec.ts.)
-  await page.addInitScript(() => {
-    try {
-      ['measure', 'measure-intro', 'value', 'color', 'grid', 'compare', 'compare-intro'].forEach((id) =>
-        localStorage.setItem('studio-onboarding-' + id, 'done'),
-      );
-    } catch {
-      /* ignore */
-    }
-  });
+test('Compare Art: Images → Align → Compare → Save, incl. GIF and still export', async ({ page }) => {
   page.on('pageerror', (e) => console.log('PAGEERROR:', e.message));
-  page.on('console', (m) => console.log('CONSOLE.' + m.type() + ':', m.text()));
-  await page.goto('/artist_tools/');
+  await page.goto('/artist_tools/#/compare');
 
-  // Existing workspaces still present.
-  await expect(page.getByRole('button', { name: 'Measure' })).toBeVisible();
+  // Step 1 — Images. Two clearly-labelled slots; Continue waits for both.
+  await expect(page.getByRole('heading', { name: 'Compare & Correct' })).toBeVisible();
+  await expect(page.getByText('Your Artwork')).toBeVisible();
+  const cont = page.getByRole('button', { name: /Continue to Align/ });
+  await expect(cont).toBeDisabled();
 
-  // Open Compare workspace.
-  await page.getByRole('button', { name: 'Compare' }).click();
-  await expect(page.getByText('Compare proportions, values, and colors')).toBeVisible();
-
-  // Add artwork → the crop screen opens first; confirm it.
+  // Add artwork → the crop screen opens first; exercise a preset, confirm.
   const [artChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.getByRole('button', { name: 'Choose' }).first().click(),
   ]);
   await artChooser.setFiles(artwork);
   await expect(page.getByRole('button', { name: 'Confirm crop' })).toBeEnabled();
-  await page.screenshot({ path: `${SHOTS}/01-crop-screen.png` });
-  // Exercise a crop preset (Square) before confirming.
   await page.getByRole('button', { name: 'Square', exact: true }).click();
-  await page.screenshot({ path: `${SHOTS}/02-crop-square.png` });
+  await page.screenshot({ path: shot('01-crop-square.png') });
   await page.getByRole('button', { name: 'Confirm crop' }).click();
 
-  // Add reference → crop screen again; confirm.
+  // Add reference → crop → confirm.
   const [refChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.getByRole('button', { name: 'Choose' }).first().click(),
   ]);
   await refChooser.setFiles(reference);
-  await expect(page.getByRole('button', { name: 'Confirm crop' })).toBeEnabled();
   await page.getByRole('button', { name: 'Confirm crop' }).click();
 
-  // The comparison canvas + bottom bar should now be visible, and the persistent
-  // alignment toolbar (Smart Align always available) is present.
-  await expect(page.getByRole('button', { name: 'Export' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Smart Align' }).first()).toBeVisible();
+  await expect(cont).toBeEnabled();
+  await cont.click();
 
-  // Task 3: Overlay mode shows an always-visible opacity slider + one-tap GIF.
-  await expect(page.getByRole('slider', { name: 'Reference opacity' })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/03-overlay-quickbar.png` });
-  await page.getByRole('button', { name: 'Create Opacity GIF' }).click();
-  // The shared Save-to-Photos sheet opens showing the ACTUAL GIF preview.
-  await expect(page.getByRole('button', { name: 'Save GIF' })).toBeVisible({ timeout: 30_000 });
+  // Step 2 — Align: Smart Align recommended, Manual as the alternative.
+  await expect(page.getByText('Align the images')).toBeVisible();
+  await page.getByRole('button', { name: /Smart Align/ }).click();
+  await expect(page.getByText('Smart Align · point 1 of 4')).toBeVisible();
+  await page.screenshot({ path: shot('02-smart-align.png') });
+  await page.getByRole('button', { name: 'Cancel alignment' }).click();
+
+  // Manual: nudge precisely, then Done moves on to Compare.
+  await page.getByRole('button', { name: /Manual Align/ }).click();
+  await page.getByRole('button', { name: 'Move right' }).click();
+  await page.getByRole('button', { name: 'Move right' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  // Step 3 — Compare: Artwork / 50-50 / Reference, opacity, grid, more views.
+  const slider = page.getByRole('slider', { name: 'Reference opacity' });
+  await expect(slider).toBeVisible();
+  await page.getByRole('button', { name: 'Reference', exact: true }).click();
+  await expect(slider).toHaveValue('100');
+  await page.getByRole('button', { name: 'Artwork', exact: true }).click();
+  await expect(slider).toHaveValue('0');
+  await page.getByRole('button', { name: '50 / 50' }).click();
+  await expect(slider).toHaveValue('50');
+  await page.getByRole('switch', { name: /Grid/ }).click();
+  await expect(page.getByRole('switch', { name: /Grid 3×3/ })).toHaveAttribute('aria-checked', 'true');
+  await page.screenshot({ path: shot('03-compare.png') });
+
+  // Advanced views are preserved behind "More views".
+  await page.getByRole('button', { name: 'More views' }).click();
+  await page.getByRole('button', { name: 'Difference' }).click();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByText(/bright areas differ most/)).toBeVisible();
+  await page.getByRole('button', { name: '50 / 50' }).click();
+
+  // Step 4 — Save: one-tap comparison GIF is the primary action.
+  await page.getByRole('button', { name: /Next: Save/ }).click();
+  await page.getByRole('button', { name: 'Create & Save GIF' }).click();
+  await expect(page.getByRole('button', { name: 'Save GIF', exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByAltText('GIF preview')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/06-save-sheet-gif.png` });
   const [quickGif] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Save GIF' }).click(),
+    page.getByRole('button', { name: 'Save GIF', exact: true }).click(),
   ]);
   {
     const stream = await quickGif.createReadStream();
@@ -117,52 +128,24 @@ test('Compare Art: full workflow incl. GIF export', async ({ page }) => {
     expect(bytes.length).toBeGreaterThan(100);
   }
 
-  // Task 2: Smart Align is now a PRIMARY action on the workspace (no menu dig).
-  // Its 2-point flow opens a guided prompt (magnifier interaction).
-  await page.getByRole('button', { name: 'Smart Align' }).first().click();
-  await expect(page.getByText('Tap point A on your ARTWORK')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/04-two-point-align.png` });
-  await page.getByRole('button', { name: 'Cancel alignment' }).click();
-
-  // Switch modes.
-  await page.getByRole('button', { name: 'Mode' }).click();
-  await page.getByRole('button', { name: 'Difference' }).click();
-  await page.getByRole('button', { name: 'Close' }).click();
-
-  // Nudge the reference (precision) — the Manual tool opens the manual toolkit.
-  await page.getByRole('button', { name: 'Manual' }).click();
-  await page.getByRole('button', { name: 'Move right' }).click();
-  await page.getByRole('button', { name: 'Move right' }).click();
-  await page.getByRole('button', { name: 'Close' }).click();
-
-  // Export a still comparison → shared save sheet → download.
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  // Still export + the full export options remain available.
+  await page.getByRole('button', { name: /Save still image/ }).click();
   await page.getByRole('button', { name: 'Save comparison' }).click();
-  await expect(page.getByRole('button', { name: 'Save Image' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: 'Save Image', exact: true })).toBeVisible({ timeout: 15_000 });
   const stillPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Save Image' }).click();
-  const stillDownload = await stillPromise;
-  expect(stillDownload.suggestedFilename()).toContain('compare-comparison');
+  await page.getByRole('button', { name: 'Save Image', exact: true }).click();
+  expect((await stillPromise).suggestedFilename()).toContain('compare-comparison');
 
-  // Export an animated GIF via the Export sheet → shared save sheet → download.
-  await page.getByRole('button', { name: 'Create GIF' }).click();
-  await expect(page.getByRole('button', { name: 'Save GIF' })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Create GIF', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save GIF', exact: true })).toBeVisible({ timeout: 30_000 });
   const [gifDownload] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Save GIF' }).click(),
+    page.getByRole('button', { name: 'Save GIF', exact: true }).click(),
   ]);
-  const filename = gifDownload.suggestedFilename();
-  expect(filename).toContain('.gif');
-  const stream = await gifDownload.createReadStream();
-  const chunks: Buffer[] = [];
-  for await (const c of stream) chunks.push(c as Buffer);
-  const gifBytes = Buffer.concat(chunks);
-  // Valid GIF header + non-trivial size.
-  expect(gifBytes.subarray(0, 3).toString('ascii')).toBe('GIF');
-  expect(gifBytes.length).toBeGreaterThan(100);
+  expect(gifDownload.suggestedFilename()).toContain('.gif');
 
-  // Mobile-viewport evidence of the difference view + bottom bar.
+  // The stepper lets the painter go back to any earlier step.
   await page.getByRole('button', { name: 'Close' }).click();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: `${SHOTS}/05-mobile-difference.png` });
+  await page.getByRole('button', { name: /Align/ }).first().click();
+  await expect(page.getByText('Align the images')).toBeVisible();
 });

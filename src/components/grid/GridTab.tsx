@@ -2,7 +2,9 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
-import { Download, Settings, X, RefreshCw, Upload } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
+import ToolHeader from '@/components/shell/ToolHeader';
+import ToolEmptyState from '@/components/shell/ToolEmptyState';
 import type { GridSettings } from '@/types/project';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { canvasToBlob } from '@/lib/saveMedia';
@@ -10,7 +12,8 @@ import { canvasToBlob } from '@/lib/saveMedia';
 export default function GridTab() {
   const { image, gridImage, setGridImage, initGridImageFromReference, gridSettings, setGridSettings } = useProject();
   const { save } = useSaveMedia();
-  const [showControls, setShowControls] = useState(false);
+  // Mobile panel: the common presets first, every setting one tap away.
+  const [panel, setPanel] = useState<'preset' | 'customize'>('preset');
   const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const isMobile = useIsMobile();
 
@@ -178,7 +181,6 @@ export default function GridTab() {
   // Drag to move image
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (!activeImage) return;
-    if (isMobile) setShowControls(false);
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.setPointerCapture(e.pointerId);
@@ -188,7 +190,7 @@ export default function GridTab() {
       initOX: gs.imageOffsetX,
       initOY: gs.imageOffsetY,
     };
-  }, [activeImage, gs.imageOffsetX, gs.imageOffsetY, isMobile]);
+  }, [activeImage, gs.imageOffsetX, gs.imageOffsetY]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current) return;
@@ -212,7 +214,6 @@ export default function GridTab() {
 
   // Touch pinch for scaling
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (isMobile) setShowControls(false);
     if (e.touches.length === 2) {
       const d = Math.hypot(
         e.touches[1].clientX - e.touches[0].clientX,
@@ -220,7 +221,7 @@ export default function GridTab() {
       );
       pinchRef.current = { initDist: d, initScale: gs.imageScale };
     }
-  }, [gs.imageScale, isMobile]);
+  }, [gs.imageScale]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2 && pinchRef.current) {
@@ -328,14 +329,56 @@ export default function GridTab() {
 
   const GRID_COLORS = ['#ffffff', '#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6'];
 
+  const fitButtons = activeImage && (
+    <SegmentedRow
+      label="Image fit"
+      options={[
+        { label: 'Fit', onClick: fitImage },
+        { label: 'Fill', onClick: fillCanvas },
+        { label: 'Center', onClick: resetImagePosition },
+      ]}
+    />
+  );
+
+  const replaceButton = (
+    <ImageUploader
+      onImageLoad={setGridImage}
+      compact
+      label={isMobile ? undefined : 'Replace image'}
+      icon={<RefreshCw className="w-4 h-4" />}
+    />
+  );
+
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
+      <ToolHeader
+        tool="grid"
+        task={activeImage
+          ? `${gs.columns}×${gs.rows} grid on a ${gs.canvasWidth}×${gs.canvasHeight} ${gs.unit} canvas — draw the same grid on yours`
+          : 'Transfer a reference to canvas square by square'}
+        actions={activeImage ? replaceButton : undefined}
+      />
+      {/* No image yet: explain the method instead of showing an empty grid.
+          The canvas stays mounted (hidden) so its effects keep their refs. */}
+      {!activeImage && (
+        <ToolEmptyState
+          tool="grid"
+          heading="Copy your reference square by square"
+          steps={[
+            'Upload your reference photo.',
+            'Pick a grid (4×4 is a good start) and your canvas size.',
+            'Save it, then draw the same grid lightly on your canvas.',
+          ]}
+        >
+          <ImageUploader primary label="Upload reference photo" onImageLoad={setGridImage} />
+        </ToolEmptyState>
+      )}
       {isMobile ? (
         <>
           <div
             ref={containerRef}
             data-onboarding="grid-canvas"
-            className="relative flex-1 canvas-area flex items-center justify-center p-2 min-h-0"
+            className={`relative flex-1 canvas-area flex items-center justify-center p-2 min-h-0 ${activeImage ? '' : 'hidden'}`}
           >
             <canvas
               ref={canvasRef}
@@ -350,124 +393,55 @@ export default function GridTab() {
               onTouchEnd={handleTouchEnd}
               style={{ maxWidth: '100%', maxHeight: '100%' }}
             />
-
-            <div className="absolute top-3 inset-x-3 z-10 flex items-center justify-between pointer-events-none">
-              <button
-                onClick={() => setShowControls(v => !v)}
-                className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-2 text-xs font-medium text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-              >
-                <Settings className="w-4 h-4" />
-                {showControls ? 'Hide controls' : 'Grid controls'}
-              </button>
-
-              <div className="flex items-center gap-2">
-                {/* Image action — always visible, alongside the canvas actions. */}
-                <div className="pointer-events-auto">
-                  <ImageUploader
-                    onImageLoad={setGridImage}
-                    compact
-                    label={activeImage ? 'Replace' : 'Upload'}
-                    icon={activeImage ? <RefreshCw className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-                  />
-                </div>
-                {activeImage && (
-                  <button
-                    onClick={handleExport}
-                    data-onboarding="grid-export"
-                    className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card/95 text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-                    title="Save image"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {activeImage && (
-              <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-card/95 px-1.5 py-1.5 shadow-lg backdrop-blur-sm">
-                <button
-                  onClick={fitImage}
-                  className="rounded-full px-3 py-2 text-xs font-medium text-foreground active:scale-95 transition-transform hover:bg-secondary"
-                >
-                  Fit
-                </button>
-                <button
-                  onClick={fillCanvas}
-                  className="rounded-full px-3 py-2 text-xs font-medium text-foreground active:scale-95 transition-transform hover:bg-secondary"
-                >
-                  Fill
-                </button>
-                <button
-                  onClick={resetImagePosition}
-                  className="rounded-full px-3 py-2 text-xs font-medium text-foreground active:scale-95 transition-transform hover:bg-secondary"
-                >
-                  Center
-                </button>
-              </div>
-            )}
-
-            {/* Empty state — only ever shown when no reference exists at all. */}
-            {!activeImage && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center p-6 pointer-events-none">
-                <div className="pointer-events-auto w-full max-w-xs">
-                  <ImageUploader onImageLoad={setGridImage} />
-                  <p className="mt-3 text-center text-xs text-muted-foreground">
-                    Add an image to grid it. Set your canvas ratio in Grid controls.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
-          {showControls && (
-            <div className="absolute inset-x-0 bottom-0 z-20 max-h-[62vh] overflow-hidden rounded-t-2xl border-t border-border bg-card/98 shadow-2xl backdrop-blur-sm">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Grid controls</p>
-                  <p className="text-[11px] text-muted-foreground">Set canvas ratio, fit the image, then export.</p>
+          {activeImage && (
+            <div className="shrink-0 border-t border-border bg-card px-3 pb-3 pt-2 space-y-2.5">
+              <SegmentedTabs<'preset' | 'customize'> value={panel} onChange={setPanel}
+                options={[{ value: 'preset', label: 'Preset' }, { value: 'customize', label: 'Customize' }]} />
+              {panel === 'preset' ? (
+                <GridPresets gs={gs} update={update} />
+              ) : (
+                <div className="max-h-[36vh] overflow-y-auto space-y-3 pr-1">
+                  <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
                 </div>
-                <button
-                  onClick={() => setShowControls(false)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-muted-foreground active:scale-95 transition-transform"
-                  title="Close controls"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="max-h-[calc(62vh-72px)] overflow-y-auto px-3 py-3 space-y-3">
-                {activeImage && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <button onClick={fitImage} className="rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95 transition-transform">Fit image</button>
-                    <button onClick={fillCanvas} className="rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95 transition-transform">Fill canvas</button>
-                    <button onClick={resetImagePosition} className="rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95 transition-transform">Reset position</button>
-                  </div>
-                )}
-
-                <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
-              </div>
+              )}
+              {fitButtons}
+              <button
+                onClick={handleExport}
+                data-onboarding="grid-export"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground active:opacity-90"
+              >
+                <Download className="h-5 w-5" /> Save grid image
+              </button>
             </div>
           )}
         </>
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Desktop sidebar */}
-          <div className="w-60 panel-surface border-r border-border p-3 space-y-4 overflow-y-auto shrink-0">
-            {activeImage && (
-              <div className="grid grid-cols-3 gap-2">
-                <button onClick={fitImage} className="rounded-lg bg-secondary px-2 py-2 text-[11px] font-medium text-foreground hover:bg-secondary/80">Fit image</button>
-                <button onClick={fillCanvas} className="rounded-lg bg-secondary px-2 py-2 text-[11px] font-medium text-foreground hover:bg-secondary/80">Fill canvas</button>
-                <button onClick={resetImagePosition} className="rounded-lg bg-secondary px-2 py-2 text-[11px] font-medium text-foreground hover:bg-secondary/80">Reset position</button>
+          <div className={`w-64 panel-surface border-r border-border p-3 space-y-4 overflow-y-auto shrink-0 ${activeImage ? '' : 'hidden'}`}>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1.5">Grid</p>
+              <GridPresets gs={gs} update={update} />
+            </div>
+            {fitButtons}
+            <details className="group">
+              <summary className="flex min-h-[40px] cursor-pointer list-none items-center justify-between text-sm font-medium text-foreground">
+                Customize grid &amp; canvas
+                <span className="text-muted-foreground transition-transform group-open:rotate-180">▾</span>
+              </summary>
+              <div className="space-y-4 pt-2">
+                <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
               </div>
-            )}
-            <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
+            </details>
           </div>
 
           {/* Desktop canvas */}
           <div
             ref={containerRef}
             data-onboarding="grid-canvas"
-            className="relative flex-1 canvas-area flex items-center justify-center p-4 min-h-0"
+            className={`relative flex-1 canvas-area flex items-center justify-center p-4 min-h-0 ${activeImage ? '' : 'hidden'}`}
           >
             <canvas
               ref={canvasRef}
@@ -483,32 +457,14 @@ export default function GridTab() {
               style={{ maxWidth: '100%', maxHeight: '100%' }}
             />
 
-            {/* Empty state — only ever shown when no reference exists at all. */}
-            {!activeImage && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center p-8">
-                <div className="w-full max-w-sm">
-                  <ImageUploader onImageLoad={setGridImage} />
-                  <p className="mt-3 text-center text-xs text-muted-foreground">
-                    Add an image to grid it. Set your canvas ratio in the panel on the left.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
 
       {/* Export bar — primary canvas actions live here (image + export). */}
-      {!isMobile && (
+      {!isMobile && activeImage && (
         <div className="flex items-center justify-between px-3 py-2 toolbar-surface border-t border-border shrink-0">
           <div className="flex items-center gap-3">
-            {/* Image action — always visible, adaptive label, never buried in the panel. */}
-            <ImageUploader
-              onImageLoad={setGridImage}
-              compact
-              label={activeImage ? 'Replace Image' : 'Upload Image'}
-              icon={activeImage ? <RefreshCw className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
-            />
             <span className="text-[11px] text-muted-foreground">
               {gs.canvasWidth}×{gs.canvasHeight} {gs.unit} · {gs.columns}×{gs.rows} grid
             </span>
@@ -516,15 +472,81 @@ export default function GridTab() {
           <button
             onClick={handleExport}
             data-onboarding="grid-export"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:opacity-90 active:scale-95 transition-transform"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:opacity-90 active:scale-95 transition-transform"
           >
-            <Download className="w-3.5 h-3.5" />
-            Save Image
+            <Download className="w-4 h-4" />
+            Save grid image
           </button>
         </div>
       )}
 
       <canvas ref={exportCanvasRef} className="hidden" />
+    </div>
+  );
+}
+
+// ─── Presets ──────────────────────────────────────────
+const GRID_PRESETS = [
+  { n: 3, note: 'Simple' },
+  { n: 4, note: 'Recommended' },
+  { n: 8, note: 'Detailed' },
+];
+
+function GridPresets({ gs, update }: { gs: GridSettings; update: (p: Partial<GridSettings>) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Grid preset">
+      {GRID_PRESETS.map(({ n, note }) => {
+        const active = gs.columns === n && gs.rows === n;
+        return (
+          <button key={n} role="radio" aria-checked={active} aria-label={`${n} by ${n} grid (${note})`}
+            onClick={() => update({ columns: n, rows: n })}
+            className={`flex flex-col items-center gap-1 rounded-xl border py-2 transition-colors ${
+              active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
+            }`}>
+            <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+              <rect x="2" y="2" width="20" height="20" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              {Array.from({ length: n - 1 }, (_, i) => {
+                const p = 2 + ((i + 1) * 20) / n;
+                return <path key={i} d={`M${p} 2V22M2 ${p}H22`} stroke="currentColor" strokeWidth="1" />;
+              })}
+            </svg>
+            <span className="text-sm font-semibold leading-none">{n} × {n}</span>
+            <span className={`text-[10px] leading-none ${active ? 'text-primary' : 'text-muted-foreground'}`}>{note}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SegmentedTabs<T extends string>({ value, onChange, options }: {
+  value: T; onChange: (v: T) => void; options: { value: T; label: string }[];
+}) {
+  return (
+    <div className="flex rounded-lg bg-secondary/60 p-0.5" role="tablist">
+      {options.map(o => (
+        <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
+          className={`min-h-[36px] flex-1 rounded-md text-sm font-medium transition-colors ${
+            value === o.value ? 'bg-card text-foreground shadow' : 'text-muted-foreground'
+          }`}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+// One-shot actions laid out like a segmented control (Fit / Fill / Center).
+function SegmentedRow({ label, options }: { label: string; options: { label: string; onClick: () => void }[] }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex flex-1 gap-1.5">
+        {options.map(o => (
+          <button key={o.label} onClick={o.onClick}
+            className="min-h-[40px] flex-1 rounded-lg border border-border bg-secondary/40 text-sm font-medium text-foreground active:bg-secondary hover:bg-secondary">
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

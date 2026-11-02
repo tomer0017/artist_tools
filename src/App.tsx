@@ -17,7 +17,9 @@ const App = () => (
       <SaveMediaProvider>
         <HashRouter>
           <Routes>
-            <Route path="/" element={<Index />} />
+            {/* One route for Home and every tool (#/measure, #/study…), so
+                the workspace never remounts when switching tools. */}
+            <Route path="/:view?" element={<Index />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

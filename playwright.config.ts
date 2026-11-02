@@ -11,6 +11,13 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // Safari/WebKit on iPhone — the mobile navigation + touch regressions.
+    {
+      name: "iphone-webkit",
+      use: { ...devices["iPhone 13"] },
+      testMatch: /navigation\.spec\.ts/,
+      grep: /mobile/,
+    },
   ],
   webServer: {
     command: "npm run dev",

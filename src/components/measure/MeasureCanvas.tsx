@@ -34,6 +34,8 @@ export default function MeasureCanvas({ containerRef }: Props) {
   const [calInputVisible, setCalInputVisible] = useState(false);
   const [calSize, setCalSize] = useState('');
   const [calUnit, setCalUnit] = useState('cm');
+  // Clicking the coach arms point selection without placing a point.
+  const [coachDismissed, setCoachDismissed] = useState(false);
   const [dragging, setDragging] = useState<{ lineId: string; endpoint: 'start' | 'end' } | null>(null);
   const [panning, setPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
@@ -569,8 +571,8 @@ export default function MeasureCanvas({ containerRef }: Props) {
 
       {/* First-run gesture coach — teaches the click for the very first
           calibration point, then clears once one is placed. */}
-      {mode === 'calibrate' && calPoints.length === 0 && !calDraftReady && !calInputVisible && (
-        <TapCoach label="Click to start" />
+      {mode === 'calibrate' && !coachDismissed && calPoints.length === 0 && !calDraftReady && !calInputVisible && (
+        <TapCoach label="Click to start" onActivate={() => setCoachDismissed(true)} />
       )}
 
       {/* Calibration draft confirmation — confirm line placement before entering size */}

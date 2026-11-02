@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import ToolHeader from '@/components/shell/ToolHeader';
 import { useProject } from '@/hooks/useProjectStore';
 import { Pipette, Copy, Plus, ArrowRight, Flame, Snowflake, Droplet, Ban } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -532,6 +533,16 @@ function PainterCheatSheet() {
   );
 }
 
+// ─── Sections ────────────────────────────────────────
+// Each section says what it is *for* — shown under the tool title.
+type ColorSection = 'wheel' | 'harmony' | 'recipes' | 'skin';
+const COLOR_SECTIONS: { id: ColorSection; label: string; purpose: string }[] = [
+  { id: 'wheel', label: 'Color Wheel', purpose: 'Pick a color by hue and shade, or sample it from your photo' },
+  { id: 'harmony', label: 'Harmonies', purpose: 'Colors that work with your selected color' },
+  { id: 'recipes', label: 'Mixing', purpose: 'Step-by-step paint recipes for common colors' },
+  { id: 'skin', label: 'Skin Tones', purpose: 'Base, shadow and highlight mixes for skin' },
+];
+
 // ─── Main ────────────────────────────────────────────
 export default function ColorTab() {
   const { image } = useProject();
@@ -541,6 +552,7 @@ export default function ColorTab() {
   const [selectedHex, setSelectedHex] = useState('#D4827A');
   const [hexInput, setHexInput] = useState('#D4827A');
   const [picking, setPicking] = useState(false);
+  const [section, setSection] = useState<ColorSection>('wheel');
   const pickCanvasRef = useRef<HTMLCanvasElement>(null);
   const pickImgRef = useRef<HTMLImageElement>(null);
 
@@ -613,14 +625,33 @@ export default function ColorTab() {
     }
   }, [picking, applyHex]);
 
+  // The selected color travels across every section, so a strip showing it
+  // keeps Harmonies / Mixing / Skin anchored to what the artist picked.
+  const selectedStrip = (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5">
+      <div className="h-10 w-10 shrink-0 rounded-lg border border-border" style={{ backgroundColor: selectedHex }} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Selected color</div>
+        <div className="font-mono text-sm uppercase text-foreground">{selectedHex}</div>
+      </div>
+      <button onClick={() => setSection('wheel')} className="min-h-[40px] rounded-lg px-3 text-xs font-semibold text-primary hover:bg-secondary">
+        Change
+      </button>
+    </div>
+  );
+
   return (
+    <div className="flex flex-1 flex-col min-h-0">
+    <ToolHeader tool="color" task={COLOR_SECTIONS.find((c) => c.id === section)?.purpose} />
     <div className="flex-1 min-h-0 overflow-y-auto canvas-area">
-      <div className="max-w-4xl mx-auto p-4 space-y-5">
-        <Tabs defaultValue="wheel" className="w-full">
-          <TabsList data-onboarding="color-tabs" className="grid w-full grid-cols-3">
-            <TabsTrigger value="wheel">Color Wheel</TabsTrigger>
-            <TabsTrigger value="recipes">Mixing Recipes</TabsTrigger>
-            <TabsTrigger value="skin">Skin Tones</TabsTrigger>
+      <div className="max-w-4xl mx-auto p-3 md:p-4 space-y-5">
+        <Tabs value={section} onValueChange={(v) => setSection(v as ColorSection)} className="w-full">
+          <TabsList data-onboarding="color-tabs" className="grid h-auto w-full grid-cols-4 p-1">
+            {COLOR_SECTIONS.map((c) => (
+              <TabsTrigger key={c.id} value={c.id} className="min-h-[40px] whitespace-normal px-1 text-xs leading-tight md:text-sm">
+                {c.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           {/* ── Color Wheel ── */}
@@ -682,6 +713,15 @@ export default function ColorTab() {
               )}
             </div>
 
+            <button onClick={() => setSection('harmony')}
+              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-sm font-semibold text-primary hover:bg-primary/15">
+              See harmonies for this color →
+            </button>
+          </TabsContent>
+
+          {/* ── Harmonies ── */}
+          <TabsContent value="harmony" className="space-y-4 mt-4">
+            {selectedStrip}
             {/* Harmonies */}
             <div data-onboarding="color-harmony" className="grid gap-3 sm:grid-cols-2">
               <HarmonyBlock
@@ -771,6 +811,7 @@ export default function ColorTab() {
 
         <canvas ref={pickCanvasRef} className="hidden" />
       </div>
+    </div>
     </div>
   );
 }

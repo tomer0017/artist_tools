@@ -88,6 +88,8 @@ export interface SampledColor {
 
 export type InteractionMode = 'idle' | 'crop' | 'calibrate' | 'measure' | 'select' | 'eyedropper' | 'pan';
 export type TabId = 'measure' | 'value' | 'color' | 'grid' | 'compare';
+// Everything the app can show: the Home tool hub or one of the tools.
+export type ViewId = 'home' | TabId;
 
 export interface GridSettings {
   canvasWidth: number;

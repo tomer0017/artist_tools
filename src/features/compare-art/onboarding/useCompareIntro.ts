@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { hasSeenOnboarding, markOnboardingSeen } from '@/onboarding';
+import { hasSeenOnboarding, markOnboardingSeen, AUTO_START_TUTORIALS } from '@/onboarding';
 
 // Persisted through the shared onboarding storage (same prefix + reset path as
 // every other tool). resetOnboarding('compare-intro') replays it from scratch.
@@ -23,6 +23,7 @@ export function useCompareIntro() {
   const autoShown = useRef(false);
 
   useEffect(() => {
+    if (!AUTO_START_TUTORIALS) return;
     if (autoShown.current) return;
     autoShown.current = true;
     if (!hasSeenOnboarding(COMPARE_INTRO_ID)) setOpen(true);

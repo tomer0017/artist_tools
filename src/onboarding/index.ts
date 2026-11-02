@@ -5,6 +5,6 @@ export { OnboardingProvider } from './OnboardingProvider';
 export { default as OnboardingHost } from './OnboardingHost';
 export { default as HelpButton } from './HelpButton';
 export { useOnboarding } from './onboardingContext';
-export { ONBOARDING } from './onboardingConfig';
+export { ONBOARDING, AUTO_START_TUTORIALS } from './onboardingConfig';
 export { hasSeenOnboarding, markOnboardingSeen, resetOnboarding } from './onboardingStorage';
 export type { OnboardingConfig, TourStep, PreviewFrame, ToolId } from './onboardingTypes';

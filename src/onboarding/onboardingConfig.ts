@@ -6,6 +6,13 @@ import type { OnboardingConfig, ToolId } from './onboardingTypes';
 // needs no new code. Copy is deliberately short (Apple-onboarding, not docs):
 // every step answers one thing in at most two lines.
 
+// Tutorials never open on their own: each tool screen is designed to explain
+// itself (goal-first title, a one-line task, one obvious first action), so an
+// overlay should not stand between a first-time artist and the work. Every
+// tutorial stays one tap away behind the tool's Help (?) button. Flip this to
+// restore the previous show-once-per-tool behaviour.
+export const AUTO_START_TUTORIALS = false;
+
 export const ONBOARDING: Partial<Record<ToolId, OnboardingConfig>> = {
   // NOTE: Measure intentionally has NO entry here. It uses a dedicated,
   // workflow-driven onboarding (a single illustrated intro + an on-canvas
@@ -62,14 +69,14 @@ export const ONBOARDING: Partial<Record<ToolId, OnboardingConfig>> = {
         body: 'Drag the ring for hue and the square for shade.',
       },
       {
-        target: 'color-harmony',
+        target: 'color-tabs',
         title: 'Build harmonies',
-        body: 'Tap any swatch to explore complementary, analogous and triadic sets.',
+        body: 'Open Harmonies for complementary, analogous and triadic sets of your color.',
       },
       {
         target: 'color-tabs',
         title: 'Recipes & skin tones',
-        body: 'Switch tabs for step-by-step mixing recipes and skin-tone mixes.',
+        body: 'Mixing and Skin Tones give step-by-step paint recipes.',
       },
       {
         target: 'color-pick',

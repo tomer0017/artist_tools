@@ -26,7 +26,7 @@ npm install      # install dependencies
 npm run dev      # start the dev server on http://localhost:8080
 npm run build    # production build
 npm run test     # run the unit tests (vitest)
-npx playwright test   # run the end-to-end Compare Art workflow test (chromium)
+npx playwright test   # end-to-end tests (desktop Chromium + iPhone WebKit)
 ```
 
 ## Tech stack

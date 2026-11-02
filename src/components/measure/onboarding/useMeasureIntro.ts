@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
-import { hasSeenOnboarding, markOnboardingSeen } from '@/onboarding';
+import { hasSeenOnboarding, markOnboardingSeen, AUTO_START_TUTORIALS } from '@/onboarding';
 
 // Persisted through the shared onboarding storage (same prefix + reset path as
 // every other tool) so the redesigned Measure intro auto-plays once and can be
@@ -28,6 +28,7 @@ export function useMeasureIntro() {
 
   // First-time auto-show: image loaded, no scale, never seen.
   useEffect(() => {
+    if (!AUTO_START_TUTORIALS) return;
     if (autoShown.current) return;
     if (!image || calibration) return;
     if (hasSeenOnboarding(MEASURE_INTRO_ID)) return;

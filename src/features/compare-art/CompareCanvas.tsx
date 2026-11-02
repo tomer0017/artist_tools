@@ -225,16 +225,21 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
     if (holdShow.current) frame = { only: holdShow.current };
     else if (session.mode === 'blink') frame = { only: blinkShow.current };
 
+    // During Smart Align, show ONLY the image the next tap belongs to (artwork
+    // for points A/B on the artwork, reference for the matching points), so
+    // the painter never has to guess which picture they are tapping. Display
+    // only — the anchor maths and the session are untouched.
+    const soloRef = anchor ? anchor.step === 1 || anchor.step === 3 : null;
     const sceneCanvas = renderSceneToCanvas({
       artwork: artworkPrep.current?.img ?? null,
       reference: referencePrep.current?.img ?? null,
       scene,
       artworkTransform: artT,
       referenceTransform: refT,
-      opacity: session.opacity,
-      mode: session.mode,
+      opacity: soloRef === null ? session.opacity : soloRef ? 1 : 0,
+      mode: soloRef === null ? session.mode : 'overlay',
       grayscale: session.grayscale,
-      referenceHidden: session.referenceHidden,
+      referenceHidden: soloRef === null ? session.referenceHidden : false,
       splitOrientation: session.splitOrientation,
       splitPosition: session.splitPosition,
       splitSwapped: session.splitSwapped,
@@ -265,7 +270,7 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
     if (!viewLocked) {
       drawChrome(ctx, scene, { width: cw, height: ch }, map, refT, artT);
     }
-  }, [session, sceneSize, prepVersion, viewLocked]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session, sceneSize, prepVersion, viewLocked, anchor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drawChrome = useCallback(
     (

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
   type Point, type MeasurementLine, type CalibrationLine, type Layer,
-  type ValueSettings, type InteractionMode, type TabId, type ProjectData,
+  type ValueSettings, type InteractionMode, type ViewId, type ProjectData,
   type SampledColor, type GridSettings,
   DEFAULT_LAYERS, DEFAULT_VALUE_SETTINGS, DEFAULT_GRID_SETTINGS, LAYER_COLORS, genId,
 } from '@/types/project';
@@ -9,7 +9,7 @@ import {
 const STORAGE_KEY = 'painter-studio-project';
 
 interface StoreState {
-  activeTab: TabId;
+  activeTab: ViewId;
   image: string | null;
   calibration: CalibrationLine | null;
   measurements: MeasurementLine[];
@@ -32,7 +32,7 @@ interface StoreState {
 }
 
 interface StoreActions {
-  setActiveTab: (tab: TabId) => void;
+  setActiveTab: (tab: ViewId) => void;
   setImage: (img: string | null) => void;
   setCalibration: (cal: CalibrationLine | null) => void;
   addMeasurement: (line: MeasurementLine) => void;
@@ -122,7 +122,7 @@ function saveToStorage(state: StoreState) {
 }
 
 const initialState: StoreState = {
-  activeTab: 'measure',
+  activeTab: 'home',
   image: null,
   calibration: null,
   measurements: [],
@@ -146,7 +146,7 @@ const initialState: StoreState = {
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const saved = useRef(loadFromStorage());
 
-  const [activeTab, setActiveTab] = useState<TabId>(saved.current.activeTab as TabId || 'measure');
+  const [activeTab, setActiveTab] = useState<ViewId>(saved.current.activeTab as ViewId || 'home');
   const [image, setImageRaw] = useState<string | null>(saved.current.image || null);
   const [calibration, setCalibration] = useState<CalibrationLine | null>(saved.current.calibration || null);
   const [measurements, setMeasurements] = useState<MeasurementLine[]>(saved.current.measurements || []);

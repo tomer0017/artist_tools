@@ -15,6 +15,9 @@ import {
 } from '@/lib/sketch';
 import { DEFAULT_SKETCH_TRACE, type SketchTraceSettings } from '@/types/project';
 import Slider from '@/components/common/Slider';
+import ToolHeader from '@/components/shell/ToolHeader';
+import ToolEmptyState from '@/components/shell/ToolEmptyState';
+import { PortraitArt } from '@/components/shell/ToolArt';
 
 type Mode = 'grayscale' | 'color' | 'painter' | 'sketch';
 type Focus = 'none' | 'shadow' | 'highlight' | 'squint';
@@ -693,13 +696,20 @@ export default function ValueTab() {
 
   if (!activeImage) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 canvas-area">
-        <div className="w-full max-w-md">
-          <p className="text-sm text-muted-foreground text-center mb-4">
-            Upload an image or use the one from the Measure tab
-          </p>
-          <ImageUploader onImageLoad={setLocalImage} />
-        </div>
+      <div className="flex flex-1 flex-col min-h-0">
+        <ToolHeader tool="value" task="Simplify a reference into colors, values and shapes" />
+        <ToolEmptyState
+          tool="value"
+          heading="Make your reference easier to read"
+          steps={[
+            'Upload your reference photo.',
+            'Pick a study: Color, Values or Sketch.',
+            'Adjust it, then save the study to paint from.',
+          ]}
+          note="A photo loaded in Measure & Plan opens here automatically."
+        >
+          <ImageUploader primary label="Upload reference photo" onImageLoad={setLocalImage} />
+        </ToolEmptyState>
       </div>
     );
   }
@@ -718,19 +728,37 @@ export default function ValueTab() {
   ]);
   const studyModeActive = (id: Mode) =>
     id === 'color' ? (mode === 'color' || mode === 'painter') : mode === id;
-  // Floating quick-switch placed directly on the image so switching between
-  // study stages while painting never requires opening the controls sheet.
-  const StudyModeSwitcher = (
-    <div data-onboarding="value-modes" className="inline-flex rounded-full border border-border bg-card/90 backdrop-blur-sm p-0.5 shadow-lg">
-      {studyModes.map(m => (
-        <button key={m.id}
-          onClick={() => updateMode(m.id === 'color' && mode === 'painter' ? 'painter' : m.id)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
-            studyModeActive(m.id) ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-          }`}>
-          {m.icon}{m.label}
-        </button>
-      ))}
+  // The three studies as picture cards, always visible above the image, so
+  // the difference between them is clear *before* choosing — no guessing from
+  // an icon. `layout="column"` stacks them in the desktop sidebar.
+  const STUDY_MODE_INFO: Record<string, { caption: string; treatment: 'flat' | 'values' | 'sketch'; task: string }> = {
+    color: { caption: 'Major colors', treatment: 'flat', task: 'Simplify the reference into its main color families' },
+    grayscale: { caption: 'Light & shadow', treatment: 'values', task: 'See the big shapes of light and shadow' },
+    sketch: { caption: 'Shapes & lines', treatment: 'sketch', task: 'Turn the reference into clean shapes to draw from' },
+  };
+  const studyTask = STUDY_MODE_INFO[mode === 'painter' ? 'color' : mode]?.task;
+  const StudyModeCards = ({ layout }: { layout: 'row' | 'column' }) => (
+    <div data-onboarding="value-modes" role="radiogroup" aria-label="Study"
+      className={layout === 'row' ? 'grid grid-cols-3 gap-2' : 'flex flex-col gap-1.5'}>
+      {studyModes.map(m => {
+        const info = STUDY_MODE_INFO[m.id];
+        const active = studyModeActive(m.id);
+        return (
+          <button key={m.id} role="radio" aria-checked={active}
+            onClick={() => updateMode(m.id === 'color' && mode === 'painter' ? 'painter' : m.id)}
+            className={`flex min-w-0 items-center gap-1.5 rounded-xl border p-1.5 text-left md:gap-2 transition-colors ${
+              active ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/40'
+            }`}>
+            <span className="h-9 w-9 shrink-0 overflow-hidden rounded-lg md:h-10 md:w-10">
+              <PortraitArt treatment={info.treatment} viewBox="30 26 40 40" label={`${m.label} example`} />
+            </span>
+            <span className="min-w-0">
+              <span className={`block truncate text-[13px] font-semibold leading-tight ${active ? 'text-primary' : 'text-foreground'}`}>{m.label}</span>
+              <span className="block text-[10px] leading-tight text-muted-foreground md:text-[11px]">{info.caption}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -865,11 +893,12 @@ export default function ValueTab() {
   const ControlsBlock = (
     <div className="space-y-4">
       <div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Study mode</p>
-        <p className="text-[10px] text-muted-foreground mb-1.5">
-          Switch Color · Values · Sketch from the toolbar on the image.
-        </p>
-        {isColorFamily && PainterToggle}
+        {isColorFamily && (
+          <>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Color rendering</p>
+            {PainterToggle}
+          </>
+        )}
         {isSketch && (
           <p className="text-[10px] text-muted-foreground">
             A deterministic black &amp; white vector trace. Ink and Detail are below
@@ -1154,9 +1183,6 @@ export default function ValueTab() {
         processedUrl && <img src={processedUrl} alt="Value study"
           className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
       )}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
-        {StudyModeSwitcher}
-      </div>
       <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
         {ReplaceImageButton}
         <button onClick={() => setFullscreen(v => !v)}
@@ -1176,15 +1202,14 @@ export default function ValueTab() {
     const mobilePane = isSketch && mobileView === 'palette' ? 'processed' : mobileView;
     return (
       <div className="relative flex-1 flex flex-col min-h-0 canvas-area">
-        {mobilePane !== 'palette' && (
-          <>
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
-              {StudyModeSwitcher}
-            </div>
+        <ToolHeader tool="value" task={studyTask} />
+        <div className="shrink-0 border-b border-border toolbar-surface px-2 py-2">
+          <StudyModeCards layout="row" />
+        </div>
+        <div className="relative flex-1 min-h-0 overflow-hidden flex items-center justify-center">
+          {mobilePane !== 'palette' && (
             <div className="absolute top-2 right-2 z-20">{ReplaceImageButton}</div>
-          </>
-        )}
-        <div className="flex-1 min-h-0 overflow-hidden flex items-center justify-center">
+          )}
           {mobilePane === 'original' && <img src={activeImage} alt="Original" className="max-h-full max-w-full object-contain" />}
           {mobilePane === 'processed' && processedUrl && <img src={processedUrl} alt="Processed" className="max-h-full max-w-full object-contain" />}
           {mobilePane === 'palette' && (
@@ -1213,24 +1238,30 @@ export default function ValueTab() {
           </div>
         )}
 
-        {/* Mobile swipe-style tab bar */}
-        <div className="flex border-t border-border toolbar-surface shrink-0">
-          {(isSketch ? (['original', 'processed'] as const) : (['original', 'processed', 'palette'] as const)).map(v => (
-            <button key={v} onClick={() => setMobileView(v)}
-              className={`flex-1 min-h-[44px] text-xs font-medium capitalize transition-colors ${
-                mobilePane === v ? 'text-primary border-t-2 border-primary -mt-px' : 'text-muted-foreground'
-              }`}>{v}</button>
-          ))}
+        {/* View switch, settings and the one primary action. */}
+        <div className="flex shrink-0 items-center gap-2 border-t border-border toolbar-surface px-2 py-2">
+          <div className="flex min-w-0 flex-1 rounded-lg bg-secondary/60 p-0.5" role="group" aria-label="Show">
+            {(isSketch ? (['original', 'processed'] as const) : (['original', 'processed', 'palette'] as const)).map(v => (
+              <button key={v} onClick={() => setMobileView(v)} aria-pressed={mobilePane === v}
+                className={`min-h-[40px] min-w-0 flex-1 rounded-md px-1 text-xs font-medium transition-colors ${
+                  mobilePane === v ? 'bg-card text-foreground shadow' : 'text-muted-foreground'
+                }`}>{v === 'processed' ? 'Study' : v === 'original' ? 'Original' : 'Palette'}</button>
+            ))}
+          </div>
           <button onClick={() => setShowMobileControls(true)}
-            className="px-4 py-2.5 text-muted-foreground border-l border-border" title="Controls">
-            <SlidersHorizontal className="w-4 h-4" />
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-secondary px-3 text-xs font-medium text-foreground">
+            <SlidersHorizontal className="h-4 w-4" /> Adjust
+          </button>
+          <button onClick={exportProcessed} data-onboarding="value-save"
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground">
+            <Download className="h-4 w-4" /> Save
           </button>
         </div>
 
         {showMobileControls && (
           <div className="absolute inset-x-0 bottom-0 z-30 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-3 sticky top-0 bg-card">
-              <p className="text-sm font-semibold">Value controls</p>
+              <p className="text-sm font-semibold">Adjust study</p>
               <button onClick={() => setShowMobileControls(false)}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground">
                 <X className="w-4 h-4" />
@@ -1247,10 +1278,20 @@ export default function ValueTab() {
 
   // === Desktop layout ===
   return (
+    <div className="flex-1 flex flex-col min-h-0">
+    <ToolHeader tool="value" task={studyTask} actions={
+      <button onClick={exportProcessed}
+        className="mr-1 flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+        <Download className="h-4 w-4" /> Save study
+      </button>
+    } />
     <div className="flex-1 flex min-h-0">
-      {/* Left controls */}
-      <aside className="w-60 panel-surface border-r border-border p-4 overflow-y-auto shrink-0">
-        <h2 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-3">Value Studio</h2>
+      {/* Left controls: the three studies first, settings below. */}
+      <aside className="w-64 panel-surface border-r border-border p-4 overflow-y-auto shrink-0 space-y-4">
+        <div>
+          <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Choose a study</h2>
+          <StudyModeCards layout="column" />
+        </div>
         {ControlsBlock}
       </aside>
 
@@ -1289,6 +1330,7 @@ export default function ValueTab() {
       </div>
 
       <canvas ref={canvasRef} className="hidden" />
+    </div>
     </div>
   );
 }

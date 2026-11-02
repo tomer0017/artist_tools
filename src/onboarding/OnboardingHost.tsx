@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
 import { useOnboarding } from './onboardingContext';
-import { ONBOARDING } from './onboardingConfig';
+import { ONBOARDING, AUTO_START_TUTORIALS } from './onboardingConfig';
 import { hasSeenOnboarding } from './onboardingStorage';
 
 /**
  * Auto-starts a tool's onboarding the first time it is opened — once, ever, per
- * tool. Renders nothing. Kept separate from the provider so the provider needs
+ * tool — when AUTO_START_TUTORIALS is on (it is off by default). Renders
+ * nothing. Kept separate from the provider so the provider needs
  * no knowledge of app state.
  */
 export default function OnboardingHost() {
@@ -22,6 +23,8 @@ export default function OnboardingHost() {
   openRef.current = isOpen;
 
   useEffect(() => {
+    if (!AUTO_START_TUTORIALS) return;
+    if (activeTab === 'home') return;
     const id = activeTab;
     if (!ONBOARDING[id]) return;
     if (hasSeenOnboarding(id)) return;

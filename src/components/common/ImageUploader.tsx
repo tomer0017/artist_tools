@@ -11,9 +11,11 @@ interface Props {
   label?: string;
   /** Optional custom leading icon for the labelled/compact button. */
   icon?: React.ReactNode;
+  /** A full-width primary call-to-action button (still accepts drag & drop). */
+  primary?: boolean;
 }
 
-export default function ImageUploader({ onImageLoad, compact, disabled, onUploadStart, onUploadError, label, icon }: Props) {
+export default function ImageUploader({ onImageLoad, compact, disabled, onUploadStart, onUploadError, label, icon, primary }: Props) {
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
       onUploadError?.('Unsupported file type. Please choose an image.');
@@ -99,6 +101,21 @@ export default function ImageUploader({ onImageLoad, compact, disabled, onUpload
     return (
       <button onClick={handleClick} className={`btn-tool ${disabled ? 'opacity-40 pointer-events-none' : ''}`} title="Upload image" disabled={disabled}>
         {icon ?? <Upload className="w-4 h-4" />}
+      </button>
+    );
+  }
+
+  if (primary) {
+    return (
+      <button
+        onClick={handleClick}
+        onDrop={disabled ? undefined : handleDrop}
+        onDragOver={(e) => e.preventDefault()}
+        disabled={disabled}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[15px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 active:scale-[0.99] disabled:opacity-50"
+      >
+        {icon ?? <Upload className="h-5 w-5" />}
+        {label ?? 'Upload image'}
       </button>
     );
   }

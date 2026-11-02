@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, Undo2, Redo2, MoreVertical, Hand, MousePointer, Plus, Layers as LayersIcon,
+  Undo2, Redo2, MoreVertical, Hand, MousePointer, Plus, Layers as LayersIcon,
   Ruler, X, Check, Eye, EyeOff, Trash2, Download, FileJson, FilePlus,
   Maximize,
 } from 'lucide-react';
+import ToolHeader, { HeaderIconButton, StepIndicator } from '@/components/shell/ToolHeader';
 import { useProject } from '@/hooks/useProjectStore';
 import { MeasureIntroModal, MeasureScaleSuccess, TapCoach, useMeasureIntro, useScaleSuccess } from './onboarding';
 import { useSaveMedia } from '@/components/common/SaveMedia';
@@ -42,7 +43,7 @@ export default function MeasureMobile() {
   // Redesigned onboarding: a single illustrated Step-1 modal (auto-shown once,
   // replayable from Help) and a Step-3 success card when the scale is first set.
   // The canvas itself carries Step 2 (the on-image "Draw a line…" helper).
-  const { open: introOpen, openIntro, close: closeIntro } = useMeasureIntro();
+  const { open: introOpen, close: closeIntro } = useMeasureIntro();
   const { open: scaleSuccessOpen, sizeLabel: scaleSuccessLabel, dismiss: dismissScaleSuccess } = useScaleSuccess();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,6 +78,9 @@ export default function MeasureMobile() {
   const [calInputVisible, setCalInputVisible] = useState(false);
   const [calSize, setCalSize] = useState('');
   const [calUnit, setCalUnit] = useState('cm');
+  // The "Tap to start" coach is dismissed by tapping it — that arms point
+  // selection without placing a point (see TapCoach).
+  const [coachDismissed, setCoachDismissed] = useState(false);
 
   // Sheets — the high-frequency actions (color, delete, pan, labels, reference
   // access) now live directly on the canvas, so only the genuinely list-based
@@ -427,6 +431,9 @@ export default function MeasureMobile() {
   };
   const cancelCal = () => {
     setCalPoints([]); setCalDraftReady(false); setCalInputVisible(false); setCalSize('');
+    // Re-scaling an existing project: cancelling returns to measuring rather
+    // than leaving the artist stuck in the scale step.
+    if (calibration) setTool('edit');
     restorePreCalView();
   };
   const confirmCal = () => {
@@ -441,13 +448,17 @@ export default function MeasureMobile() {
     restorePreCalView();
   };
 
-  // Open the illustrated intro modal (explains what/why *before* drawing).
+  // Step 1 — go straight to drawing the reference line. The screen itself
+  // (step row + instruction card + tap coach) explains the step; the
+  // illustrated intro remains available from Help.
   const startScaleSetup = () => {
     setSheet(null);
     setCalPoints([]);
     setCalDraftReady(false);
     setCalInputVisible(false);
-    openIntro();
+    setCoachDismissed(false);
+    setPendingPoint(null);
+    setTool('cal');
   };
   // Primary CTA of the intro: mark it seen and drop straight into drawing the
   // reference line.
@@ -702,42 +713,43 @@ export default function MeasureMobile() {
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0 bg-[hsl(var(--canvas-bg))]">
-      {/* Top bar — replaced by a focused reference header during the guided
-          reference-setup step. */}
-      {referenceMode ? (
-        <div className="shrink-0 z-30 flex items-center justify-between px-3 h-12 border-b border-border bg-card/95 backdrop-blur-sm">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Ruler className="w-4 h-4 text-primary" />
-            {enteringLength ? 'Enter real-world length' : 'Set measurement scale'}
-          </div>
-          {canCancelReference && (
+      {/* Tool header + the two-step flow. The first step doubles as the
+          always-visible current scale, one tap from changing it. */}
+      <ToolHeader
+        tool="measure"
+        actions={referenceMode ? (
+          canCancelReference && (
             <button onClick={cancelCal}
-              className="h-10 px-3 flex items-center gap-1.5 rounded-md text-sm text-muted-foreground active:bg-secondary" aria-label="Cancel scale setup">
-              <X className="w-4 h-4" /> Cancel
+              className="flex h-10 items-center gap-1.5 rounded-lg px-3 text-sm text-muted-foreground active:bg-secondary" aria-label="Cancel scale setup">
+              <X className="h-4 w-4" /> Cancel
+            </button>
+          )
+        ) : (
+          <>
+            <HeaderIconButton label="Undo" onClick={undo}><Undo2 className="h-5 w-5" /></HeaderIconButton>
+            <HeaderIconButton label="Save image" onClick={exportPNG}><Download className="h-5 w-5" /></HeaderIconButton>
+            <HeaderIconButton label="More" onClick={() => setSheet('more')}><MoreVertical className="h-5 w-5" /></HeaderIconButton>
+          </>
+        )}
+      />
+      {!enteringLength && (
+        <StepIndicator
+          steps={[
+            calibration && !referenceMode ? `Scale ${calibration.realWorldSize} ${calibration.unit}` : 'Set scale',
+            'Measure',
+          ]}
+          current={calibration && !referenceMode ? 1 : 0}
+          canSelect={(i) => (i === 0 ? !!calibration && !referenceMode : !!calibration)}
+          onSelect={(i) => {
+            if (i === 0) setSheet('reference');
+            else cancelCal();
+          }}
+          trailing={calibration && !referenceMode && (
+            <button onClick={() => setSheet('reference')} aria-label="Change scale" className="min-h-[32px] rounded-md px-2 text-xs font-semibold text-primary active:bg-secondary">
+              Change
             </button>
           )}
-        </div>
-      ) : (
-      <div className="shrink-0 z-30 flex items-center justify-between px-2 h-12 border-b border-border bg-card/95 backdrop-blur-sm">
-        <button onClick={() => { if (confirm('Start a new project?')) newProject(); }}
-          className="h-11 w-11 flex items-center justify-center rounded-md text-muted-foreground active:bg-secondary" aria-label="New project">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Ruler className="w-4 h-4 text-primary" /> Measure
-        </div>
-        <div className="flex items-center">
-          <button onClick={undo} className="h-11 w-11 flex items-center justify-center rounded-md text-muted-foreground active:bg-secondary" aria-label="Undo">
-            <Undo2 className="w-5 h-5" />
-          </button>
-          <button onClick={redo} className="h-11 w-11 flex items-center justify-center rounded-md text-muted-foreground active:bg-secondary" aria-label="Redo">
-            <Redo2 className="w-5 h-5" />
-          </button>
-          <button onClick={() => setSheet('more')} className="h-11 w-11 flex items-center justify-center rounded-md text-muted-foreground active:bg-secondary" aria-label="More">
-            <MoreVertical className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+        />
       )}
 
       {/* Canvas */}
@@ -844,23 +856,19 @@ export default function MeasureMobile() {
           </svg>
         </div>
 
-        {/* Tool indicator — hidden while typing the reference length so the
-            canvas stays clean and focused on that single step. */}
-        {!enteringLength && (
-          <div data-canvas-ui className="absolute top-2 left-2 max-w-[70%] px-2 py-1 text-[11px] rounded bg-card/80 text-muted-foreground backdrop-blur-sm">
-            {tool === 'pan' && 'Pan / Zoom'}
-            {tool === 'edit' && (selectedLine ? 'Editing selected' : 'Tap a line to edit')}
-            {tool === 'add' && (pendingPoint ? 'Tap to set the end point' : 'Tap to set the start point')}
-            {tool === 'cal' && (calPoints.length === 0 ? 'Draw a line over something whose real size you know'
-              : calPoints.length === 1 ? 'Tap the second point'
-              : 'Check the line, then confirm below')}
-          </div>
+        {/* Pan mode must never be mistaken for measuring: while it is on, a
+            clear badge says taps move the image instead of placing points. */}
+        {tool === 'pan' && (
+          <button data-canvas-ui onClick={togglePan}
+            className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg">
+            <Hand className="h-3.5 w-3.5" /> Moving the image · tap to finish
+          </button>
         )}
 
         {/* First-run gesture coach — a pulsing target that teaches the tap for
             the very first reference point, then disappears once one is placed. */}
-        {referenceMode && calPoints.length === 0 && !calDraftReady && !calInputVisible && (
-          <TapCoach />
+        {referenceMode && !coachDismissed && calPoints.length === 0 && !calDraftReady && !calInputVisible && (
+          <TapCoach onActivate={() => setCoachDismissed(true)} />
         )}
 
         {/* Floating action column — the professional "on-canvas" workspace.
@@ -944,19 +952,6 @@ export default function MeasureMobile() {
           </div>
         )}
 
-        {/* Calibration draft (Task 3 · Step 3) — explains what happens next in
-            plain language instead of a generic "Confirm reference". */}
-        {calDraftReady && !calInputVisible && (
-          <div data-canvas-ui className="absolute bottom-4 inset-x-3 z-30 flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-3 shadow-xl">
-            <span className="flex-1 text-xs text-foreground">Great! Next, enter the real length of this line.</span>
-            <button onClick={confirmCalDraft} className="flex items-center gap-1.5 h-10 px-3 text-sm bg-primary text-primary-foreground rounded-md font-medium">
-              <Check className="w-4 h-4" /> Continue
-            </button>
-            <button onClick={cancelCal} aria-label="Cancel" className="h-10 w-10 flex items-center justify-center bg-secondary text-muted-foreground rounded-md">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
         {/* Reference-length entry (Task 8) — a focused, centered modal dialog.
             It stays fully assembled and is vertically centered in the viewport
             *above* the soft keyboard (tracked via visualViewport) instead of
@@ -1008,14 +1003,6 @@ export default function MeasureMobile() {
           </button>
         )}
 
-        {/* On-canvas selected-line editor — shows the measurement and lets the
-            artist label the line directly on the artwork, replacing the old
-            "Selected" bottom sheet. Delete lives in the floating column. */}
-        {tool === 'edit' && selectedLine && !enteringLength && (
-          <InlineLabelEditor key={selectedLine.id} line={selectedLine} getRealSize={getRealSize}
-            onChange={(u) => updateMeasurement(selectedLine.id, u)} />
-        )}
-
         {/* Loading overlay */}
         {isImageLoading && (
           <div data-canvas-ui className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -1037,25 +1024,56 @@ export default function MeasureMobile() {
         )}
       </div>
 
-      {/* Bottom action bar — fully hidden during the guided reference-setup
-          step so only reference controls are visible. */}
-      {!referenceMode && (
-      <div className="shrink-0 z-30 border-t border-border bg-card/95 backdrop-blur-sm">
-        {/* Primary toolbar — Layers (Task 5) now sits alongside the creation
-            modes. Pan moved to the floating action column (Task 4); Selected /
-            Precision were removed entirely (Task 6). */}
-        <div className="flex items-center gap-1 px-2 pt-2">
-          <ModeToggle onClick={() => setSheet('layers')} icon={<LayersIcon className="w-4 h-4" />} label="Layers" />
-          <ModeToggle active={tool === 'edit'} onClick={() => setTool('edit')} icon={<MousePointer className="w-4 h-4" />} label="Edit" />
-          <ModeToggle active={tool === 'add'} onClick={() => { if (!calibration) { startScaleSetup(); return; } setTool('add'); setPendingPoint(null); }}
-            icon={<Plus className="w-4 h-4" />} label="Add" />
+      {/* Step 1 panel — what to do, with a concrete example, right under
+          the thumb instead of floating over the reference. */}
+      {referenceMode && !enteringLength && (
+        <div className="shrink-0 border-t border-border bg-card px-4 py-3">
+          {calDraftReady ? (
+            <div className="flex items-center gap-2">
+              <p className="flex-1 text-sm text-foreground">Great! Now enter how long this line is on your artwork.</p>
+              <button onClick={confirmCalDraft} className="flex h-11 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground">
+                <Check className="h-4 w-4" /> Continue
+              </button>
+              <button onClick={cancelCal} aria-label="Redraw the line" className="flex h-11 w-11 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-foreground">Set your painting scale</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {calPoints.length === 0
+                  ? <>Tap two points on a distance you know — e.g. <span className="text-foreground">chin → top of hair</span>. Then enter how large it should be on your artwork, like <span className="text-foreground">150&nbsp;cm</span>.</>
+                  : 'Now tap the second point.'}
+              </p>
+            </>
+          )}
         </div>
-        {/* Primary Save Image */}
-        <div className="px-2 pt-2 pb-2">
-          <button onClick={exportPNG}
-            className="w-full h-12 rounded-md bg-primary text-primary-foreground font-medium text-sm flex items-center justify-center gap-2 active:opacity-80">
-            <Download className="w-5 h-5" />
-            Save Image
+      )}
+
+      {/* Step 2 panel — the result first, then the actions. */}
+      {!referenceMode && (
+      <div className="shrink-0 border-t border-border bg-card">
+        {selectedLine ? (
+          <ResultCard key={selectedLine.id} line={selectedLine} getRealSize={getRealSize}
+            onChange={(u) => updateMeasurement(selectedLine.id, u)} />
+        ) : (
+          <p className="px-4 pt-2.5 text-xs text-muted-foreground">
+            {tool === 'add'
+              ? (pendingPoint ? 'Now tap the end point.' : 'Tap the start point of any distance on the reference.')
+              : measurements.length > 0
+                ? `Tap a line to see its size · ${measurements.length} saved`
+                : 'Tap “Measure”, then tap two points to get their real size.'}
+          </p>
+        )}
+        <div className="flex items-center gap-2 px-2 pb-2 pt-2">
+          <ModeToggle onClick={() => setSheet('layers')} icon={<LayersIcon className="w-4 h-4" />} label={`Saved (${measurements.length})`} />
+          <ModeToggle active={tool === 'edit'} onClick={() => setTool('edit')} icon={<MousePointer className="w-4 h-4" />} label="Select" />
+          <button
+            onClick={() => { if (!calibration) { startScaleSetup(); return; } setTool('add'); setPendingPoint(null); }}
+            aria-pressed={tool === 'add'}
+            className={`flex h-11 flex-[1.3] items-center justify-center gap-1.5 rounded-lg bg-primary text-sm font-semibold text-primary-foreground transition-shadow ${tool === 'add' ? 'ring-2 ring-primary ring-offset-2 ring-offset-card' : ''}`}>
+            <Plus className="h-4 w-4" /> Measure
           </button>
         </div>
       </div>
@@ -1064,7 +1082,7 @@ export default function MeasureMobile() {
       {/* Bottom sheets */}
       {sheet && (
         <Sheet onClose={() => setSheet(null)} title={
-          sheet === 'layers' ? 'Layers'
+          sheet === 'layers' ? 'Saved measurements · layers'
           : sheet === 'reference' ? 'Measurement scale'
           : 'More'
         }>
@@ -1136,6 +1154,8 @@ export default function MeasureMobile() {
 
           {sheet === 'more' && (
             <div className="space-y-1">
+              <SheetItem onClick={() => { setSheet(null); exportPNG(); }} icon={<Download className="w-5 h-5" />} label="Save image with measurements" />
+              <SheetItem onClick={redo} icon={<Redo2 className="w-5 h-5" />} label="Redo" />
               <SheetItem onClick={() => { toggleMeasurements(); }} icon={showMeasurements ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />} label={showMeasurements ? 'Hide measurements' : 'Show measurements'} />
               <SheetItem onClick={() => { if (confirm('Clear all lines?')) clearAllLines(); }} icon={<Trash2 className="w-5 h-5" />} label="Clear all lines" danger />
               <SheetItem onClick={() => { if (confirm('Start a new project?')) newProject(); }} icon={<FilePlus className="w-5 h-5" />} label="New project" danger />
@@ -1164,8 +1184,8 @@ export default function MeasureMobile() {
 function ModeToggle({ active, onClick, icon, label }: { active?: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick}
-      className={`flex-1 h-11 rounded-md flex items-center justify-center gap-1.5 text-sm font-medium transition-colors ${active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground active:bg-secondary/80'}`}>
-      {icon}<span>{label}</span>
+      className={`flex-1 h-11 rounded-md flex items-center justify-center gap-1.5 text-sm font-medium transition-colors ${active ? 'bg-primary/15 text-primary ring-1 ring-primary/40' : 'bg-secondary text-muted-foreground active:bg-secondary/80'}`}>
+      {icon}<span className="truncate">{label}</span>
     </button>
   );
 }
@@ -1216,24 +1236,28 @@ function Sheet({ title, children, onClose }: { title: string; children: React.Re
   );
 }
 
-// Compact on-canvas editor for the selected line. Floats at the bottom-center
-// of the artwork so the artist can read the measurement and label the line
-// without opening any menu. Delete is handled by the floating action column.
-function InlineLabelEditor({ line, getRealSize, onChange }:
+// The selected measurement, shown big enough to read at arm's length from the
+// easel, with the instruction it implies and an optional label. Lives in the
+// bottom panel so it never covers the reference.
+function ResultCard({ line, getRealSize, onChange }:
   { line: MeasurementLine; getRealSize: (l: MeasurementLine) => string; onChange: (u: Partial<MeasurementLine>) => void }) {
   const [label, setLabel] = useState(line.label);
+  const size = getRealSize(line);
   // `key={line.id}` on the mount site keeps this in sync when selection changes.
   return (
-    <div data-canvas-ui className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 max-w-[calc(100%-6rem)] bg-card/95 border border-border rounded-full pl-3 pr-2 py-1.5 shadow-lg backdrop-blur-sm">
-      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: line.color }} />
-      <span className="text-sm font-semibold text-foreground whitespace-nowrap">{getRealSize(line)}</span>
-      <span className="w-px self-stretch bg-border" />
+    <div className="flex items-center gap-3 px-4 pt-2.5">
+      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: line.color }} />
+      <div className="min-w-0 flex-1">
+        <div className="text-2xl font-bold leading-none text-foreground" aria-live="polite">{size}</div>
+        <div className="mt-1 text-[11px] leading-tight text-muted-foreground">Draw this distance as {size} on your artwork.</div>
+      </div>
       <input value={label}
         onChange={e => { setLabel(e.target.value); onChange({ label: e.target.value }); }}
         placeholder="Add label"
+        aria-label="Measurement label"
         /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
         style={{ fontSize: '16px' }}
-        className="w-28 min-w-0 h-8 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
+        className="h-10 w-28 min-w-0 rounded-lg border border-border bg-secondary px-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
     </div>
   );
 }

@@ -8,7 +8,7 @@
 // leaves and returns.
 
 import { useState } from 'react';
-import { Camera, Crop, ImagePlus, RefreshCw, Check } from 'lucide-react';
+import { ArrowRight, Camera, Crop, ImagePlus, RefreshCw, Check } from 'lucide-react';
 import { useCompare } from './compareArtState';
 import { openImagePicker, ImagePickError } from './compareArtImage';
 import { ImageCrop } from './compareArtTypes';
@@ -44,9 +44,9 @@ function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, original, crop, onR
   const accent = role === 'artwork' ? 'primary' : 'blue';
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border-2 p-4 transition-colors ${
-        dataUrl ? 'border-border bg-card' : 'border-dashed border-border bg-card/40'
-      }`}
+      className={`relative flex flex-col rounded-2xl border-2 p-3 transition-colors md:p-4 ${
+        accent === 'primary' ? 'border-primary/50' : 'border-blue-500/50'
+      } ${dataUrl ? 'bg-card' : 'border-dashed bg-card/40'}`}
     >
       <div className="mb-3 flex items-center justify-between">
         <div>
@@ -87,20 +87,20 @@ function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, original, crop, onR
           </button>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center gap-3 py-6">
+        <div className="flex flex-col items-center justify-center gap-3 py-3 md:py-6">
           <p className="text-center text-xs text-muted-foreground">{hint}</p>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <button
               onClick={() => pick(false)}
               disabled={busy}
-              className="flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95 disabled:opacity-50"
+              className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95 disabled:opacity-50"
             >
               <ImagePlus className="h-4 w-4" /> Choose
             </button>
             <button
               onClick={() => pick(true)}
               disabled={busy}
-              className="flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95 disabled:opacity-50"
+              className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95 disabled:opacity-50"
               title="Camera (mobile)"
             >
               <Camera className="h-4 w-4" /> Camera
@@ -115,34 +115,34 @@ function UploadSlot({ role, titleEn, titleHe, hint, dataUrl, original, crop, onR
 
 interface Props {
   onRequestCrop: (role: 'artwork' | 'reference', original: string, initialCrop?: ImageCrop | null) => void;
+  /** Move on to alignment — offered once both images are in. */
+  onContinue: () => void;
 }
 
-export default function CompareUploadStep({ onRequestCrop }: Props) {
+export default function CompareUploadStep({ onRequestCrop, onContinue }: Props) {
   const store = useCompare();
   const { session } = store;
 
   const needBoth = !session.artwork || !session.reference;
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
-      <div className="mx-auto max-w-md">
-        <h2 className="text-lg font-semibold text-foreground">Compare Art</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Compare proportions, values, and colors by aligning your reference over your painting.
+    <div className="flex flex-1 flex-col min-h-0">
+    <div className="flex-1 overflow-y-auto px-4 py-4 md:py-6">
+      <div className="mx-auto max-w-2xl">
+        <p className="text-sm text-muted-foreground">
+          Add a photo of your painting and the reference you worked from. You can crop each one to the area you
+          want to check — an eye, the nose, a hand.
         </p>
         <p className="mt-0.5 text-xs text-muted-foreground" dir="rtl">
-          השוואת ציור — יישרו את הרפרנס מעל הציור כדי להשוות פרופורציות, ערכים וצבע.
-        </p>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Tip: crop each image to the region you want to compare (an eye, the nose, a hand).
+          השוואת ציור — הוסיפו צילום של הציור ואת הרפרנס.
         </p>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-2 gap-3">
           <UploadSlot
             role="artwork"
-            titleEn="Artwork"
+            titleEn="Your Artwork"
             titleHe="הציור שלי"
-            hint="A photo of your current physical painting."
+            hint="A photo of your painting or drawing."
             dataUrl={session.artwork}
             original={session.artworkOriginal}
             crop={session.artworkCrop}
@@ -152,7 +152,7 @@ export default function CompareUploadStep({ onRequestCrop }: Props) {
             role="reference"
             titleEn="Reference"
             titleHe="רפרנס"
-            hint="The original reference image."
+            hint="The original image you painted from."
             dataUrl={session.reference}
             original={session.referenceOriginal}
             crop={session.referenceCrop}
@@ -167,14 +167,24 @@ export default function CompareUploadStep({ onRequestCrop }: Props) {
           </div>
         )}
 
+      </div>
+    </div>
+    <div className="shrink-0 border-t border-border bg-card px-4 py-3">
+      <div className="mx-auto max-w-2xl">
+        <button
+          onClick={onContinue}
+          disabled={needBoth}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground transition-opacity disabled:opacity-40"
+        >
+          Continue to Align <ArrowRight className="h-5 w-5" />
+        </button>
         {needBoth && (
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            {session.artwork || session.reference
-              ? 'Add the second image to open the comparison.'
-              : 'Add both images to begin.'}
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            {session.artwork || session.reference ? 'Add the second image to continue.' : 'Add both images to continue.'}
           </p>
         )}
       </div>
+    </div>
     </div>
   );
 }

@@ -8,9 +8,11 @@ import MeasurePanel from './MeasurePanel';
 import MeasureMobile from './MeasureMobile';
 import { MeasureDesktopOnboarding } from './onboarding';
 import { Maximize, SlidersHorizontal, X } from 'lucide-react';
+import ToolHeader, { StepIndicator } from '@/components/shell/ToolHeader';
+import ToolEmptyState from '@/components/shell/ToolEmptyState';
 
 export default function MeasureTab() {
-  const { image, setImage, setZoom, setPanOffset, sampledColors, removeSampledColor, clearSampledColors, setActiveTab, mode, isImageLoading, imageLoadError, clearImageLoadError, beginImageUpload, setImageLoadError } = useProject();
+  const { image, setImage, setZoom, setPanOffset, sampledColors, removeSampledColor, clearSampledColors, setActiveTab, mode, setMode, calibration, isImageLoading, imageLoadError, clearImageLoadError, beginImageUpload, setImageLoadError } = useProject();
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsTouchOrMobile();
   const [showMobileControls, setShowMobileControls] = useState(false);
@@ -81,31 +83,42 @@ export default function MeasureTab() {
 
   if (!image) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 canvas-area">
-        <div className="w-full max-w-md">
-          {imageLoadError ? (
-            <div className="flex flex-col items-center gap-3 p-6 text-center">
-              <p className="text-sm text-destructive font-medium">{imageLoadError}</p>
-              <button onClick={() => { clearImageLoadError(); setImage(null); }}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium">
-                Try again
-              </button>
-            </div>
-          ) : isImageLoading ? (
-            <div className="flex flex-col items-center gap-3 p-12">
-              <div className="w-10 h-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-              <p className="text-sm font-medium text-foreground">Loading image…</p>
-              <p className="text-xs text-muted-foreground">Preparing canvas</p>
-            </div>
-          ) : (
+      <div className="flex flex-1 flex-col min-h-0">
+        <ToolHeader tool="measure" task="Real-world sizes for every proportion" showHelp={false} />
+        {imageLoadError ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center canvas-area">
+            <p className="text-sm text-destructive font-medium">{imageLoadError}</p>
+            <button onClick={() => { clearImageLoadError(); setImage(null); }}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium">
+              Try again
+            </button>
+          </div>
+        ) : isImageLoading ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-12 canvas-area">
+            <div className="w-10 h-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            <p className="text-sm font-medium text-foreground">Loading image…</p>
+            <p className="text-xs text-muted-foreground">Preparing canvas</p>
+          </div>
+        ) : (
+          <ToolEmptyState
+            tool="measure"
+            heading="Plan your proportions"
+            steps={[
+              'Upload your reference photo.',
+              'Mark one distance you know — e.g. chin → top of hair = 150 cm.',
+              'Tap any two points to get their real size on your artwork.',
+            ]}
+          >
             <ImageUploader
+              primary
+              label="Upload reference photo"
               onImageLoad={setImage}
               disabled={isImageLoading}
               onUploadStart={beginImageUpload}
               onUploadError={(msg) => setImageLoadError(msg)}
             />
-          )}
-        </div>
+          </ToolEmptyState>
+        )}
       </div>
     );
   }
@@ -117,6 +130,23 @@ export default function MeasureTab() {
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
+      <ToolHeader
+        tool="measure"
+        task={calibration
+          ? `Scale: ${calibration.realWorldSize} ${calibration.unit} on your artwork. Click two points to measure any distance.`
+          : 'Click two points whose real size you know, then enter that size.'}
+      />
+      <StepIndicator
+        steps={[calibration ? `Scale ${calibration.realWorldSize} ${calibration.unit}` : 'Set scale', 'Measure']}
+        current={calibration ? 1 : 0}
+        canSelect={() => !!calibration}
+        onSelect={(i) => setMode(i === 0 ? 'calibrate' : 'measure')}
+        trailing={calibration && (
+          <button onClick={() => setMode('calibrate')} aria-label="Change scale" className="min-h-[32px] rounded-md px-2 text-xs font-semibold text-primary hover:bg-secondary">
+            Change
+          </button>
+        )}
+      />
       {/* Redesigned onboarding: Step-1 intro + Step-3 success (desktop path). */}
       <MeasureDesktopOnboarding />
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
