@@ -2,13 +2,25 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { BrandMark } from './AppNav';
-import { HeroEyeArt, ToolArt } from './ToolArt';
 import { HOME_ORDER, TOOLS, pathForView } from './tools';
+import type { TabId } from '@/types/project';
 
 // ─── Home / Tool Hub ──────────────────────────────────────────────────────────
 // The answer to "what can this app do for me, and where do I start?". Each card
 // names a painter's goal, shows the outcome as a picture, and opens the tool in
 // one tap. Nothing here needs a tutorial.
+
+const ART = `${import.meta.env.BASE_URL}images/home/`;
+
+// Artwork for each card. The images are wide; `position` keeps each one's
+// subject in view when a narrow card crops it.
+const CARD_ART: Record<TabId, { src: string; alt: string; width: number; height: number; position: string }> = {
+  measure: { src: 'home-measure.webp', alt: 'Portrait with proportion measurements', width: 586, height: 230, position: '100% 50%' },
+  value: { src: 'home-study.webp', alt: 'The same portrait as photo, simplified shapes, values and sketch', width: 586, height: 211, position: '35% 50%' },
+  color: { src: 'home-color.webp', alt: 'Paint palette, color wheel and mixed swatches', width: 586, height: 209, position: '62% 50%' },
+  grid: { src: 'home-grid.webp', alt: 'Mountain landscape with a drawing grid', width: 586, height: 196, position: '50% 50%' },
+  compare: { src: 'home-compare.webp', alt: 'Painted eye compared side by side with the reference photo', width: 586, height: 205, position: '50% 50%' },
+};
 
 const HERO_FADE = 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 30%, #000 62%, #000 88%, transparent 100%)';
 
@@ -23,7 +35,20 @@ export default function HomeScreen() {
             className="pointer-events-none absolute inset-y-0 right-0 w-[64%] md:w-[55%]"
             style={{ maskImage: HERO_FADE, WebkitMaskImage: HERO_FADE }}
           >
-            <HeroEyeArt className="h-full w-full" />
+            <img
+              src={`${ART}home-hero.webp`}
+              alt=""
+              width={1199}
+              height={1312}
+              // React 18 doesn't know the camelCase prop; pass the HTML attribute.
+              {...{ fetchpriority: 'high' }}
+              decoding="async"
+              // Phones: zoom toward the sketch and colour wheel so the palette
+              // doesn't sit behind the headline.
+              className="h-full w-full origin-[100%_15%] scale-[1.4] object-cover md:scale-100"
+              style={{ objectPosition: '60% 35%' }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/25 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-background to-transparent" />
           </div>
 
@@ -54,7 +79,7 @@ export default function HomeScreen() {
         <ul className="grid grid-cols-1 gap-3 px-4 md:gap-4 md:px-6 lg:grid-cols-6 lg:px-8">
           {HOME_ORDER.map((id, i) => (
             <li key={id} className={i < 2 ? 'lg:col-span-3' : 'lg:col-span-2'}>
-              <ToolCard id={id} lead={i < 2} />
+              <ToolCard id={id} lead={i < 2} eager={i < 2} />
             </li>
           ))}
         </ul>
@@ -67,8 +92,9 @@ export default function HomeScreen() {
   );
 }
 
-function ToolCard({ id, lead }: { id: keyof typeof TOOLS; lead: boolean }) {
+function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; eager: boolean }) {
   const tool = TOOLS[id];
+  const art = CARD_ART[id];
   const Icon = tool.icon;
   return (
     <Link
@@ -77,7 +103,16 @@ function ToolCard({ id, lead }: { id: keyof typeof TOOLS; lead: boolean }) {
       className="group flex h-full items-stretch gap-3 rounded-2xl border border-border bg-card p-2 pr-2.5 shadow-sm transition-colors hover:border-primary/50 active:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:gap-5 md:p-2.5 md:pr-4 lg:flex-col lg:gap-0 lg:p-0"
     >
       <div className={`relative aspect-[4/3] w-[38%] max-w-[260px] shrink-0 self-center overflow-hidden rounded-xl bg-secondary ${lead ? 'lg:aspect-[21/9]' : 'lg:aspect-[16/9]'} lg:w-full lg:max-w-none lg:rounded-b-none lg:rounded-t-2xl`}>
-        <ToolArt tool={id} />
+        <img
+          src={`${ART}${art.src}`}
+          alt={art.alt}
+          width={art.width}
+          height={art.height}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: art.position }}
+        />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-2 lg:items-start lg:p-4">
         <div className="min-w-0 flex-1 py-1">
