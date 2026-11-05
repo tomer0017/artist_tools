@@ -241,11 +241,15 @@ export const BLINK_INTERVAL_MS: Record<BlinkSpeed, number> = {
   fast: 300,
 };
 
-/** Per-frame delay (ms) for exported GIFs, by speed preset. */
+/**
+ * Per-frame delay (ms) for exported GIFs, by speed preset. 1.5× the original
+ * 180/110/60 so a comparison is easier to inspect. GIF stores delays in 1/100 s,
+ * so normal's 1.5 × 110 = 165 is encoded as 170.
+ */
 export const GIF_FRAME_DELAY_MS: Record<GifSpeed, number> = {
-  slow: 180,
-  normal: 110,
-  fast: 60,
+  slow: 270,
+  normal: 170,
+  fast: 90,
 };
 
 export const GIF_SIZE_MAX_DIM: Record<GifSize, number> = {

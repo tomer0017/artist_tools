@@ -126,6 +126,14 @@ test('Compare Art: Images → Align → Compare → Save, incl. GIF and still ex
     const bytes = Buffer.concat(chunks);
     expect(bytes.subarray(0, 3).toString('ascii')).toBe('GIF');
     expect(bytes.length).toBeGreaterThan(100);
+    // Every frame's Graphic Control Extension holds the default (normal)
+    // delay: 17/100 s, i.e. 1.5× the original 110 ms.
+    const delays: number[] = [];
+    for (let i = 0; i + 5 < bytes.length; i++) {
+      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) delays.push(bytes.readUInt16LE(i + 4));
+    }
+    expect(delays.length).toBe(11);
+    expect(new Set(delays)).toEqual(new Set([17]));
   }
 
   // Still export + the full export options remain available.
