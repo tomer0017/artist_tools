@@ -56,16 +56,16 @@ async function upload(page: Page, buttonName: string | RegExp) {
 }
 
 const TOOLS = [
-  { card: 'Measure & Plan', nav: 'Measure', hash: '#/measure' },
-  { card: 'Study & Simplify', nav: 'Study', hash: '#/study' },
-  { card: 'Color & Mixing', nav: 'Color', hash: '#/color' },
-  { card: 'Create a Grid', nav: 'Grid', hash: '#/grid' },
-  { card: 'Compare & Correct', nav: 'Compare', hash: '#/compare' },
+  { card: 'Measure & Plan', nav: 'Measure', path: '/app/measure' },
+  { card: 'Study & Simplify', nav: 'Study', path: '/app/study' },
+  { card: 'Color & Mixing', nav: 'Color', path: '/app/color' },
+  { card: 'Create a Grid', nav: 'Grid', path: '/app/grid' },
+  { card: 'Compare & Correct', nav: 'Compare', path: '/app/compare' },
 ];
 
 test.describe('desktop', () => {
   test('Home explains all five tools and every card opens its tool', async ({ page }) => {
-    await page.goto('/artist_tools/');
+    await page.goto('/app');
     await expect(page.getByRole('heading', { name: /Your All-in-One/ })).toBeVisible();
     for (const t of TOOLS) {
       const card = page.getByRole('link', { name: new RegExp(`^${t.card}:`) });
@@ -74,15 +74,15 @@ test.describe('desktop', () => {
       await expect(card.getByRole('img').first()).toBeVisible();
     }
     for (const t of TOOLS) {
-      await page.goto('/artist_tools/');
+      await page.goto('/app');
       await page.getByRole('link', { name: new RegExp(`^${t.card}:`) }).click();
-      await expect(page).toHaveURL(new RegExp(`${t.hash}$`));
+      await expect(page).toHaveURL(new RegExp(`${t.path}$`));
       await expect(page.getByRole('heading', { name: t.card })).toBeVisible();
     }
   });
 
   test('top navigation switches tools directly, marks the active one, and Back works', async ({ page }) => {
-    await page.goto('/artist_tools/#/grid');
+    await page.goto('/app/grid');
     const nav = page.getByRole('navigation', { name: 'Tools' });
     await expect(nav.getByRole('link', { name: 'Grid' })).toHaveAttribute('aria-current', 'page');
     await nav.getByRole('link', { name: 'Study' }).click();
@@ -95,12 +95,12 @@ test.describe('desktop', () => {
   });
 
   test('unknown tool URLs fall back to Home', async ({ page }) => {
-    await page.goto('/artist_tools/#/nope');
+    await page.goto('/app/nope');
     await expect(page.getByRole('heading', { name: /Your All-in-One/ })).toBeVisible();
   });
 
   test('switching tools keeps Compare and Study work in memory', async ({ page }) => {
-    await page.goto('/artist_tools/#/compare');
+    await page.goto('/app/compare');
     for (let i = 0; i < 2; i++) {
       await upload(page, 'Choose');
       await page.getByRole('button', { name: 'Confirm crop' }).click();
@@ -109,7 +109,9 @@ test.describe('desktop', () => {
     await page.getByRole('button', { name: /Skip to Compare/ }).click();
     await page.getByRole('button', { name: 'Reference', exact: true }).click();
 
-    await page.goto('/artist_tools/#/study');
+    // Switch the way artists do, inside the app: a page.goto would be a full
+    // page load (like a browser refresh), which never kept in-memory work.
+    await page.getByRole('navigation', { name: 'Tools' }).getByRole('link', { name: 'Study' }).click();
     await upload(page, 'Upload reference photo');
     await expect(page.getByRole('radio', { name: /Values/ })).toBeVisible();
 
@@ -126,7 +128,7 @@ test.describe('mobile', () => {
   test.use({ viewport: { width: 375, height: 740 }, hasTouch: true, isMobile: true });
 
   test('bottom navigation shows six labelled destinations and fits the screen', async ({ page }) => {
-    await page.goto('/artist_tools/');
+    await page.goto('/app');
     const nav = page.getByRole('navigation', { name: 'Tools' });
     for (const label of ['Home', 'Measure', 'Study', 'Grid', 'Compare', 'Color']) {
       await expect(nav.getByRole('link', { name: label })).toBeVisible();
@@ -141,7 +143,7 @@ test.describe('mobile', () => {
   });
 
   test('Measure: tapping the "Tap to start" coach does not create a point (regression)', async ({ page }) => {
-    await page.goto('/artist_tools/#/measure');
+    await page.goto('/app/measure');
     await upload(page, 'Upload reference photo');
     const coach = page.getByRole('button', { name: 'Tap to start' });
     await expect(coach).toBeVisible();
@@ -167,7 +169,7 @@ test.describe('mobile', () => {
   });
 
   test('the bottom navigation never covers a tool\'s primary action', async ({ page }) => {
-    await page.goto('/artist_tools/#/grid');
+    await page.goto('/app/grid');
     await upload(page, 'Upload reference photo');
     const save = page.getByRole('button', { name: 'Save grid image' });
     const nav = page.getByRole('navigation', { name: 'Tools' });

@@ -65,7 +65,7 @@ export default function CompareCropScreen({ role, image, initialCrop, onConfirm,
     | { kind: 'resizeFrame'; corner: number; fixed: Vec }
     | null
   >(null);
-  const raf = useRef<number>();
+  const raf = useRef<number>(undefined);
 
   const viewportSize = () => {
     const el = containerRef.current;

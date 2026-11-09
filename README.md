@@ -22,19 +22,25 @@ Everything runs client-side; the active project is auto-saved to the browser's
 ## Getting started
 
 ```sh
-npm install      # install dependencies
-npm run dev      # start the dev server on http://localhost:8080
-npm run build    # production build
-npm run test     # run the unit tests (vitest)
-npx playwright test   # end-to-end tests (desktop Chromium + iPhone WebKit)
+npm install           # install dependencies
+npm run dev           # dev server on http://localhost:8080 (the studio is at /app)
+npm run build         # production build (self-contained server in .next/standalone)
+npm start             # run the production build on http://localhost:8080
+npm run typecheck     # TypeScript
+npm run lint          # ESLint
+npm run test          # unit tests (vitest)
+npx playwright test   # end-to-end tests on the production build (Chromium + iPhone WebKit)
 ```
+
+The public landing page is `/`; the studio lives under `/app` (`/app/measure`,
+`/app/study`, `/app/color`, `/app/grid`, `/app/compare`). Old `/#/tool` links
+are forwarded to the new URLs.
 
 ## Tech stack
 
-- Vite + React 18 + TypeScript
+- Next.js 16 (App Router) + React 19 + TypeScript
 - Tailwind CSS with shadcn/ui (Radix) components
-- React Router (HashRouter) for GitHub Pages hosting
-- Canvas 2D APIs for all image processing and exports
+- Canvas 2D APIs for all image processing and exports (in the browser)
 
 ## Project documentation
 

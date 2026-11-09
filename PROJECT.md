@@ -25,35 +25,45 @@ the exception — it manages its own two images and an isolated saved session):
 
 Everything runs client-side. The active project (image, measurements, layers,
 sampled colors, value/grid settings) is auto-saved to `localStorage`, so a
-refresh restores the last session. The app is deployed to GitHub Pages under
-`/artist_tools/` and uses `HashRouter` so deep links work on static hosting.
+refresh restores the last session. The app is a Next.js (App Router)
+application: a public landing page at `/` and the studio under `/app`. Until the
+Next.js version goes live, production is still the pre-migration Vite build on
+GitHub Pages (`/artist_tools/`, hash routes), deployed from
+`develop/post-v0.5.0-ux-improvements`.
 
 ## General Architecture
 
 ```
 .
-├── index.html                  App shell + meta tags
-├── vite.config.ts              Vite config (base "/artist_tools/", port 8080, @ alias)
+├── next.config.ts              Next.js config (standalone output, StrictMode off as before)
+├── scripts/prepare-standalone.mjs  Copies public/ + static assets into .next/standalone after build
 ├── tailwind.config.ts          Tailwind theme (HSL CSS-variable design tokens)
-├── playwright.config.ts        @playwright/test config; e2e/ holds the Compare Art workflow spec
+├── playwright.config.ts        @playwright/test config (runs on the production build)
+├── e2e/                        End-to-end specs + opt-in visual-parity harness
 ├── PROJECT.md                  ← this file
 └── src/
-    ├── main.tsx                React root; renders <App />
-    ├── App.tsx                 Providers (QueryClient, Tooltip, Toasters) + HashRouter
+    ├── app/                    Next.js App Router
+    │   ├── layout.tsx          Root layout: <html>, metadata, viewport, index.css
+    │   ├── page.tsx            Public landing page (/) + legacy /#/tool forwarding
+    │   ├── not-found.tsx       404 page
+    │   └── app/                The studio (/app)
+    │       ├── layout.tsx      Renders the studio once for every /app route
+    │       ├── page.tsx        Home marker (renders nothing)
+    │       └── [tool]/page.tsx Tool markers; unknown tools redirect to /app
     ├── index.css               Design tokens + utility classes (.btn-tool, .tab-button, surfaces)
     ├── App.css                 Legacy Vite scaffold styles (not imported anywhere)
-    ├── pages/
-    │   ├── Index.tsx           The whole app: ProjectProvider + tab Workspace
-    │   └── NotFound.tsx        404 catch-all route
     ├── components/
-    │   ├── shell/              App shell: Home hub, navigation, shared tool chrome
+    │   ├── shell/              App shell: studio, Home hub, navigation, shared tool chrome
+    │   │   ├── Studio.tsx      The whole studio: providers + ProjectProvider + tab Workspace
+    │   │   ├── StudioClient.tsx  Renders the studio in the browser only (after mount)
+    │   │   ├── LegacyHashRedirect.tsx  Forwards old /#/tool links to /app/tool
     │   │   ├── tools.ts        Tool registry (titles, descriptions, icons, URL slugs)
     │   │   ├── HomeScreen.tsx  Home / Tool Hub (five illustrated tool cards)
-    │   │   ├── AppNav.tsx      BottomNav (phones) + TopNav (tablet/desktop) + BrandMark
+    │   │   ├── AppNav.tsx      BottomNav (phones) + TopNav (tablet/desktop)
+    │   │   ├── BrandMark.tsx   Logo + wordmark (also used by the landing page)
     │   │   ├── ToolHeader.tsx  ToolHeader, ToolHelpButton, HeaderIconButton, StepIndicator
     │   │   ├── ToolEmptyState.tsx  First screen of an image tool (art + steps + upload)
     │   │   └── ToolArt.tsx     SVG illustrations (portrait in photo/flat/values/sketch, hero eye)
-    │   ├── NavLink.tsx         Thin react-router NavLink wrapper (currently unused by pages)
     │   ├── common/ImageUploader.tsx   File picker / drag-drop → data URL
     │   ├── measure/            Measure tool (canvas, toolbar, panel, mobile, tab)
     │   ├── value/ValueTab.tsx  Value study + palette extraction + Sketch mode
@@ -69,18 +79,29 @@ refresh restores the last session. The app is deployed to GitHub Pages under
     └── test/                   Vitest setup + a placeholder test
 ```
 
-The app is intentionally a **single page** (`/`) that swaps tool panels based on
-the `activeTab` value in the project store — not a multi-route SPA. `HashRouter`
-exists only to serve that page and a 404 fallback from GitHub Pages.
+The studio is intentionally **one persistent workspace**: every `/app` route
+shares one layout (`src/app/app/layout.tsx`) that renders the studio, and the
+studio swaps tool panels based on the `activeTab` value in the project store.
+The route pages render nothing, so changing the URL never remounts a tool. The
+studio renders only in the browser (it starts from `localStorage` and its layout
+depends on the screen size), while its code is part of the page's first
+download.
 
 ## Pages
 
-### Workspace — route `/:view?` (`src/pages/Index.tsx`)
-- **Purpose:** The entire application: the Home / Tool Hub and the five tools.
-  One route serves every view (`#/`, `#/measure`, `#/study`, `#/color`,
-  `#/grid`, `#/compare`), so switching tools never remounts the workspace and
-  the browser / iOS back gesture moves between tools. Unknown segments
-  redirect to Home.
+### Landing — route `/` (`src/app/page.tsx`)
+- **Purpose:** Public entry point; a placeholder reusing the studio hero until
+  the marketing page is designed. "Open the studio" goes to `/app`.
+- Old hash links (`/#/compare`) are forwarded to `/app/compare` by
+  `LegacyHashRedirect` (unknown tools → `/app`), because a hash never reaches
+  the server.
+
+### Studio — routes `/app` and `/app/[tool]` (`src/components/shell/Studio.tsx`)
+- **Purpose:** The Home / Tool Hub and the five tools. Every view has its own
+  URL (`/app`, `/app/measure`, `/app/study`, `/app/color`, `/app/grid`,
+  `/app/compare`); they share one layout, so switching tools never remounts
+  the workspace and the browser / iOS back gesture moves between tools.
+  Unknown tools redirect to Home.
 - **Features & functionality:**
   - `useViewRouting` keeps the URL and the store's `activeTab` (`ViewId` =
     `'home' | TabId`, default `'home'`) in sync both ways — nav links change
@@ -131,9 +152,6 @@ exists only to serve that page and a 404 fallback from GitHub Pages.
   in the accessibility tree via `sr-only`).
 - **ToolEmptyState** (`shell/ToolEmptyState.tsx`) — the no-image screen for
   Measure / Study / Grid: illustration, 3 numbered steps, primary upload.
-- **NavLink** (`NavLink.tsx`) — `forwardRef` wrapper around react-router's
-  `NavLink` adding `activeClassName`/`pendingClassName` compatibility props.
-  Present but not used by the current single-page UI.
 - **ImageUploader** (`common/ImageUploader.tsx`) — Reusable uploader with a full
   drop-zone variant, a `compact` icon-button variant and a `primary`
   full-width call-to-action button variant (also accepts drops). Validates the MIME
@@ -460,17 +478,15 @@ out-of-range settings being clamped rather than misbehaving.
 - **Cross-tool handoff** uses `sessionStorage` key `use-color-in-tab`: a sampled
   swatch in Measure stashes a hex and switches to the Color tab, which reads and
   clears it on mount.
-- **React Query** (`QueryClient`) is provided in `App.tsx` for parity with the
+- **React Query** (`QueryClient`) is provided in `Studio.tsx` for parity with the
   original scaffold but is not currently used for data fetching (the app has no
   backend).
 
 ## Key Dependencies
 
-- **react / react-dom (18)** — UI runtime.
-- **vite + @vitejs/plugin-react-swc** — dev server (port 8080) and build.
-  `base` is `/artist_tools/` for GitHub Pages.
-- **react-router-dom (HashRouter)** — serves the single page + 404 from static
-  hosting.
+- **next (16, App Router)** — routing, server, build (`output: 'standalone'`);
+  dev and production server on port 8080.
+- **react / react-dom (19)** — UI runtime.
 - **tailwindcss + tailwindcss-animate + @tailwindcss/typography** — styling via
   HSL CSS-variable design tokens defined in `index.css`.
 - **shadcn/ui + @radix-ui/\*** — accessible UI primitives in `components/ui`
@@ -479,10 +495,11 @@ out-of-range settings being clamped rather than misbehaving.
 - **@tanstack/react-query** — provider wired up; no active queries yet.
 - **sonner / next-themes / class-variance-authority / clsx / tailwind-merge /
   zod / react-hook-form** — standard shadcn supporting libraries.
-- **vitest + @testing-library/react + jsdom** — unit testing (`npm run test`).
-- **@playwright/test** — installed for future e2e; `playwright.config.ts` is a
-  standard self-contained config (no specs committed yet).
-- **gh-pages** — `npm run deploy` publishes `dist/` to GitHub Pages.
+- **vitest + @testing-library/react + jsdom** — unit testing (`npm run test`;
+  vite + @vitejs/plugin-react-swc remain only as vitest's transform).
+- **@playwright/test** — end-to-end specs in `e2e/` (Chromium + iPhone WebKit),
+  run against the production build; `PARITY=vite|next` runs the visual-parity
+  harness instead.
 
 All image processing relies on the browser's native **Canvas 2D API**
 (`getImageData` / `putImageData` / `drawImage` / `toDataURL` / `toBlob`); there
@@ -567,7 +584,7 @@ best native path and guides the user.
   `shared`/`cancelled`/`unsupported`/`error`), `downloadBlob`, `canvasToBlob`,
   `dataUrlToBlob`, `isIOS`/`isTouchDevice`.
 - `src/components/common/SaveMedia.tsx` — `SaveMediaProvider` (mounted in
-  `App.tsx`) + `useSaveMedia().save({ blob, filename, mime? })`. Renders one
+  `Studio.tsx`) + `useSaveMedia().save({ blob, filename, mime? })`. Renders one
   preview sheet showing the ACTUAL image/GIF (object URL, revoked on close). On
   touch/iOS the primary action is **Save to Photos** (native share, file only)
   with the guidance "In the next screen, choose Save Image."
@@ -727,3 +744,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-07-25 | **Replaced Sketch mode with a deterministic vector-trace filter** (`src/lib/sketch/trace.ts`) and deleted the contour/heuristic engine. The previous versions decided for the user what was worth drawing (subject/priority/feature maps, contour scoring, ink budgets); this one decides nothing. Professional control set instead: Threshold (Photoshop semantics), Local threshold radius (0 = global), Smoothing, Noise (min feature area, Illustrator semantics), Simplify (RDP), Corners (sharp ↔ rounded), Invert — plus presets that are just sets of those values. Pipeline: edge-preserving smoothing → global or local-max threshold → morphological open/close + connected-component noise floor → marching squares → RDP → one even-odd path. Grayscale cached per image; smoothing and local reference memoised per setting. SVG export emits the same polygons as the canvas. Removed `pipeline.ts`, `styles.ts`, `analysis.ts`, `types.ts`, `contours.ts` and the stroke renderer (~1600 lines); `sketchDetail`/`sketchShading` kept in `ValueSettings` only so old saved projects still load. Tests: `trace.test.ts` — determinism, order-independence, threshold monotonicity, extremes, noise, invert, uneven lighting, clamping. | src/lib/sketch/{trace,trace.test}.ts (new), src/lib/sketch/{imageOps,regions,vector,render,index}.ts, src/lib/sketch/{pipeline,styles,analysis,types,contours,pipeline.test}.ts (deleted), src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
 | 2026-07-25 | **Vector trace: painter-facing controls and a mobile-usable slider.** (1) Replaced every `input[type=range]` in Value/Sketch with `src/components/common/Slider.tsx` — pointer events + `setPointerCapture` (in a try/catch, so a capture failure can never abort a drag) + `touch-action: pan-y` + a 44px touch target + full ARIA and keyboard support. Verified on **WebKit/iPhone 13**: one continuous drag produced 14 distinct values, page scrollY stayed 0, and a second drag started immediately. (2) Renamed the controls for what the painter sees: Threshold→**Ink**, Noise→**Detail**, plus a new **Separation** (percentile levels stretch + S-curve before thresholding). Both primary mappings are non-linear and were tuned by visual sweep — Ink spans threshold ratio 0.30–0.62, Detail tops out at 0.05% of the frame (an iris is 0.12%). Advanced controls, Invert, Save-SVG and Reset live behind a **More controls** disclosure. (3) White holes are now cleaned independently of black shapes and protected by shape, so eye whites and brow/lid gaps survive maximum Detail. (4) Sketch mode drops the colour palette entirely (strip, tab and pane) and the preview takes the space; **Replace image** is a visible 44×44 button over the preview using the shared uploader, clearing all cached analysis. (5) Preview renders at 1× while a control is under the finger and 2× on release — same composition, no reframing. Regression captured across bearded/female/light-hair/low-contrast/high-contrast/animal/object scenes. | src/components/common/Slider.tsx (new), src/lib/sketch/{trace,trace.test,regions}.ts, src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
 | 2026-11-02 | **UX/IA redesign: Home hub, global navigation, shared tool chrome, step-based tools.** New `src/components/shell/` (tool registry, Home / Tool Hub with SVG outcome illustrations, labelled BottomNav/TopNav, ToolHeader + StepIndicator + ToolHelpButton, ToolEmptyState). Routing: one `/:view?` route with per-tool URLs synced to `activeTab` (now `ViewId`, default `'home'`); `Header.tsx` removed. KeepAlive for Study/Color/Compare. Tutorials no longer auto-open (`AUTO_START_TUTORIALS = false` in onboardingConfig; Help replays everything). **Measure:** step row with always-visible scale + "Change", instruction card and result card ("Draw this distance as X on your artwork") below the canvas instead of floating, explicit pan badge, Save image in header; **TapCoach is now a button that arms selection without placing a point** (mobile + desktop); cancelling a re-scale returns to measuring. **Study:** Color/Values/Sketch picture cards replace the floating switcher; Save is the primary action. **Color:** four sections (Color Wheel / Harmonies / Mixing / Skin Tones) each with a purpose line; selected colour carried across. **Grid:** 3×3 / 4×4 (recommended) / 8×8 presets, Fit/Fill/Center, primary "Save grid image", full settings under Customize. **Compare:** Images → Align → Compare → Save flow; Smart Align (recommended) / Manual; during Smart Align the canvas shows only the image being tapped and the instruction panel has a fixed height (a resizing panel shifted the image under the finger between taps); Artwork / 50-50 / Reference + opacity + grid + more views; Save step = one-tap comparison GIF + still/advanced export. No calculation, image-processing, export or storage-format changes. Tests: rewrote `e2e/onboarding.spec.ts` + `e2e/compare-art.spec.ts` for the new flows; new `e2e/navigation.spec.ts`; Playwright `iphone-webkit` project runs the mobile tests on WebKit. | src/components/shell/* (new), src/pages/Index.tsx, src/App.tsx, src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/layout/Header.tsx (deleted), src/components/common/ImageUploader.tsx, src/components/measure/{MeasureTab,MeasureMobile,MeasureCanvas}.tsx, src/components/measure/onboarding/{TapCoach.tsx,useMeasureIntro.ts}, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/grid/GridTab.tsx, src/features/compare-art/{CompareArt,CompareCanvas,CompareOverlayBar,CompareUploadStep}.tsx, src/features/compare-art/onboarding/useCompareIntro.ts, src/onboarding/{OnboardingHost.tsx,onboardingConfig.ts,index.ts}, e2e/*, playwright.config.ts, PROJECT.md |
+| 2026-11-09 | **Migrated from Vite to Next.js 16 (App Router) + React 19**, behaviour-preserving. Public landing at `/`; the studio under `/app` (`/app/<tool>`), rendered once by a shared layout so tools stay mounted across URLs (KeepAlive preserved); client-only studio rendering with its code in the first download; old `/#/tool` links forwarded; unknown tools → `/app`. Removed react-router-dom, gh-pages and the unused calendar/drawer components (React-18-only deps). Lint errors fixed (0 errors). Tests: 78 unit, 19 e2e (4 new routing specs), 36/36 visual-parity screenshots identical to the pre-migration build. Checkpoint tag `pre-nextjs-migration-2026-11-09`. | src/app/*, src/components/shell/{Studio,StudioClient,BrandMark,LegacyHashRedirect,AppNav,HomeScreen,tools}, next.config.ts, tsconfig.json, eslint.config.js, package.json, playwright.config.ts, e2e/*, scripts/prepare-standalone.mjs, README.md, PROJECT.md |

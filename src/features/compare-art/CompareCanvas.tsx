@@ -103,9 +103,9 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
 
   // Difference overlay cache.
   const diffOverlay = useRef<{ data: Uint8ClampedArray; width: number; height: number } | null>(null);
-  const diffTimer = useRef<ReturnType<typeof setTimeout>>();
+  const diffTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const rafId = useRef<number>();
+  const rafId = useRef<number>(undefined);
 
   // 2-point alignment: a magnifier follows the finger and the point is only
   // committed on release (never on touch-down), so the finger never hides the

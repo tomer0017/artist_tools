@@ -1,5 +1,12 @@
+'use client';
+
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { usePathname, useRouter } from 'next/navigation';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster as Sonner } from '@/components/ui/sonner';
+import { Toaster } from '@/components/ui/toaster';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { SaveMediaProvider } from '@/components/common/SaveMedia';
 import { ProjectProvider, useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ViewId } from '@/types/project';
@@ -9,12 +16,14 @@ import ColorTab from '@/components/color/ColorTab';
 import GridTab from '@/components/grid/GridTab';
 import HomeScreen from '@/components/shell/HomeScreen';
 import { BottomNav, TopNav } from '@/components/shell/AppNav';
-import { pathForView, viewFromPath } from '@/components/shell/tools';
+import { pathForView, viewFromPathname } from '@/components/shell/tools';
 import { OnboardingProvider, OnboardingHost } from '@/onboarding';
 
 // Compare Art (with its gifenc dependency) is code-split so it never weighs down
 // the initial load of the other workspaces.
 const CompareArt = lazy(() => import('@/features/compare-art/CompareArt'));
+
+const queryClient = new QueryClient();
 
 // iOS Safari/Chrome: keep an accurate viewport height that accounts for
 // dynamic toolbars and the on-screen keyboard. Avoids 100vh layout jumps
@@ -41,14 +50,14 @@ function useAppHeight() {
   }, []);
 }
 
-// Keeps the URL (#/measure, #/study…) and the store's activeTab in step, in
-// both directions: navigation links change the URL, while a tool can still
+// Keeps the URL (/app/measure, /app/study…) and the store's activeTab in step,
+// in both directions: navigation links change the URL, while a tool can still
 // hand off with setActiveTab (e.g. Measure → "use this color in Color").
 function useViewRouting() {
-  const { view: segment } = useParams();
-  const navigate = useNavigate();
+  const pathname = usePathname();
+  const router = useRouter();
   const { activeTab, setActiveTab } = useProject();
-  const urlView = viewFromPath(segment);
+  const urlView = viewFromPathname(pathname);
   const activeRef = useRef(activeTab);
   activeRef.current = activeTab;
   // A URL-driven change the store hasn't caught up with yet; while set, the
@@ -57,20 +66,20 @@ function useViewRouting() {
 
   useEffect(() => {
     if (urlView === null) {
-      navigate('/', { replace: true });
+      router.replace(pathForView('home'));
       return;
     }
     if (urlView === activeRef.current) return;
     pending.current = urlView;
     setActiveTab(urlView);
-  }, [urlView, navigate, setActiveTab]);
+  }, [urlView, router, setActiveTab]);
 
   useEffect(() => {
     if (pending.current !== null) {
       if (activeTab === pending.current) pending.current = null;
       return;
     }
-    if (urlView !== null && activeTab !== urlView) navigate(pathForView(activeTab));
+    if (urlView !== null && activeTab !== urlView) router.push(pathForView(activeTab));
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
@@ -159,12 +168,21 @@ function Workspace() {
   );
 }
 
-export default function Index() {
+/** The whole studio: Home and every tool, with the providers they share. */
+export default function Studio() {
   return (
-    <ProjectProvider>
-      <OnboardingProvider>
-        <Workspace />
-      </OnboardingProvider>
-    </ProjectProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <SaveMediaProvider>
+          <ProjectProvider>
+            <OnboardingProvider>
+              <Workspace />
+            </OnboardingProvider>
+          </ProjectProvider>
+        </SaveMediaProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }

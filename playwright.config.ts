@@ -34,11 +34,14 @@ export default defineConfig({
           grep: /mobile/,
         },
       ],
+  // Tests run against a production build (next start), not the dev server: it
+  // is what ships, and it does not compile routes on first visit mid-test.
   webServer: process.env.PARITY_BASE_URL
     ? undefined
     : {
-        command: "npm run dev",
+        command: "npm run build && npm run start",
         url: "http://localhost:8080",
         reuseExistingServer: !process.env.CI,
+        timeout: 300_000,
       },
 });

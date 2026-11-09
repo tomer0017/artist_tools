@@ -163,7 +163,7 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
   ) => (src && ref.current?.src === src ? ref.current.compact : src);
 
   // ── Autosave (debounced) ──────────────────────────────────────────────────
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {

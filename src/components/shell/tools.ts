@@ -87,9 +87,15 @@ const SLUGS: Record<TabId, string> = {
   compare: 'compare',
 };
 
-/** URL path for each view (Home is the root). */
+/** URL segments of the tools, e.g. for the router to know which tool pages exist. */
+export const TOOL_SLUGS: string[] = Object.values(SLUGS);
+
+/** The studio lives under /app; the site root is the public landing page. */
+const STUDIO_ROOT = '/app';
+
+/** URL path for each view (Home is the studio root). */
 export function pathForView(view: ViewId): string {
-  return view === 'home' ? '/' : `/${SLUGS[view]}`;
+  return view === 'home' ? STUDIO_ROOT : `${STUDIO_ROOT}/${SLUGS[view]}`;
 }
 
 /** Parse a URL segment into a view; undefined segment = Home, unknown = null. */
@@ -97,4 +103,12 @@ export function viewFromPath(segment: string | undefined): ViewId | null {
   if (!segment) return 'home';
   const hit = (Object.keys(SLUGS) as TabId[]).find((id) => SLUGS[id] === segment);
   return hit ?? null;
+}
+
+/** Parse a studio pathname (/app, /app/study…) into a view; anything else = null. */
+export function viewFromPathname(pathname: string): ViewId | null {
+  if (pathname === STUDIO_ROOT || pathname === `${STUDIO_ROOT}/`) return 'home';
+  if (!pathname.startsWith(`${STUDIO_ROOT}/`)) return null;
+  const segment = pathname.slice(STUDIO_ROOT.length + 1).replace(/\/$/, '');
+  return segment.includes('/') ? null : viewFromPath(segment);
 }

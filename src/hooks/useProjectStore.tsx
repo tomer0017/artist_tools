@@ -171,7 +171,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const redoStack = useRef<MeasurementLine[][]>([]);
 
   // Auto-save
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {

@@ -20,23 +20,23 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('tutorials do not open on their own, even on a first visit', async ({ page }) => {
-  await page.goto('/artist_tools/#/study');
+  await page.goto('/app/study');
   await expect(page.getByRole('heading', { name: 'Study & Simplify' })).toBeVisible();
   // Give the old 450ms auto-start delay ample time to (not) fire.
   await page.waitForTimeout(1500);
   await expect(page.getByRole('dialog', { name: 'Value Study' })).toBeHidden();
 
-  await page.goto('/artist_tools/#/color');
+  await page.goto('/app/color');
   await page.waitForTimeout(1500);
   await expect(page.getByRole('dialog', { name: 'Color Studio' })).toBeHidden();
 
-  await page.goto('/artist_tools/#/compare');
+  await page.goto('/app/compare');
   await page.waitForTimeout(1500);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('Help replays the preview and the guided tour on demand', async ({ page }) => {
-  await page.goto('/artist_tools/#/study');
+  await page.goto('/app/study');
   await page.getByRole('button', { name: 'Show tutorial' }).click();
 
   const preview = page.getByRole('dialog', { name: 'Value Study' });
@@ -57,7 +57,7 @@ test('Help replays the preview and the guided tour on demand', async ({ page }) 
 });
 
 test('each tool replays its own onboarding', async ({ page }) => {
-  await page.goto('/artist_tools/#/study');
+  await page.goto('/app/study');
   await page.getByRole('button', { name: 'Show tutorial' }).click();
   const value = page.getByRole('dialog', { name: 'Value Study' });
   await expect(value).toBeVisible();
@@ -70,7 +70,7 @@ test('each tool replays its own onboarding', async ({ page }) => {
 });
 
 test('Measure never shows the generic tour', async ({ page }) => {
-  await page.goto('/artist_tools/#/measure');
+  await page.goto('/app/measure');
   await expect(page.getByRole('heading', { name: 'Measure & Plan' })).toBeVisible();
   await page.waitForTimeout(1000);
   await expect(page.getByRole('dialog', { name: 'Proportion Measure' })).toBeHidden();

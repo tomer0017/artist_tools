@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
-import { Layers } from 'lucide-react';
+import Link from 'next/link';
 import { useProject } from '@/hooks/useProjectStore';
 import type { ViewId } from '@/types/project';
+import { BrandMark } from './BrandMark';
 import { NAV_ORDER, navItem, pathForView } from './tools';
 
 // ─── Global navigation ────────────────────────────────────────────────────────
@@ -9,17 +9,6 @@ import { NAV_ORDER, navItem, pathForView } from './tools';
 // testing showed icon-only tabs left first-time users guessing. Items are real
 // links (one URL per tool), so the browser / iOS back gesture moves between
 // tools the way people expect.
-
-export function BrandMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className="flex items-center gap-2">
-      <Layers className={compact ? 'h-6 w-6 text-primary' : 'h-7 w-7 text-primary'} strokeWidth={2.2} aria-hidden="true" />
-      <span className={`font-semibold leading-[1.05] tracking-tight text-foreground ${compact ? 'text-sm' : 'text-[15px]'}`}>
-        Studio<br />Companion
-      </span>
-    </span>
-  );
-}
 
 /** Mobile: a labelled six-item bar pinned above the home indicator. */
 export function BottomNav() {
@@ -46,7 +35,7 @@ export function TopNav() {
   const { activeTab } = useProject();
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border px-4 toolbar-surface lg:px-6">
-      <Link to="/" aria-label="Studio Companion — Home" className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Link href={pathForView('home')} aria-label="Studio Companion — Home" className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <BrandMark compact />
       </Link>
       <nav aria-label="Tools" className="ml-auto min-w-0">
@@ -68,7 +57,7 @@ function NavItemLink({ id, active, variant }: { id: ViewId; active: boolean; var
   if (variant === 'bottom') {
     return (
       <Link
-        to={pathForView(id)}
+        href={pathForView(id)}
         aria-current={active ? 'page' : undefined}
         className={`flex h-14 w-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
           active ? 'text-primary' : 'text-muted-foreground active:text-foreground'
@@ -83,7 +72,7 @@ function NavItemLink({ id, active, variant }: { id: ViewId; active: boolean; var
   }
   return (
     <Link
-      to={pathForView(id)}
+      href={pathForView(id)}
       aria-current={active ? 'page' : undefined}
       className={`flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-3.5 lg:text-sm ${
         active

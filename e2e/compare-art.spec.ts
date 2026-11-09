@@ -47,7 +47,7 @@ const reference = { name: 'reference.png', mimeType: 'image/png', buffer: makePn
 
 test('Compare Art: Images → Align → Compare → Save, incl. GIF and still export', async ({ page }) => {
   page.on('pageerror', (e) => console.log('PAGEERROR:', e.message));
-  await page.goto('/artist_tools/#/compare');
+  await page.goto('/app/compare');
 
   // Step 1 — Images. Two clearly-labelled slots; Continue waits for both.
   await expect(page.getByRole('heading', { name: 'Compare & Correct' })).toBeVisible();

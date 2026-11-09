@@ -31,3 +31,12 @@ dist-ssr
 
 # Visual-parity baseline (machine-specific, see e2e/visual-parity.spec.ts)
 /e2e/.parity-baseline
+
+# Next.js
+/.next
+next-env.d.ts
+*.tsbuildinfo
+
+# Environment files hold secrets; only the example is committed
+.env*
+!.env.example

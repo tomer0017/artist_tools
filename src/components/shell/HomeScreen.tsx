@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { BrandMark } from './AppNav';
+import { BrandMark } from './BrandMark';
 import { HOME_ORDER, TOOLS, pathForView } from './tools';
 import type { TabId } from '@/types/project';
 
@@ -10,7 +10,7 @@ import type { TabId } from '@/types/project';
 // names a painter's goal, shows the outcome as a picture, and opens the tool in
 // one tap. Nothing here needs a tutorial.
 
-const ART = `${import.meta.env.BASE_URL}images/home/`;
+const ART = '/images/home/';
 
 // Artwork for each card. The images are wide; `position` keeps each one's
 // subject in view when a narrow card crops it.
@@ -40,8 +40,7 @@ export default function HomeScreen() {
               alt=""
               width={1199}
               height={1312}
-              // React 18 doesn't know the camelCase prop; pass the HTML attribute.
-              {...{ fetchpriority: 'high' }}
+              fetchPriority="high"
               decoding="async"
               // Phones: zoom toward the sketch and colour wheel so the palette
               // doesn't sit behind the headline.
@@ -98,7 +97,7 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
   const Icon = tool.icon;
   return (
     <Link
-      to={pathForView(id)}
+      href={pathForView(id)}
       aria-label={`${tool.title}: ${tool.description}`}
       className="group flex h-full items-stretch gap-3 rounded-2xl border border-border bg-card p-2 pr-2.5 shadow-sm transition-colors hover:border-primary/50 active:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:gap-5 md:p-2.5 md:pr-4 lg:flex-col lg:gap-0 lg:p-0"
     >
