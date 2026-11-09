@@ -16,7 +16,16 @@ function GoogleLogo() {
   );
 }
 
-export default function SignInCard({ callbackPath, error }: { callbackPath: string; error: string | null }) {
+export default function SignInCard({
+  callbackPath,
+  available,
+  error,
+}: {
+  callbackPath: string;
+  /** False until this server's Google OAuth client is configured. */
+  available: boolean;
+  error: string | null;
+}) {
   const [state, setState] = useState<'idle' | 'redirecting' | 'failed'>('idle');
 
   async function signIn() {
@@ -39,6 +48,12 @@ export default function SignInCard({ callbackPath, error }: { callbackPath: stri
         <h1 className="mt-6 text-2xl font-bold tracking-tight text-foreground">Sign in to Studio Companion</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Use your Google account to open the studio.</p>
 
+        {!available && (
+          <p className="mt-5 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground">
+            Sign-in is not set up on this server yet. Please check back soon.
+          </p>
+        )}
+
         {message && (
           <p role="alert" className="mt-5 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-foreground">
             {message}
@@ -48,7 +63,7 @@ export default function SignInCard({ callbackPath, error }: { callbackPath: stri
         <button
           type="button"
           onClick={signIn}
-          disabled={state === 'redirecting'}
+          disabled={!available || state === 'redirecting'}
           className="mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white px-4 text-[15px] font-semibold text-neutral-900 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
         >
           {state === 'redirecting' ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <GoogleLogo />}

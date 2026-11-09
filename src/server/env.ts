@@ -14,12 +14,18 @@ const dbSchema = z.object({
   MONGODB_DB: required('MONGODB_DB'),
 });
 
-const authSchema = z.object({
-  BETTER_AUTH_URL: required('BETTER_AUTH_URL').url('BETTER_AUTH_URL must be a full URL, e.g. http://localhost:8080'),
-  BETTER_AUTH_SECRET: required('BETTER_AUTH_SECRET').min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
-  GOOGLE_CLIENT_ID: required('GOOGLE_CLIENT_ID'),
-  GOOGLE_CLIENT_SECRET: required('GOOGLE_CLIENT_SECRET'),
-});
+// Google credentials are optional (a server can run before its OAuth client
+// exists: sign-in then says it is not set up yet), but never half-configured.
+const authSchema = z
+  .object({
+    BETTER_AUTH_URL: required('BETTER_AUTH_URL').url('BETTER_AUTH_URL must be a full URL, e.g. http://localhost:8080'),
+    BETTER_AUTH_SECRET: required('BETTER_AUTH_SECRET').min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+  })
+  .refine((env) => !env.GOOGLE_CLIENT_ID === !env.GOOGLE_CLIENT_SECRET, {
+    message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together',
+  });
 
 function read<T extends z.ZodTypeAny>(schema: T, area: string): z.infer<T> {
   const result = schema.safeParse(process.env);
@@ -30,4 +36,14 @@ function read<T extends z.ZodTypeAny>(schema: T, area: string): z.infer<T> {
 }
 
 export const dbConfig = () => read(dbSchema, 'database');
-export const authConfig = () => read(authSchema, 'authentication');
+export function authConfig() {
+  const env = read(authSchema, 'authentication');
+  return {
+    baseURL: env.BETTER_AUTH_URL,
+    secret: env.BETTER_AUTH_SECRET,
+    google:
+      env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+        : null,
+  };
+}

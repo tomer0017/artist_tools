@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import SignInCard from '@/components/auth/SignInCard';
 import { safeCallbackPath } from '@/lib/redirects';
+import { googleSignInAvailable } from '@/server/auth';
 import { getSession } from '@/server/session';
 
 export const metadata: Metadata = {
@@ -28,5 +29,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const callbackPath = safeCallbackPath(first(params.callbackURL));
   if (await getSession()) redirect(callbackPath);
   const error = first(params.error);
-  return <SignInCard callbackPath={callbackPath} error={error ? (MESSAGES[error] ?? GENERIC) : null} />;
+  return (
+    <SignInCard callbackPath={callbackPath} available={googleSignInAvailable()} error={error ? (MESSAGES[error] ?? GENERIC) : null} />
+  );
 }

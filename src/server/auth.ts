@@ -23,7 +23,8 @@ interface AuthDeps {
   client: MongoClient;
   baseURL: string;
   secret: string;
-  google: { clientId: string; clientSecret: string };
+  /** null until the Google OAuth client exists; sign-in is then unavailable. */
+  google: { clientId: string; clientSecret: string } | null;
   /** Next.js cookie integration for server actions; off where there is no request scope (tests). */
   nextjs?: boolean;
 }
@@ -54,13 +55,9 @@ export function createAuth(deps: AuthDeps) {
     telemetry: { enabled: false },
     // Google is the only way in: there are no passwords to leak or reset.
     emailAndPassword: { enabled: false },
-    socialProviders: {
-      google: {
-        clientId: deps.google.clientId,
-        clientSecret: deps.google.clientSecret,
-        prompt: 'select_account',
-      },
-    },
+    socialProviders: deps.google
+      ? { google: { clientId: deps.google.clientId, clientSecret: deps.google.clientSecret, prompt: 'select_account' } }
+      : {},
     account: {
       accountLinking: { enabled: false },
       encryptOAuthTokens: true,
@@ -150,16 +147,12 @@ let instance: Auth | undefined;
 /** The app's auth instance, created on first use from the environment. */
 export function getAuth(): Auth {
   if (!instance) {
-    const env = authConfig();
+    const { baseURL, secret, google } = authConfig();
     const { client, db } = getMongo();
-    instance = createAuth({
-      db,
-      client,
-      baseURL: env.BETTER_AUTH_URL,
-      secret: env.BETTER_AUTH_SECRET,
-      google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
-      nextjs: true,
-    });
+    instance = createAuth({ db, client, baseURL, secret, google, nextjs: true });
   }
   return instance;
 }
+
+/** Whether this server can offer Google sign-in (its OAuth client is configured). */
+export const googleSignInAvailable = (): boolean => authConfig().google !== null;

@@ -1,0 +1,46 @@
+# systemd unit for one Studio Companion environment. Install as
+# /etc/systemd/system/studio-companion-<env>.service with the placeholders
+# filled in (see deploy/README.md), then: systemctl enable --now <unit>.
+#
+# The app listens on 127.0.0.1 only; nginx (managed by CloudPanel) terminates
+# HTTPS and proxies to it.
+
+[Unit]
+Description=Studio Companion (@ENV@)
+After=network-online.target mongod.service
+Wants=network-online.target mongod.service
+
+[Service]
+Type=simple
+User=@APP_USER@
+Group=@APP_USER@
+WorkingDirectory=@APP_DIR@/current/.next/standalone
+EnvironmentFile=/etc/studio-companion/@ENV@.env
+Environment=NODE_ENV=production PORT=@PORT@ HOSTNAME=127.0.0.1 NEXT_TELEMETRY_DISABLED=1
+ExecStart=@NODE_BIN@/node server.js
+
+# Restart after crashes; Next.js drains in-flight requests on SIGTERM and exits 143.
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SuccessExitStatus=143
+
+# Resource limits and sandboxing.
+MemoryMax=1G
+TasksMax=256
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# Logs (structured JSON lines from the app) go to journald:
+#   journalctl -u studio-companion-@ENV@ -f
+SyslogIdentifier=studio-companion-@ENV@
+
+[Install]
+WantedBy=multi-user.target
