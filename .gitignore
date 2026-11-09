@@ -28,3 +28,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Visual-parity baseline (machine-specific, see e2e/visual-parity.spec.ts)
+/e2e/.parity-baseline
