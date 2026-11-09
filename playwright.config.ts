@@ -1,18 +1,21 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Standard Playwright config. Add end-to-end specs under `e2e/` (or adjust
-// `testDir`) and run them with `npx playwright test`.
+// End-to-end tests run against the production build, served by
+// scripts/e2e-server.ts with a throwaway database and signed-in test accounts.
+// Specs are signed in as the test user unless they say otherwise.
 //
 // PARITY=vite|next runs only the visual-parity spec instead (see
 // e2e/visual-parity.spec.ts); PARITY_BASE_URL points it at an already running
-// server.
+// server (the pre-migration build).
 const parity = process.env.PARITY;
+const external = process.env.PARITY_BASE_URL;
+const signedIn = { storageState: "e2e/.auth/user.json" };
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   use: {
-    baseURL: process.env.PARITY_BASE_URL ?? "http://localhost:8080",
+    baseURL: external ?? "http://localhost:8080",
     trace: "on-first-retry",
   },
   projects: parity
@@ -20,28 +23,28 @@ export default defineConfig({
         {
           name: "parity",
           testMatch: /visual-parity\.spec\.ts/,
-          use: { ...devices["Desktop Chrome"] },
+          use: { ...devices["Desktop Chrome"], ...(parity === "vite" ? {} : signedIn) },
           snapshotPathTemplate: "{testDir}/.parity-baseline/{arg}{ext}",
         },
       ]
     : [
-        { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /visual-parity/ },
-        // Safari/WebKit on iPhone — the mobile navigation + touch regressions.
+        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity/ },
+        // Safari/WebKit on iPhone — the mobile navigation, touch and sign-in checks.
         {
           name: "iphone-webkit",
-          use: { ...devices["iPhone 13"] },
-          testMatch: /navigation\.spec\.ts/,
+          use: { ...devices["iPhone 13"], ...signedIn },
+          testMatch: /(navigation|auth)\.spec\.ts/,
           grep: /mobile/,
         },
       ],
-  // Tests run against a production build (next start), not the dev server: it
-  // is what ships, and it does not compile routes on first visit mid-test.
-  webServer: process.env.PARITY_BASE_URL
+  // Always a fresh build and a freshly seeded database: never a leftover
+  // server that happens to be listening on the port.
+  webServer: external
     ? undefined
     : {
-        command: "npm run build && npm run start",
-        url: "http://localhost:8080",
-        reuseExistingServer: !process.env.CI,
+        command: "npm run build && npm run e2e:server",
+        url: "http://localhost:8080/api/health?ready=1",
+        reuseExistingServer: false,
         timeout: 300_000,
       },
 });

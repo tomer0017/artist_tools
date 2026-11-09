@@ -31,6 +31,8 @@ dist-ssr
 
 # Visual-parity baseline (machine-specific, see e2e/visual-parity.spec.ts)
 /e2e/.parity-baseline
+# Signed-in test sessions, generated per run by scripts/e2e-server.ts
+/e2e/.auth
 
 # Next.js
 /.next

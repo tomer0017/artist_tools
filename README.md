@@ -16,10 +16,18 @@ reference photo and use five focused tools to plan and execute a piece:
   blink, split, difference and grayscale modes) and export a still comparison,
   a difference image, or an animated GIF that reveals the mismatch.
 
-Everything runs client-side; the active project is auto-saved to the browser's
-`localStorage`. The Compare workspace keeps its own isolated session.
+Image processing runs entirely in the browser; the active project is
+auto-saved to the browser's `localStorage`, and images never leave the device.
+Signing in (Google) and account data (plans, usage) go through the server and
+MongoDB.
 
 ## Getting started
+
+1. Copy `.env.example` to `.env.local` and fill it in: a MongoDB connection
+   string (Atlas), a Google OAuth client for `http://localhost:8080` (redirect URI
+   `http://localhost:8080/api/auth/callback/google`) and a random secret. The
+   file is git-ignored — never commit it.
+2. Create the database indexes and plans once: `npm run db -- migrate`.
 
 ```sh
 npm install           # install dependencies
@@ -30,7 +38,14 @@ npm run typecheck     # TypeScript
 npm run lint          # ESLint
 npm run test          # unit tests (vitest)
 npx playwright test   # end-to-end tests on the production build (Chromium + iPhone WebKit)
+npm run db -- migrate                 # indexes + plans (idempotent; run on every deploy)
+npm run db -- find-user <email>       # a user's id (after their first sign-in)
+npm run db -- grant-admin <userId>    # admin access, granted only from the server (audited)
 ```
+
+Unit tests that touch the database start a throwaway MongoDB automatically;
+the end-to-end tests start their own server, database and signed-in test
+accounts (`scripts/e2e-server.ts`). Neither needs `.env.local`.
 
 The public landing page is `/`; the studio lives under `/app` (`/app/measure`,
 `/app/study`, `/app/color`, `/app/grid`, `/app/compare`). Old `/#/tool` links
@@ -39,6 +54,7 @@ are forwarded to the new URLs.
 ## Tech stack
 
 - Next.js 16 (App Router) + React 19 + TypeScript
+- Better Auth (Google sign-in, database sessions) + MongoDB
 - Tailwind CSS with shadcn/ui (Radix) components
 - Canvas 2D APIs for all image processing and exports (in the browser)
 

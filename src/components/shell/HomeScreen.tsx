@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { BrandMark } from './BrandMark';
+import { AccountLine } from './account';
 import { HOME_ORDER, TOOLS, pathForView } from './tools';
 import type { TabId } from '@/types/project';
 
@@ -86,6 +87,7 @@ export default function HomeScreen() {
         <p className="mt-6 px-4 text-center text-xs text-muted-foreground md:px-6">
           Everything runs in your browser — your images never leave this device.
         </p>
+        <AccountLine />
       </div>
     </div>
   );

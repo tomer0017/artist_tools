@@ -37,6 +37,9 @@ GitHub Pages (`/artist_tools/`, hash routes), deployed from
 .
 ├── next.config.ts              Next.js config (standalone output, StrictMode off as before)
 ├── scripts/prepare-standalone.mjs  Copies public/ + static assets into .next/standalone after build
+├── scripts/db.ts               Operator CLI: migrate, find-user, grant-admin, revoke-admin
+├── scripts/e2e-server.ts       Test server: throwaway MongoDB + signed-in test accounts
+├── .env.example                Every environment variable, documented (no secrets)
 ├── tailwind.config.ts          Tailwind theme (HSL CSS-variable design tokens)
 ├── playwright.config.ts        @playwright/test config (runs on the production build)
 ├── e2e/                        End-to-end specs + opt-in visual-parity harness
@@ -46,7 +49,13 @@ GitHub Pages (`/artist_tools/`, hash routes), deployed from
     │   ├── layout.tsx          Root layout: <html>, metadata, viewport, index.css
     │   ├── page.tsx            Public landing page (/) + legacy /#/tool forwarding
     │   ├── not-found.tsx       404 page
-    │   └── app/                The studio (/app)
+    │   ├── error.tsx           Server-failure page (access is never granted on error)
+    │   ├── sign-in/page.tsx    Google sign-in (public)
+    │   ├── admin/page.tsx      Users list for admins (404 for everyone else)
+    │   ├── api/auth/[...all]/  Better Auth endpoints (sign-in, callback, sign-out, session)
+    │   ├── api/me/             The signed-in user + entitlements (read-only copy)
+    │   ├── api/health/         Liveness, and database readiness with ?ready=1
+    │   └── app/                The studio (/app, signed-in only)
     │       ├── layout.tsx      Renders the studio once for every /app route
     │       ├── page.tsx        Home marker (renders nothing)
     │       └── [tool]/page.tsx Tool markers; unknown tools redirect to /app
@@ -126,12 +135,64 @@ download.
 - **State & data:** Reads `activeTab` from the project store. All tool state
   lives in the store or in each tool's local component state.
 
-### Not Found — route `*` (`src/pages/NotFound.tsx`)
+### Sign in — route `/sign-in` (`src/app/sign-in/page.tsx`)
+- **Purpose:** The only way in: "Continue with Google". Signed-in visitors are
+  sent straight on; failed sign-ins come back here with a plain-language
+  message. `?callbackURL=` is accepted only for internal `/app` and `/admin`
+  paths (`src/lib/redirects.ts`).
+
+### Admin — route `/admin` (`src/app/admin/page.tsx`)
+- **Purpose:** Who uses the app: registration date, last login, status, plan,
+  subscription status and uses this month, 50 per page. Server rendered; the
+  admin role is re-read from the database on every request and everyone else
+  gets a 404. There is no API that lists users.
+
+### Not Found — route `*` (`src/app/not-found.tsx`)
 - **Purpose:** Catch-all for unknown routes.
 - **Features & functionality:** Logs the attempted path to the console and shows
   a 404 message with a link back to `/`.
-- **Key components used:** None beyond router `useLocation`.
 - **State & data:** None.
+
+## Accounts, data and security (SaaS foundation)
+
+- **Sign-in:** Google only, via Better Auth (`src/server/auth.ts`): OpenID
+  Connect with state and PKCE, scopes `openid email profile`. An account IS its
+  Google identity — `accounts` has a unique (providerId, accountId=`sub`) index
+  and accounts are never linked or matched by email. Google tokens are not
+  stored. Origin/callbackURL checks are forced on (Better Auth would skip them
+  under tests).
+- **Sessions:** random tokens in MongoDB, HttpOnly + SameSite=Lax cookies
+  (`sc.session_token`, `__Secure-` prefixed over HTTPS), 30 days rolling, a
+  5-minute signed cookie cache, TTL cleanup. Suspended accounts cannot start
+  sessions and are treated as signed out.
+- **Three layers of protection:** `src/proxy.ts` redirects requests without a
+  session cookie (speed only); `requireUser`/`requireAdmin`
+  (`src/server/session.ts`) verify the session on the server in every studio
+  layout and page; API routes verify it themselves (`/api/me` → 401).
+- **Data model** (`src/server/db/collections.ts`, indexes in `migrate.ts`):
+  users/accounts/sessions/verifications (Better Auth), plans, subscriptions,
+  usage (per user/feature/month), audit_events, payment_events,
+  analytics_events. User references are ObjectIds.
+- **Entitlements** (`src/server/entitlements.ts`): one pure function decides
+  plan, features and limits from the database only (user status,
+  server-written subscription, plans, usage). Free and Pro both include every
+  tool today; no limits are set. Client-supplied plan or payment claims are
+  never inputs (tested).
+- **Payments (not active):** `src/server/billing/` defines the provider
+  contract (verified webhooks only) and an idempotent processor keyed on the
+  provider's event id; there is no HTTP route and no real billing yet.
+- **Admin access** is granted only with `npm run db -- grant-admin <userId>` on
+  a machine with database access — never from configuration or an email
+  address — and every change is audited.
+- **Analytics:** first-party, allow-listed events without personal data;
+  one-off events are de-duplicated. Registration and login are recorded on the
+  server; the browser-side events (landing, first tool use, first export) are
+  defined but not wired yet. Marketing consent is a separate, default-off field.
+- **Limits to know:** tools run in the browser, so their features cannot be
+  truly paywalled by hiding UI — only server-side features can be enforced.
+  The last project lives in the browser's `localStorage`, so on a shared device
+  the next person to sign in on that browser sees it (no per-account local data
+  yet).
 
 ## Core Components
 
@@ -487,6 +548,11 @@ out-of-range settings being clamped rather than misbehaving.
 - **next (16, App Router)** — routing, server, build (`output: 'standalone'`);
   dev and production server on port 8080.
 - **react / react-dom (19)** — UI runtime.
+- **better-auth** — Google sign-in, sessions, rate limiting (MongoDB adapter).
+- **mongodb** (driver 7) — database access; **server-only** marks modules that
+  must never reach the browser.
+- **mongodb-memory-server / tsx** (dev) — throwaway MongoDB for tests; running
+  the TypeScript operator scripts.
 - **tailwindcss + tailwindcss-animate + @tailwindcss/typography** — styling via
   HSL CSS-variable design tokens defined in `index.css`.
 - **shadcn/ui + @radix-ui/\*** — accessible UI primitives in `components/ui`
@@ -745,3 +811,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-07-25 | **Vector trace: painter-facing controls and a mobile-usable slider.** (1) Replaced every `input[type=range]` in Value/Sketch with `src/components/common/Slider.tsx` — pointer events + `setPointerCapture` (in a try/catch, so a capture failure can never abort a drag) + `touch-action: pan-y` + a 44px touch target + full ARIA and keyboard support. Verified on **WebKit/iPhone 13**: one continuous drag produced 14 distinct values, page scrollY stayed 0, and a second drag started immediately. (2) Renamed the controls for what the painter sees: Threshold→**Ink**, Noise→**Detail**, plus a new **Separation** (percentile levels stretch + S-curve before thresholding). Both primary mappings are non-linear and were tuned by visual sweep — Ink spans threshold ratio 0.30–0.62, Detail tops out at 0.05% of the frame (an iris is 0.12%). Advanced controls, Invert, Save-SVG and Reset live behind a **More controls** disclosure. (3) White holes are now cleaned independently of black shapes and protected by shape, so eye whites and brow/lid gaps survive maximum Detail. (4) Sketch mode drops the colour palette entirely (strip, tab and pane) and the preview takes the space; **Replace image** is a visible 44×44 button over the preview using the shared uploader, clearing all cached analysis. (5) Preview renders at 1× while a control is under the finger and 2× on release — same composition, no reframing. Regression captured across bearded/female/light-hair/low-contrast/high-contrast/animal/object scenes. | src/components/common/Slider.tsx (new), src/lib/sketch/{trace,trace.test,regions}.ts, src/components/value/ValueTab.tsx, src/types/project.ts, PROJECT.md |
 | 2026-11-02 | **UX/IA redesign: Home hub, global navigation, shared tool chrome, step-based tools.** New `src/components/shell/` (tool registry, Home / Tool Hub with SVG outcome illustrations, labelled BottomNav/TopNav, ToolHeader + StepIndicator + ToolHelpButton, ToolEmptyState). Routing: one `/:view?` route with per-tool URLs synced to `activeTab` (now `ViewId`, default `'home'`); `Header.tsx` removed. KeepAlive for Study/Color/Compare. Tutorials no longer auto-open (`AUTO_START_TUTORIALS = false` in onboardingConfig; Help replays everything). **Measure:** step row with always-visible scale + "Change", instruction card and result card ("Draw this distance as X on your artwork") below the canvas instead of floating, explicit pan badge, Save image in header; **TapCoach is now a button that arms selection without placing a point** (mobile + desktop); cancelling a re-scale returns to measuring. **Study:** Color/Values/Sketch picture cards replace the floating switcher; Save is the primary action. **Color:** four sections (Color Wheel / Harmonies / Mixing / Skin Tones) each with a purpose line; selected colour carried across. **Grid:** 3×3 / 4×4 (recommended) / 8×8 presets, Fit/Fill/Center, primary "Save grid image", full settings under Customize. **Compare:** Images → Align → Compare → Save flow; Smart Align (recommended) / Manual; during Smart Align the canvas shows only the image being tapped and the instruction panel has a fixed height (a resizing panel shifted the image under the finger between taps); Artwork / 50-50 / Reference + opacity + grid + more views; Save step = one-tap comparison GIF + still/advanced export. No calculation, image-processing, export or storage-format changes. Tests: rewrote `e2e/onboarding.spec.ts` + `e2e/compare-art.spec.ts` for the new flows; new `e2e/navigation.spec.ts`; Playwright `iphone-webkit` project runs the mobile tests on WebKit. | src/components/shell/* (new), src/pages/Index.tsx, src/App.tsx, src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/layout/Header.tsx (deleted), src/components/common/ImageUploader.tsx, src/components/measure/{MeasureTab,MeasureMobile,MeasureCanvas}.tsx, src/components/measure/onboarding/{TapCoach.tsx,useMeasureIntro.ts}, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/grid/GridTab.tsx, src/features/compare-art/{CompareArt,CompareCanvas,CompareOverlayBar,CompareUploadStep}.tsx, src/features/compare-art/onboarding/useCompareIntro.ts, src/onboarding/{OnboardingHost.tsx,onboardingConfig.ts,index.ts}, e2e/*, playwright.config.ts, PROJECT.md |
 | 2026-11-09 | **Migrated from Vite to Next.js 16 (App Router) + React 19**, behaviour-preserving. Public landing at `/`; the studio under `/app` (`/app/<tool>`), rendered once by a shared layout so tools stay mounted across URLs (KeepAlive preserved); client-only studio rendering with its code in the first download; old `/#/tool` links forwarded; unknown tools → `/app`. Removed react-router-dom, gh-pages and the unused calendar/drawer components (React-18-only deps). Lint errors fixed (0 errors). Tests: 78 unit, 19 e2e (4 new routing specs), 36/36 visual-parity screenshots identical to the pre-migration build. Checkpoint tag `pre-nextjs-migration-2026-11-09`. | src/app/*, src/components/shell/{Studio,StudioClient,BrandMark,LegacyHashRedirect,AppNav,HomeScreen,tools}, next.config.ts, tsconfig.json, eslint.config.js, package.json, playwright.config.ts, e2e/*, scripts/prepare-standalone.mjs, README.md, PROJECT.md |
+| 2026-11-10 | **Google sign-in, MongoDB and SaaS foundation (phases C–E), local only.** Better Auth (Google OIDC, PKCE, database sessions, origin checks forced on, no stored Google tokens, identity = Google `sub`); proxy + server-verified sessions on every studio page/API; sign-in page; account line + sign-out under Home; MongoDB data model, idempotent migrations and Free/Pro plans; server-only entitlements; inactive payment-event processor (idempotent, audited); admin users page + CLI role grants; first-party analytics; /api/me, /api/health; security headers. Tests: 120 unit/integration (real MongoDB 8 replica set, full Google OAuth flow with a simulated Google), 36 e2e incl. 17 auth/security, 36/36 visual parity. | src/server/**, src/proxy.ts, src/app/{sign-in,admin,api,error}, src/app/app/*, src/components/{auth,shell/account,shell/Studio*,shell/HomeScreen}, src/lib/{auth-client,redirects}, scripts/{db,e2e-server}.ts, .env.example, e2e/*, playwright.config.ts, next.config.ts, README.md, PROJECT.md |

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Studio from './Studio';
+import type { StudioAccount } from './account';
 
 // The studio is a canvas app: its state starts from localStorage and its
 // layout depends on the screen size, neither of which exists on the server.
@@ -9,8 +10,8 @@ import Studio from './Studio';
 // body's background shows, exactly as before the migration. Its code is still
 // part of the page's first download (a lazy import would only start fetching it
 // after the framework had loaded, adding a round trip before anything appears).
-export default function StudioClient() {
+export default function StudioClient({ account }: { account: StudioAccount }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  return mounted ? <Studio /> : null;
+  return mounted ? <Studio account={account} /> : null;
 }

@@ -9,6 +9,7 @@ import { photo } from './fixtures/photo';
 //   PARITY=vite PARITY_BASE_URL=http://localhost:4180 npx playwright test --update-snapshots
 // Later runs compare the current app against it:
 //   PARITY=next npx playwright test
+// (the Next.js run starts its own server and is signed in as the test user).
 
 const TARGET = process.env.PARITY === 'vite' ? 'vite' : 'next';
 
@@ -35,6 +36,9 @@ const HEADINGS: Record<string, string | RegExp> = {
 };
 
 async function settle(page: Page) {
+  // The "Signed in as … · Sign out" line under Home is a deliberate addition of
+  // the SaaS migration; hide it so everything else is compared pixel for pixel.
+  if (TARGET === 'next') await page.addStyleTag({ content: '[data-account-line]{display:none!important}' });
   await page.waitForLoadState('networkidle');
   await page.evaluate(async () => {
     await document.fonts.ready;

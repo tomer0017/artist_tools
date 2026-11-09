@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "db": "tsx --conditions=react-server scripts/db.ts"
+    "db": "tsx --conditions=react-server scripts/db.ts",
+    "e2e:server": "tsx --conditions=react-server scripts/e2e-server.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

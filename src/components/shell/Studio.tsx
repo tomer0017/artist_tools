@@ -18,6 +18,7 @@ import HomeScreen from '@/components/shell/HomeScreen';
 import { BottomNav, TopNav } from '@/components/shell/AppNav';
 import { pathForView, viewFromPathname } from '@/components/shell/tools';
 import { OnboardingProvider, OnboardingHost } from '@/onboarding';
+import { AccountProvider, type StudioAccount } from '@/components/shell/account';
 
 // Compare Art (with its gifenc dependency) is code-split so it never weighs down
 // the initial load of the other workspaces.
@@ -169,20 +170,22 @@ function Workspace() {
 }
 
 /** The whole studio: Home and every tool, with the providers they share. */
-export default function Studio() {
+export default function Studio({ account }: { account: StudioAccount }) {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <SaveMediaProvider>
-          <ProjectProvider>
-            <OnboardingProvider>
-              <Workspace />
-            </OnboardingProvider>
-          </ProjectProvider>
-        </SaveMediaProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <AccountProvider value={account}>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <SaveMediaProvider>
+            <ProjectProvider>
+              <OnboardingProvider>
+                <Workspace />
+              </OnboardingProvider>
+            </ProjectProvider>
+          </SaveMediaProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </AccountProvider>
   );
 }
