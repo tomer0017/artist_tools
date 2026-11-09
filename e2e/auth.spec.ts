@@ -151,14 +151,15 @@ test.describe('admin', () => {
 test.describe('health', () => {
   test('reports the process and the database as up', async ({ request }) => {
     expect(await (await request.get('/api/health')).json()).toEqual({ status: 'ok' });
-    expect(await (await request.get('/api/health?ready=1')).json()).toEqual({ status: 'ok', database: 'ok' });
+    expect(await (await request.get('/api/health?ready=1')).json()).toEqual({ status: 'ok', config: 'ok', database: 'ok' });
   });
 
   test('sends basic security headers', async ({ request }) => {
     const headers = (await request.get('/')).headers();
     expect(headers['x-content-type-options']).toBe('nosniff');
-    expect(headers['x-frame-options']).toBe('DENY');
-    expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(headers['x-frame-options']).toBe('SAMEORIGIN');
+    expect(headers['referrer-policy']).toBe('same-origin');
+    expect(headers['strict-transport-security']).toBe('max-age=31536000');
     expect(headers['x-powered-by']).toBeUndefined();
   });
 });
