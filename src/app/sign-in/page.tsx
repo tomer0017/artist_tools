@@ -18,6 +18,7 @@ export const dynamic = 'force-dynamic';
 const MESSAGES: Record<string, string> = {
   access_denied: 'Sign-in was cancelled. You can try again whenever you are ready.',
   account_not_linked: 'This Google account cannot be used to sign in here. Please use the Google account you signed up with.',
+  unable_to_create_user: 'This Google account has not been invited to Studio Companion yet.',
   unable_to_create_session: 'This account cannot sign in right now. Please contact support if you think this is a mistake.',
 };
 const GENERIC = 'Sign-in did not complete. Please try again.';

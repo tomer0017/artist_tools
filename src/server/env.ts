@@ -22,6 +22,7 @@ const authSchema = z
     BETTER_AUTH_SECRET: required('BETTER_AUTH_SECRET').min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+    AUTH_SIGNUP_ALLOWLIST: z.string().optional(),
   })
   .refine((env) => !env.GOOGLE_CLIENT_ID === !env.GOOGLE_CLIENT_SECRET, {
     message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together',
@@ -36,6 +37,22 @@ function read<T extends z.ZodTypeAny>(schema: T, area: string): z.infer<T> {
 }
 
 export const dbConfig = () => read(dbSchema, 'database');
+/**
+ * Who may create a new account. Empty or unset: nobody (registration closed —
+ * existing accounts still sign in). A comma-separated list: only those
+ * addresses, once Google has verified them. `*`: anyone (public registration).
+ */
+export type SignupPolicy = '*' | string[];
+
+const parseSignupPolicy = (raw: string | undefined): SignupPolicy => {
+  const value = (raw ?? '').trim();
+  if (value === '*') return '*';
+  return value
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+};
+
 export function authConfig() {
   const env = read(authSchema, 'authentication');
   return {
@@ -45,5 +62,6 @@ export function authConfig() {
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
         : null,
+    signups: parseSignupPolicy(env.AUTH_SIGNUP_ALLOWLIST),
   };
 }

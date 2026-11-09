@@ -3,7 +3,7 @@ import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { nextCookies } from 'better-auth/next-js';
 import type { Db, MongoClient } from 'mongodb';
-import { authConfig } from '@/server/env';
+import { authConfig, type SignupPolicy } from '@/server/env';
 import { getMongo } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { recordAudit } from '@/server/audit';
@@ -25,8 +25,21 @@ interface AuthDeps {
   secret: string;
   /** null until the Google OAuth client exists; sign-in is then unavailable. */
   google: { clientId: string; clientSecret: string } | null;
+  /** Who may create a new account (see SignupPolicy); signing in to an existing one is never affected. */
+  signups: SignupPolicy;
   /** Next.js cookie integration for server actions; off where there is no request scope (tests). */
   nextjs?: boolean;
+}
+
+/**
+ * Whether a brand-new account may be created. Only gates registration: the
+ * account's identity remains its Google `sub`, and no role or permission is
+ * ever derived from an email address. Google must have verified the address.
+ */
+export function signupAllowed(policy: SignupPolicy, user: { email?: string | null; emailVerified?: boolean | null }): boolean {
+  if (policy === '*') return true;
+  if (!user.emailVerified || !user.email) return false;
+  return policy.includes(user.email.trim().toLowerCase());
 }
 
 /** Side work after sign-in must never undo a sign-in that already succeeded. */
@@ -105,6 +118,13 @@ export function createAuth(deps: AuthDeps) {
     databaseHooks: {
       user: {
         create: {
+          // Registration is invite-only until it is opened on purpose.
+          before: async (user) => {
+            if (!signupAllowed(deps.signups, user)) {
+              log.warn('auth.signup_refused', { reason: user.emailVerified ? 'not_invited' : 'email_not_verified' });
+              return false;
+            }
+          },
           after: async (user) => {
             await safely('auth.audit_failed', () =>
               recordAudit(deps.db, { type: 'user.registered', userId: user.id, actor: `user:${user.id}`, metadata: { provider: 'google' } }),
@@ -147,9 +167,9 @@ let instance: Auth | undefined;
 /** The app's auth instance, created on first use from the environment. */
 export function getAuth(): Auth {
   if (!instance) {
-    const { baseURL, secret, google } = authConfig();
+    const { baseURL, secret, google, signups } = authConfig();
     const { client, db } = getMongo();
-    instance = createAuth({ db, client, baseURL, secret, google, nextjs: true });
+    instance = createAuth({ db, client, baseURL, secret, google, signups, nextjs: true });
   }
   return instance;
 }

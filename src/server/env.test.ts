@@ -6,7 +6,7 @@ const BASE = { BETTER_AUTH_URL: 'https://staging.example.com', BETTER_AUTH_SECRE
 const saved = { ...process.env };
 
 function withEnv(env: Record<string, string | undefined>) {
-  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']) delete process.env[key];
+  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_SIGNUP_ALLOWLIST']) delete process.env[key];
   Object.assign(process.env, env);
 }
 
@@ -17,7 +17,7 @@ afterEach(() => {
 describe('authConfig', () => {
   it('runs without Google until its OAuth client exists', () => {
     withEnv({ ...BASE });
-    expect(authConfig()).toEqual({ baseURL: BASE.BETTER_AUTH_URL, secret: BASE.BETTER_AUTH_SECRET, google: null });
+    expect(authConfig()).toEqual({ baseURL: BASE.BETTER_AUTH_URL, secret: BASE.BETTER_AUTH_SECRET, google: null, signups: [] });
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
     expect(authConfig().google).toBeNull();
   });
@@ -30,6 +30,15 @@ describe('authConfig', () => {
   it('refuses a half-configured Google client', () => {
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: 'id.apps.googleusercontent.com' });
     expect(() => authConfig()).toThrow('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together');
+  });
+
+  it('keeps registration closed unless addresses are invited or it is opened on purpose', () => {
+    withEnv({ ...BASE });
+    expect(authConfig().signups).toEqual([]);
+    withEnv({ ...BASE, AUTH_SIGNUP_ALLOWLIST: ' Ada@Example.com , ,grace@example.com ' });
+    expect(authConfig().signups).toEqual(['ada@example.com', 'grace@example.com']);
+    withEnv({ ...BASE, AUTH_SIGNUP_ALLOWLIST: '*' });
+    expect(authConfig().signups).toBe('*');
   });
 
   it('names what is wrong without echoing secret values', () => {

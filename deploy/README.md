@@ -28,6 +28,22 @@ listens on `127.0.0.1` only.
    `@APP_USER@`, `@APP_DIR@`, `@PORT@` and `@NODE_BIN@`; `systemctl daemon-reload`
    and `systemctl enable studio-companion-<env>`.
 
+## Google sign-in credentials
+
+Install the server side once (as root): `install -m 700 deploy/install-google-oauth.sh /usr/local/sbin/studio-set-google-oauth`.
+Then, on your own computer, from the repository:
+
+```sh
+bash deploy/set-google-oauth.sh staging
+```
+
+It asks for the Client ID, the Client Secret (hidden) and the Google
+account(s) allowed to create accounts (`AUTH_SIGNUP_ALLOWLIST`), and sends them
+over SSH into `/etc/studio-companion/<env>.env`. Nothing is printed, other
+variables are kept, the previous file is saved as `<env>.env.previous`, and
+nothing restarts until you run `systemctl restart studio-companion-<env>`.
+Registration stays invite-only: an empty allowlist means no new accounts.
+
 ## Releasing
 
 ```sh

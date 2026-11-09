@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
 import { migrate } from '@/server/db/migrate';
 import { collections } from '@/server/db/collections';
-import { createAuth, type Auth } from './auth';
+import { createAuth, signupAllowed, type Auth } from './auth';
 
 // The real sign-in flow, end to end, against a real database. Only Google's
 // token endpoint is simulated: it returns an ID token for a fake Google user.
@@ -13,6 +13,8 @@ const CLIENT_ID = 'test-client.apps.googleusercontent.com';
 
 let mongo: TestMongo;
 let auth: Auth;
+/** Same database, but registration limited to one invited address (as on staging). */
+let inviteOnly: Auth;
 const realFetch = globalThis.fetch;
 
 beforeAll(async () => {
@@ -24,6 +26,15 @@ beforeAll(async () => {
     baseURL: BASE,
     secret: 'test-secret-that-is-at-least-32-characters-long',
     google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
+    signups: '*',
+  });
+  inviteOnly = createAuth({
+    db: mongo.db,
+    client: mongo.client,
+    baseURL: BASE,
+    secret: 'test-secret-that-is-at-least-32-characters-long',
+    google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
+    signups: ['invited@example.com'],
   });
 }, MONGO_STARTUP_TIMEOUT);
 
@@ -34,6 +45,8 @@ interface GoogleUser {
   sub: string;
   email: string;
   name?: string;
+  /** Google's email_verified claim; true unless a test says otherwise. */
+  verified?: boolean;
 }
 
 const b64url = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -45,7 +58,7 @@ const idToken = (user: GoogleUser) =>
       aud: CLIENT_ID,
       sub: user.sub,
       email: user.email,
-      email_verified: true,
+      email_verified: user.verified ?? true,
       name: user.name ?? 'Ada Artist',
       picture: 'https://example.com/ada.png',
       iat: Math.floor(Date.now() / 1000),
@@ -80,11 +93,16 @@ const cookiesFrom = (response: Response, previous = ''): string => {
 
 const sessionTokenCookie = (cookies: string) => cookies.split('; ').find((c) => c.startsWith('sc.session_token=')) ?? '';
 
-async function startSignIn(callbackURL = '/app') {
-  const response = await auth.handler(
+// Each simulated visitor gets its own address (as nginx reports it), so the
+// per-client rate limit never interferes with the functional tests.
+let visitor = 0;
+const nextVisitorIp = () => `10.0.${Math.floor(++visitor / 250)}.${visitor % 250}`;
+
+async function startSignIn(callbackURL = '/app', using: Auth = auth, ip = nextVisitorIp()) {
+  const response = await using.handler(
     new Request(`${BASE}/api/auth/sign-in/social`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: BASE },
+      headers: { 'content-type': 'application/json', origin: BASE, 'x-real-ip': ip },
       body: JSON.stringify({ provider: 'google', callbackURL }),
     }),
   );
@@ -92,11 +110,11 @@ async function startSignIn(callbackURL = '/app') {
 }
 
 /** Run the whole sign-in as `user`: start, "consent" at Google, come back. */
-async function signInAs(user: GoogleUser) {
-  const { response, body } = await startSignIn();
+async function signInAs(user: GoogleUser, using: Auth = auth) {
+  const { response, body } = await startSignIn('/app', using);
   const state = new URL(body!.url).searchParams.get('state')!;
   simulateGoogle(user);
-  const callback = await auth.handler(
+  const callback = await using.handler(
     new Request(`${BASE}/api/auth/callback/google?state=${encodeURIComponent(state)}&code=test-code`, {
       headers: { cookie: cookiesFrom(response) },
     }),
@@ -232,5 +250,62 @@ describe('sessions', () => {
     expect(new URL(callback.headers.get('location')!, BASE).pathname).toBe('/sign-in');
     expect(sessionTokenCookie(cookies)).toBe('');
     expect(await sessions.countDocuments({ userId: user!._id })).toBe(sessionsBefore);
+  });
+});
+
+describe('invite-only registration (staging)', () => {
+  const refusedWith = (callback: Response) => {
+    const location = new URL(callback.headers.get('location')!, BASE);
+    return { path: location.pathname, error: location.searchParams.get('error') };
+  };
+
+  it('lets an invited, Google-verified address create an account', async () => {
+    const { callback, cookies } = await signInAs({ sub: 'google-sub-invited', email: 'Invited@Example.com' }, inviteOnly);
+    expect(new URL(callback.headers.get('location')!, BASE).pathname).toBe('/app');
+    expect(sessionTokenCookie(cookies)).toBeTruthy();
+    expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-invited' })).toBe(1);
+  });
+
+  it('refuses everyone else, without creating anything', async () => {
+    const { callback, cookies } = await signInAs({ sub: 'google-sub-stranger', email: 'stranger@example.com' }, inviteOnly);
+    const refused = refusedWith(callback);
+    expect(refused.path).toBe('/sign-in');
+    expect(refused.error).toBe('unable_to_create_user');
+    expect(sessionTokenCookie(cookies)).toBe('');
+    expect(await collections(mongo.db).users.countDocuments({ email: 'stranger@example.com' })).toBe(0);
+    expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-stranger' })).toBe(0);
+  });
+
+  it('refuses an invited address that Google has not verified', async () => {
+    const { callback } = await signInAs({ sub: 'google-sub-unverified', email: 'invited@example.com', verified: false }, inviteOnly);
+    expect(refusedWith(callback).path).toBe('/sign-in');
+    expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-unverified' })).toBe(0);
+  });
+
+  it('never locks out accounts that already exist', async () => {
+    // Ada registered while sign-ups were open (earlier test); she is not on the list.
+    const { callback, cookies } = await signInAs({ sub: 'google-sub-ada', email: 'ada@example.com' }, inviteOnly);
+    expect(new URL(callback.headers.get('location')!, BASE).pathname).toBe('/app');
+    expect(sessionTokenCookie(cookies)).toBeTruthy();
+  });
+
+  it('applies the policy exactly as configured', () => {
+    expect(signupAllowed('*', { email: 'x@y.z', emailVerified: false })).toBe(true);
+    expect(signupAllowed([], { email: 'a@b.c', emailVerified: true })).toBe(false);
+    expect(signupAllowed(['a@b.c'], { email: ' A@B.C ', emailVerified: true })).toBe(true);
+    expect(signupAllowed(['a@b.c'], { email: 'a@b.c', emailVerified: false })).toBe(false);
+    expect(signupAllowed(['a@b.c'], { email: null, emailVerified: true })).toBe(false);
+  });
+});
+
+describe('rate limiting', () => {
+  it('stops one client from starting sign-in more than 10 times a minute', async () => {
+    const ip = '192.0.2.77';
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i++) statuses.push((await startSignIn('/app', auth, ip)).response.status);
+    expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true);
+    expect(statuses[10]).toBe(429);
+    // Other visitors are unaffected.
+    expect((await startSignIn('/app', auth, '192.0.2.78')).response.status).toBe(200);
   });
 });
