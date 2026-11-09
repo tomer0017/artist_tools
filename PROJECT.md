@@ -153,6 +153,29 @@ download.
   a 404 message with a link back to `/`.
 - **State & data:** None.
 
+## Environments and deployment
+
+| Environment | Where | Runs |
+|---|---|---|
+| Production (current) | GitHub Pages `tomer0017.github.io/artist_tools` | Pre-migration Vite build, from `develop/post-v0.5.0-ux-improvements` |
+| Preview | `http://185.176.255.3` (VPS, static files in `/var/www/studio-preview`) | Pre-migration build, root paths |
+| Staging | `https://staging.185-176-255-3.sslip.io` (VPS) | Next.js app from `migration/nextjs-saas-foundation` |
+
+Staging on the VPS (details and commands in `deploy/README.md`):
+- CloudPanel Node.js site (nginx + Let's Encrypt, auto-renewed) → Next.js
+  standalone server on `127.0.0.1:3000` under systemd unit
+  `studio-companion-staging` (site user `studio-staging`, Node 24 via NVM).
+- MongoDB 8.0 on the same VPS, `127.0.0.1:27017` only, access control on,
+  single-node replica set `rs0`; app user `studio_staging` with readWrite on
+  `studio_companion_staging` only. Nightly dump at 02:40 to
+  `/var/backups/mongodb` (14 days, this server only — no off-site copy yet).
+- Secrets live only on the server: `/etc/studio-companion/staging.env`
+  (root:studio-staging 0640) and `/root/.studio-secrets/` (root 0700).
+- Releases: `sudo /usr/local/sbin/studio-release staging <ref>` (a copy of
+  `deploy/release.sh`); rollback drill verified.
+- The `sslip.io` hostname is a free wildcard DNS name for the server's IP,
+  used until a real domain exists.
+
 ## Accounts, data and security (SaaS foundation)
 
 - **Sign-in:** Google only, via Better Auth (`src/server/auth.ts`): OpenID
@@ -812,3 +835,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-02 | **UX/IA redesign: Home hub, global navigation, shared tool chrome, step-based tools.** New `src/components/shell/` (tool registry, Home / Tool Hub with SVG outcome illustrations, labelled BottomNav/TopNav, ToolHeader + StepIndicator + ToolHelpButton, ToolEmptyState). Routing: one `/:view?` route with per-tool URLs synced to `activeTab` (now `ViewId`, default `'home'`); `Header.tsx` removed. KeepAlive for Study/Color/Compare. Tutorials no longer auto-open (`AUTO_START_TUTORIALS = false` in onboardingConfig; Help replays everything). **Measure:** step row with always-visible scale + "Change", instruction card and result card ("Draw this distance as X on your artwork") below the canvas instead of floating, explicit pan badge, Save image in header; **TapCoach is now a button that arms selection without placing a point** (mobile + desktop); cancelling a re-scale returns to measuring. **Study:** Color/Values/Sketch picture cards replace the floating switcher; Save is the primary action. **Color:** four sections (Color Wheel / Harmonies / Mixing / Skin Tones) each with a purpose line; selected colour carried across. **Grid:** 3×3 / 4×4 (recommended) / 8×8 presets, Fit/Fill/Center, primary "Save grid image", full settings under Customize. **Compare:** Images → Align → Compare → Save flow; Smart Align (recommended) / Manual; during Smart Align the canvas shows only the image being tapped and the instruction panel has a fixed height (a resizing panel shifted the image under the finger between taps); Artwork / 50-50 / Reference + opacity + grid + more views; Save step = one-tap comparison GIF + still/advanced export. No calculation, image-processing, export or storage-format changes. Tests: rewrote `e2e/onboarding.spec.ts` + `e2e/compare-art.spec.ts` for the new flows; new `e2e/navigation.spec.ts`; Playwright `iphone-webkit` project runs the mobile tests on WebKit. | src/components/shell/* (new), src/pages/Index.tsx, src/App.tsx, src/types/project.ts, src/hooks/useProjectStore.tsx, src/components/layout/Header.tsx (deleted), src/components/common/ImageUploader.tsx, src/components/measure/{MeasureTab,MeasureMobile,MeasureCanvas}.tsx, src/components/measure/onboarding/{TapCoach.tsx,useMeasureIntro.ts}, src/components/value/ValueTab.tsx, src/components/color/ColorTab.tsx, src/components/grid/GridTab.tsx, src/features/compare-art/{CompareArt,CompareCanvas,CompareOverlayBar,CompareUploadStep}.tsx, src/features/compare-art/onboarding/useCompareIntro.ts, src/onboarding/{OnboardingHost.tsx,onboardingConfig.ts,index.ts}, e2e/*, playwright.config.ts, PROJECT.md |
 | 2026-11-09 | **Migrated from Vite to Next.js 16 (App Router) + React 19**, behaviour-preserving. Public landing at `/`; the studio under `/app` (`/app/<tool>`), rendered once by a shared layout so tools stay mounted across URLs (KeepAlive preserved); client-only studio rendering with its code in the first download; old `/#/tool` links forwarded; unknown tools → `/app`. Removed react-router-dom, gh-pages and the unused calendar/drawer components (React-18-only deps). Lint errors fixed (0 errors). Tests: 78 unit, 19 e2e (4 new routing specs), 36/36 visual-parity screenshots identical to the pre-migration build. Checkpoint tag `pre-nextjs-migration-2026-11-09`. | src/app/*, src/components/shell/{Studio,StudioClient,BrandMark,LegacyHashRedirect,AppNav,HomeScreen,tools}, next.config.ts, tsconfig.json, eslint.config.js, package.json, playwright.config.ts, e2e/*, scripts/prepare-standalone.mjs, README.md, PROJECT.md |
 | 2026-11-10 | **Google sign-in, MongoDB and SaaS foundation (phases C–E), local only.** Better Auth (Google OIDC, PKCE, database sessions, origin checks forced on, no stored Google tokens, identity = Google `sub`); proxy + server-verified sessions on every studio page/API; sign-in page; account line + sign-out under Home; MongoDB data model, idempotent migrations and Free/Pro plans; server-only entitlements; inactive payment-event processor (idempotent, audited); admin users page + CLI role grants; first-party analytics; /api/me, /api/health; security headers. Tests: 120 unit/integration (real MongoDB 8 replica set, full Google OAuth flow with a simulated Google), 36 e2e incl. 17 auth/security, 36/36 visual parity. | src/server/**, src/proxy.ts, src/app/{sign-in,admin,api,error}, src/app/app/*, src/components/{auth,shell/account,shell/Studio*,shell/HomeScreen}, src/lib/{auth-client,redirects}, scripts/{db,e2e-server}.ts, .env.example, e2e/*, playwright.config.ts, next.config.ts, README.md, PROJECT.md |
+| 2026-11-10 | **Staging on the VPS.** MongoDB 8.0 (localhost, auth, replica set, nightly local dumps); CloudPanel Node.js site `staging.185-176-255-3.sslip.io` with Let's Encrypt; systemd unit + `deploy/release.sh` (build exact commit, migrate, atomic switch, health-gated auto switch-back; drill verified). Google sign-in optional until its OAuth client exists. Security headers aligned with CloudPanel's nginx + HSTS; health check validates config. | deploy/*, next.config.ts, src/app/api/health, src/server/{env,auth}.ts, src/app/sign-in, src/components/auth, PROJECT.md |
