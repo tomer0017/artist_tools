@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import StudioClient from '@/components/shell/StudioClient';
 import { RETURN_TO_HEADER, signInPath } from '@/lib/redirects';
 import { getAccountSummary } from '@/server/account';
+import { emailPasswordAvailable } from '@/server/auth';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { requireUser } from '@/server/session';
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
 export default async function StudioLayout({ children }: { children: React.ReactNode }) {
   const returnTo = (await headers()).get(RETURN_TO_HEADER) ?? '/app';
   const user = await requireUser(returnTo);
-  const summary = await getAccountSummary(getDb(), toObjectId(user.id)!);
+  const summary = await getAccountSummary(getDb(), toObjectId(user.id)!, { emailPasswordEnabled: emailPasswordAvailable() });
   if (!summary) redirect(signInPath(returnTo));
   return (
     <>

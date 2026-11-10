@@ -69,16 +69,52 @@ admin access is never granted automatically. To close it again, set
 `AUTH_SIGNUP_MODE="invite"` and restart. The sign-in, landing and plans pages
 follow the setting on their own.
 
+### Email and password sign-in
+
+Off unless `AUTH_EMAIL_PASSWORD="on"`, and it always needs a mail transport.
+There is no real mail provider yet (it needs a domain and the owner's
+approval, docs/adr/0004), so **staging** uses the outbox:
+
+```sh
+APP_ENV="staging"
+AUTH_EMAIL_PASSWORD="on"
+MAIL_TRANSPORT="outbox"
+```
+
+Account emails (confirmations, resets, notices) are then kept for 24 hours
+instead of sent, and admins read them at `/admin/mail` ("Test mail"). The
+configuration refuses `MAIL_TRANSPORT="outbox"` unless `APP_ENV` is
+development, test or staging, so a production server cannot start with it
+(the health check fails and the release is switched back). The invite gate
+applies to email sign-ups exactly as to Google ones. To turn it off: set
+`AUTH_EMAIL_PASSWORD="off"` and restart; password accounts then cannot sign
+in until it is on again (their data is kept).
+
+### Nightly maintenance
+
+Removes password sign-ups never confirmed within 24 hours and prunes idle
+rate-limit rows. Install once per environment (as root):
+
+```sh
+install -m 755 deploy/maintenance.sh /usr/local/sbin/studio-maintenance
+echo '20 3 * * * root /usr/local/sbin/studio-maintenance staging' > /etc/cron.d/studio-maintenance
+chmod 0644 /etc/cron.d/studio-maintenance     # cron ignores group/world-writable files
+```
+
+Output goes to syslog: `journalctl -t studio-maintenance-staging`.
+
 ## Releasing
 
 ```sh
 sudo deploy/release.sh <env> <branch, tag or commit>
 ```
 
-It mirrors the repository, builds that exact commit as the site user, runs the
-database migration, switches `current` atomically, restarts the service and
-waits for `/api/health?ready=1`. If the new release is not healthy within 60 s
-it switches back to the previous one. The last 5 releases stay on disk.
+It mirrors the repository, builds that exact commit as the site user, takes a
+database backup (`studio-mongo-backup`; a failed backup stops the release),
+runs the database migration, switches `current` atomically, restarts the
+service and waits for `/api/health?ready=1`. If the new release is not healthy
+within 60 s it switches back to the previous one. The last 5 releases stay on
+disk.
 
 ## Rolling back
 

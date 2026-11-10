@@ -281,7 +281,7 @@ test.describe('sessions', () => {
 
     test('ends the session on the server', async ({ page }) => {
       await page.goto('/app/profile');
-      await page.getByRole('button', { name: 'Sign out' }).click();
+      await page.getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect(page).toHaveURL(/\/$/);
       expect((await page.request.get('/api/me')).status()).toBe(401);
       await page.goto('/app/profile');
@@ -307,7 +307,7 @@ test.describe('mobile', () => {
     await expect(tools.locator('[aria-current="page"]')).toHaveCount(0);
     expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
     await shot(page, 'profile-free');
-    const signOut = page.getByRole('button', { name: 'Sign out' });
+    const signOut = page.getByRole('button', { name: 'Sign out', exact: true });
     await signOut.scrollIntoViewIfNeeded();
     await expect(signOut).toBeInViewport();
   });

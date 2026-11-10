@@ -46,7 +46,12 @@ if [ ! -f "$RELEASE/.next/standalone/server.js" ]; then
   (cd "$RELEASE" && as_app env NEXT_TELEMETRY_DISABLED=1 npm run build --silent)
 fi
 
-# 3. Bring the database schema up to date (idempotent, additive only).
+# 3. Back up the database, then bring its schema up to date (idempotent,
+#    additive only). No dump, no release: a failed backup stops here.
+if [ -x /usr/local/sbin/studio-mongo-backup ]; then
+  log "backing up the database"
+  /usr/local/sbin/studio-mongo-backup
+fi
 log "migrating database"
 (cd "$RELEASE" && as_app bash -c "set -a; . '$ENV_FILE'; set +a; npm run --silent db -- migrate")
 

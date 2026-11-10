@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAccountSummary } from '@/server/account';
+import { emailPasswordAvailable } from '@/server/auth';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { log } from '@/server/log';
@@ -18,7 +19,7 @@ export async function GET() {
   try {
     const session = await getSession();
     if (!session) return json({ error: 'unauthorized' }, 401);
-    const summary = await getAccountSummary(getDb(), toObjectId(session.user.id)!);
+    const summary = await getAccountSummary(getDb(), toObjectId(session.user.id)!, { emailPasswordEnabled: emailPasswordAvailable() });
     if (!summary) return json({ error: 'unauthorized' }, 401);
     return json({ user: summary.account, entitlements: summary.entitlements });
   } catch (error) {

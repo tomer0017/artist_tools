@@ -6,7 +6,9 @@ import {
   DEFAULT_LAYERS, DEFAULT_VALUE_SETTINGS, DEFAULT_GRID_SETTINGS, LAYER_COLORS, genId,
 } from '@/types/project';
 
-const STORAGE_KEY = 'painter-studio-project';
+/** Where the shared project (Measure, Study, Grid) is kept in this browser. */
+export const PROJECT_STORAGE_KEY = 'painter-studio-project';
+const STORAGE_KEY = PROJECT_STORAGE_KEY;
 
 interface StoreState {
   activeTab: ViewId;

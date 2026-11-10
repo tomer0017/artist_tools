@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BadgeCheck, Check, Crown, Lock, LogOut, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
+import { DataCard, DevicesCard, NameEditor, PreferencesCard, SignInMethodsCard } from '@/components/account/ProfileSections';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FEATURE_MATRIX, PLAN_NAMES } from '@/lib/plans';
 import { AccountAvatar, useAccount, useSignOut, type StudioAccount } from './account';
@@ -8,9 +9,12 @@ import { BrandMark } from './BrandMark';
 import { pathForView } from './tools';
 
 // ─── Account page (/app/profile) ──────────────────────────────────────────────
-// Who is signed in, which plan they are on and what it includes. Everything
-// shown comes from the server; there is nothing to edit here except signing
-// out. Paid plans do not exist yet, and the page says so plainly.
+// Who is signed in, which plan they are on and what it includes, and the
+// person's own controls: name and photo, language, currency and marketing
+// email, sign-in methods, signed-in devices, downloading their data and
+// deleting the account (src/components/account/). Everything shown comes from
+// the server, and every change goes through a server action for the signed-in
+// account only. Paid plans do not exist yet, and the page says so plainly.
 
 const SUBSCRIPTION_LABELS: Record<StudioAccount['subscription']['status'], string> = {
   none: 'None',
@@ -41,10 +45,27 @@ export default function ProfileScreen() {
   const refresh = state?.refresh;
   const [introsReset, setIntrosReset] = useState<null | 'done' | 'failed'>(null);
 
+  const [returned, setReturned] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+
   // Always show the account as it is now (an admin may have just changed it).
   useEffect(() => {
     void refresh?.();
   }, [refresh]);
+
+  // Coming back from Google (connecting it, or confirming who you are).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const message = params.has('connect_error')
+      ? { tone: 'error' as const, text: 'Google was not connected. It must be the Google account with the same email address as this account.' }
+      : params.get('connected') === 'google'
+        ? { tone: 'ok' as const, text: 'Google is connected: you can now sign in with Google too.' }
+        : params.has('confirmed')
+          ? { tone: 'ok' as const, text: 'Thank you, you are confirmed for the next 10 minutes. Please repeat the step you were doing.' }
+          : null;
+    if (!message) return;
+    setReturned(message);
+    window.history.replaceState(window.history.state, '', window.location.pathname);
+  }, []);
 
   if (!state) return null;
   const { account } = state;
@@ -62,6 +83,11 @@ export default function ProfileScreen() {
           </div>
         )}
         <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground md:text-3xl">Your account</h1>
+        {returned && (
+          <p role={returned.tone === 'error' ? 'alert' : 'status'} className={`mt-4 rounded-lg border px-3 py-2 text-sm text-foreground ${returned.tone === 'error' ? 'border-destructive/40 bg-destructive/10' : 'border-primary/40 bg-primary/10'}`}>
+            {returned.text}
+          </p>
+        )}
 
         {/* Who */}
         <section aria-label="Profile" className="mt-5 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
@@ -71,7 +97,7 @@ export default function ProfileScreen() {
               <p className="truncate text-lg font-semibold text-foreground">{account.name}</p>
               <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
                 <span className="truncate">{account.email}</span>
-                {account.emailVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" aria-label="Verified by Google" />}
+                {account.emailVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" aria-label="Verified" />}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${plan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border bg-secondary/60 text-foreground'}`}>
@@ -87,11 +113,12 @@ export default function ProfileScreen() {
             </div>
           </div>
           <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
-            <Detail label="Signed in with" value="Google" />
-            <Detail label="Email" value={account.emailVerified ? 'Verified by Google' : 'Not verified'} />
+            <Detail label="Signed in with" value={signInWith(account)} />
+            <Detail label="Email" value={account.emailVerified ? (account.methods.google ? 'Verified by Google' : 'Verified') : 'Not verified'} />
             <Detail label="Member since" value={longDate(account.createdAt)} />
             <Detail label="Role" value={isAdmin ? 'Administrator' : 'Member'} />
           </dl>
+          <NameEditor account={account} onChanged={state.refresh} />
         </section>
 
         {/* Plan */}
@@ -151,6 +178,10 @@ export default function ProfileScreen() {
           </Link>
         </section>
 
+        <PreferencesCard account={account} onChanged={state.refresh} />
+        <SignInMethodsCard account={account} onChanged={state.refresh} />
+        <DevicesCard />
+
         {/* Tool introductions */}
         <section aria-label="Tool introductions" className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
           <p className="font-semibold text-foreground">Tool introductions</p>
@@ -184,20 +215,36 @@ export default function ProfileScreen() {
           </section>
         )}
 
+        <DataCard account={account} />
+
         <button
           type="button"
-          onClick={signOut}
+          onClick={() => signOut()}
           disabled={signingOut}
           className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-border bg-card text-[15px] font-semibold text-foreground transition-colors hover:bg-secondary disabled:opacity-60"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" /> {signingOut ? 'Signing out…' : 'Sign out'}
         </button>
+        <button
+          type="button"
+          onClick={() => signOut({ clearDevice: true })}
+          disabled={signingOut}
+          className="mx-auto mt-2 block rounded-md px-2 py-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+        >
+          Shared device? Sign out and remove the work stored here
+        </button>
         <p className="mt-3 px-2 text-center text-xs text-muted-foreground">
-          Your images never leave this device. From Google, Studio Companion keeps only your name, email address and picture.
+          Your images never leave this device. Studio Companion keeps only your account details: your name, email address, picture and settings.
         </p>
       </div>
     </div>
   );
+}
+
+function signInWith(account: StudioAccount): string {
+  const { google, password } = account.methods;
+  if (google && password) return 'Google or password';
+  return password ? 'Email and password' : 'Google';
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

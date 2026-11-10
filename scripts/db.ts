@@ -7,6 +7,7 @@
 //   npm run db -- grant-admin <userId>        give a verified Google account the admin role (audited)
 //   npm run db -- revoke-admin <userId>       take the admin role away; never from the last admin (audited)
 //   npm run db -- set-plan <userId> free|pro  assign a plan without billing, for testing (audited)
+//   npm run db -- maintenance                 nightly: remove never-confirmed password sign-ups, prune rate limits
 //
 // Admin access is granted only here or by another admin, always by user id —
 // never from configuration or an email address.
@@ -19,11 +20,12 @@ import { closeMongo, getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { authConfig } from '@/server/env';
+import { runMaintenance } from '@/server/maintenance';
 
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | maintenance';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -117,6 +119,11 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       const result = await setUserPlan(db, { userId, plan: arg2, actor: 'cli' });
       if (result.status === 'not_found') throw new Error('No user with that id.');
       console.log(result.status === 'unchanged' ? `Already on ${arg2}; nothing changed.` : `Plan changed: ${result.from} → ${result.to} (recorded in the audit log).`);
+      return;
+    }
+    case 'maintenance': {
+      const r = await runMaintenance(db);
+      console.log(`Maintenance done: ${r.unverifiedRemoved} never-confirmed sign-ups removed, ${r.rateLimitsPruned} idle rate-limit rows pruned.`);
       return;
     }
     default:

@@ -3,7 +3,9 @@
 // access is guarded — private-browsing quota or disabled storage must never
 // break the app (mirrors the rest of the codebase's localStorage handling).
 
-const PREFIX = 'studio-onboarding-';
+/** Prefix of the guided-tour progress keys in this browser. */
+export const ONBOARDING_STORAGE_PREFIX = 'studio-onboarding-';
+const PREFIX = ONBOARDING_STORAGE_PREFIX;
 
 export function hasSeenOnboarding(id: string): boolean {
   try {

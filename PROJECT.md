@@ -132,13 +132,27 @@ download.
     `visualViewport.height`, so iOS Safari/Chrome toolbars and the on-screen
     keyboard don't cause `100vh` layout jumps. The root element uses
     `height: var(--app-height, 100vh)`.
-  - **Account page** (`/app/profile`, `ProfileScreen.tsx`): Google name,
-    verified email, plan, role (admins), subscription status, member-since
-    date, what the plan includes (the Free/Pro matrix below), a disabled
-    "Upgrade: coming soon" for Free accounts, a link to the admin dashboard for
-    admins, and Sign out. Reached from the avatar at the top right of Home
-    (phones) and of the top bar (wider screens). It is a studio view like the
-    tools, so the tools stay alive behind it.
+  - **Account page** (`/app/profile`, `ProfileScreen.tsx` +
+    `src/components/account/`): name (editable) and photo (removable),
+    verified email, how the person signs in, plan, role (admins),
+    subscription status, member-since date, what the plan includes (the
+    Free/Pro matrix below), a disabled "Upgrade: coming soon" for Free
+    accounts; **Preferences** (language English/עברית and currency USD/ILS,
+    saved for Phases 3–4; "News by email" switch, off by default, every change
+    kept in `consent_events`); **How you sign in** (Google connected or
+    "Connect Google"; "Add a password" / "Change password"; "Disconnect
+    Google" only while a password exists); **Signed-in devices** (browser/OS,
+    last active, masked network, sign out one or all others; tokens never
+    reach the browser); tool introductions; admin link; **Your data**
+    ("Download my data" JSON, "Delete account…" with typed DELETE and an
+    option to remove this browser's work); Sign out, and "Shared device? Sign
+    out and remove the work stored here". Adding a password and deleting the
+    account need a session younger than 10 minutes, otherwise "Confirm it is
+    you" (password, or Google again). All changes are server actions
+    (`src/app/app/profile/actions.ts`) on the signed-in account only. Reached
+    from the avatar at the top right of Home (phones) and of the top bar
+    (wider screens). It is a studio view like the tools, so the tools stay
+    alive behind it.
   - `AccountProvider` (`account.tsx`) holds the account the server rendered
     the studio with (`getAccountSummary`) and re-reads `/api/me` when the
     studio comes back into view or the account page opens; a 401 sends the
@@ -158,14 +172,22 @@ download.
 - **State & data:** Reads `activeTab` from the project store. All tool state
   lives in the store or in each tool's local component state.
 
-### Sign in / sign up — route `/sign-in` (`src/app/sign-in/page.tsx`)
-- **Purpose:** The only way in: "Continue with Google", which also creates the
-  free account on first use (no passwords). The copy follows the registration
-  setting ("Sign in or create your free account" when open; an invite-only
-  explanation otherwise) and lists what a free account includes. Signed-in
-  visitors are sent straight on; failed sign-ins come back here with a
-  plain-language message. `?callbackURL=` is accepted only for internal `/app`
-  and `/admin` paths (`src/lib/redirects.ts`).
+### Sign in / sign up — routes `/sign-in`, `/sign-up`, `/forgot-password`, `/reset-password`, `/email-verified`
+- **Purpose:** The way in. `/sign-in`: "Continue with Google" (creates the free
+  account on first use) and, where `AUTH_EMAIL_PASSWORD=on`, an email +
+  password form with "Forgot password?" and "Create an account". The copy
+  follows the registration setting ("Sign in or create your free account" when
+  open; an invite-only explanation otherwise) and lists what a free account
+  includes. `/sign-up` (name, email, password; ends on "Check your email"
+  whatever the address — new, registered or not invited), `/forgot-password`
+  (same answer for any address), `/reset-password?token=` (new password; signs
+  out every device) and `/email-verified` (where confirmation links and email
+  sign-ins land; shows expired-link errors) exist only with email + password
+  on (`src/components/auth/`). Fields use 16 px text so iOS does not zoom.
+  Signed-in visitors are sent straight on; failed sign-ins come back with a
+  plain-language message that never reveals whether an account exists.
+  `?callbackURL=` is accepted only for internal `/app` and `/admin` paths
+  (`src/lib/redirects.ts`).
 
 ### Plans — routes `/pricing` (public) and `/app/plans` (studio view)
 - **Purpose:** Free (available now) and Pro (coming soon) side by side, from the
@@ -176,7 +198,7 @@ download.
   landing page, the sign-in page, Home ("Plans" under the tools), the account
   page and every Pro notice.
 
-### Admin — routes `/admin`, `/admin/users/[id]`, `/admin/activity` (`src/app/admin/`)
+### Admin — routes `/admin`, `/admin/users/[id]`, `/admin/activity`, `/admin/mail` (`src/app/admin/`)
 - **Purpose:** Supporting accounts. `/admin`: search by email, headline counts
   (accounts, admins, Pro), every account with its Google link (last four
   characters of the provider id only), registration, last login, role, plan,
@@ -185,7 +207,9 @@ download.
   (sessions, access in force, usage, its audit trail) and the two changes an
   admin can make, each behind a confirmation: **plan** Free ↔ Pro (testing
   only, no billing) and **role** (make / remove admin). `/admin/activity`: the
-  latest 100 audit events.
+  latest 100 audit events. `/admin/mail` ("Test mail"): only while
+  `MAIL_TRANSPORT=outbox` (development/test/staging) — the account emails the
+  app kept instead of sending, for 24 hours, with their links; 404 otherwise.
 - **Protection:** every page calls `requireAdmin()` (role re-read from the
   database; everyone else gets a 404). Changes are server actions
   (`actions.ts`): Next.js accepts them only from this site's pages, and each
@@ -225,12 +249,40 @@ Staging on the VPS (details and commands in `deploy/README.md`):
 
 ## Accounts, data and security (SaaS foundation)
 
-- **Sign-in:** Google only, via Better Auth (`src/server/auth.ts`): OpenID
-  Connect with state and PKCE, scopes `openid email profile`. An account IS its
-  Google identity — `accounts` has a unique (providerId, accountId=`sub`) index
-  and accounts are never linked or matched by email. Google tokens are not
-  stored. Origin/callbackURL checks are forced on (Better Auth would skip them
-  under tests).
+- **Sign-in:** Better Auth (`src/server/auth.ts`). Google: OpenID Connect
+  with state and PKCE, scopes `openid email profile`; the Google identity is
+  its `sub` (`accounts` unique on providerId + accountId), Google tokens are
+  not stored. Email + password (off unless `AUTH_EMAIL_PASSWORD=on`, needs a
+  mail transport): address confirmed by email before any session (links last
+  24 h), the same response for every sign-up (the owner of an existing
+  account is emailed instead), scrypt hashing, policy 12–128 characters
+  without common, predictable or personal passwords
+  (`src/server/security/password-policy.ts`), reset tokens single-use, 30
+  minutes, stored hashed (`verification.storeIdentifier: 'hashed'`), a reset
+  signs out every device. **Accounts are never merged because addresses
+  match** (`disableImplicitLinking`): a Google sign-in for a password
+  account's address is refused with guidance; the signed-in owner can connect
+  Google (same verified address) or add a password (fresh session); every
+  added method is audited and emailed. Origin/callbackURL checks are forced on
+  (Better Auth would skip them under tests).
+- **Abuse limits:** per-IP limits in MongoDB (`rateLimits`, from nginx's
+  `X-Real-IP`) per auth endpoint; per-address throttles keyed on a hash of the
+  address (`auth_throttles`): 10 wrong passwords per 15 minutes pause password
+  sign-in for that address, at most 3 emails of a kind per hour and 10 per day
+  (`src/server/security/throttle.ts`). The app must stay behind nginx: without
+  `X-Real-IP` every client shares one per-IP bucket.
+- **Account email** (`src/server/mail/`): one provider-neutral mailer;
+  `MAIL_TRANSPORT=disabled` (default) or `outbox` (kept 24 h for admins at
+  `/admin/mail`; refused unless `APP_ENV` is development, test or staging). No
+  real provider yet (needs a domain and approval). Sent in the background so a
+  response never reveals whether an address has an account.
+- **Self-service** (`src/server/account-management.ts`): device sessions,
+  profile and preferences, marketing consent history, data export
+  (`POST /api/me/export`, 5 per hour, no tokens/hashes/provider ids) and
+  deletion (removes the user and personal app data; the audit trail keeps the
+  bare id; refused for the last admin and while a paid subscription runs).
+  Nightly `npm run db -- maintenance` removes password sign-ups never
+  confirmed within 24 h and prunes idle rate-limit rows.
 - **Sessions:** random tokens in MongoDB, HttpOnly + SameSite=Lax cookies
   (`sc.session_token`, `__Secure-` prefixed over HTTPS), 30 days rolling, a
   5-minute signed cookie cache, TTL cleanup. Suspended accounts cannot start
@@ -947,3 +999,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-10 | **Roles, Free/Pro plans, admin dashboard and account page (staging).** Account model: role (`user`/`admin`) separate from an admin-assigned plan (`users.plan`, Free for every new account; Better Auth field with `input: false`) and from subscription status (billing not live). Entitlements: admins get every feature on any plan; effective plan = better of assigned plan and an active subscription; Pro never grants admin. Free/Pro matrix in `src/lib/plans.ts` (Free keeps all five tools and every save; Pro adds Large GIFs and Compare+Difference GIFs), synced to `plans` by the migration (which also moves existing accounts to Free). `POST /api/usage` authorizes and counts plan-gated feature use on the server before any GIF is encoded. Admin dashboard: search by email, phone cards / desktop table, account detail (Google link without the full id, sessions, access, usage, audit trail), plan Free↔Pro and make/remove admin behind confirmations, with server actions that re-check the admin from the database and audit every change; no self-demotion, never the last admin. Account page `/app/profile` (plan, role, subscription, member since, what is included, Upgrade: coming soon, sign out), reached from a new avatar on Home and the top bar. CLI: `list-users` (masked), guarded `grant-admin`, `revoke-admin`, `set-plan`. An expired session now returns to the page it was on after sign-in (the proxy passes the requested path to the studio layout). Tests: 146 unit/integration, 59 e2e (Desktop Chrome + iPhone WebKit; 23 new account/admin/plan specs), 36/36 visual parity with the new avatar hidden. | src/lib/{plans,account,features-client}.ts, src/server/{account,request,admin,entitlements,session,auth}.ts, src/server/db/{collections,migrate}.ts, src/app/admin/**, src/app/api/{me,usage}, src/app/app/{layout.tsx,profile/}, src/proxy.ts, src/lib/redirects.ts, src/components/shell/{account,ProfileScreen,AppNav,HomeScreen,Studio,tools}, src/components/common/ProFeature.tsx, src/features/compare-art/{CompareExportSheet.tsx,useCompareGif.ts}, src/onboarding/OnboardingHost.tsx, src/types/project.ts, scripts/{db,e2e-server}.ts, e2e/{accounts.spec.ts (new),visual-parity.spec.ts}, playwright.config.ts, deploy/README.md, PROJECT.md |
 | 2026-11-10 | **Visitor journey: registration, plans, tool introductions, Pro notices; Compare iPhone long-press fix.** Registration is an explicit setting (`AUTH_SIGNUP_MODE` invite|open; invite stays the default and staging stays invite-only); both modes need a Google-verified address, new accounts are always user/Free with marketing off, and registration and logins are audited. Sign-in page explains that Google creates the free account automatically (or that it is invite-only for now). New landing page (five tools with artwork, Plans, Sign in). Plans comparison (`PlanComparison`) on public `/pricing` and studio `/app/plans`: Free available, Pro coming soon, no prices, no payment. First-visit introduction per tool (what it helps with, how it works in three steps, one Start button), remembered per account (`users.introsSeen`, `/api/me/intros`) and resettable from the account page; guided tours unchanged. Pro notices explain what the feature does, why it is Pro and that Pro cannot be bought yet, and link to the plans. Compare: the canvas surface opts out of iOS text selection, callout and tap highlight, and cancels touches that start on it (Pointer Events still place points, drag, pinch and pan); no global change. Same fix prepared, not deployed, for the GitHub Pages app on branch `fix/compare-ios-long-press`. Tests: 150 unit/integration, 71 e2e (Desktop Chrome + iPhone WebKit), 36/36 visual parity. | src/server/{env,auth,account}.ts, src/app/{page.tsx,pricing/,sign-in/page.tsx,api/me/intros/,app/plans/}, src/components/{auth/SignInCard.tsx,plans/PlanComparison.tsx,common/ProFeature.tsx}, src/components/shell/{ToolIntro,PlansScreen,ProfileScreen,account,Studio,tools,HomeScreen}, src/lib/{plans,account}.ts, src/features/compare-art/{CompareCanvas,CompareArt,CompareExportSheet}.tsx, src/onboarding/OnboardingHost.tsx, src/types/project.ts, scripts/{db,e2e-server}.ts, e2e/{journey.spec.ts (new),accounts.spec.ts}, playwright.config.ts, .env.example, deploy/README.md, PROJECT.md |
 | 2026-11-10 | **Phase 0 — audit and architecture for the commercial SaaS roadmap.** Current-state audit of code and staging server, gap analysis, proposed data model, migration/rollback strategy, risk register, phased backlog with acceptance criteria (`docs/roadmap/`), 11 ADRs (`docs/adr/`). Found and fixed on the server: the nightly MongoDB backup had never run (cron ignored the group-writable `/etc/cron.d/studio-mongo-backup`); now `0644`, cron reloaded it, a manual run succeeded. | docs/roadmap/*, docs/adr/*, deploy/README.md, PROJECT.md |
+| 2026-11-11 | **Phase 1 — authentication and account management.** Email + password through Better Auth behind `AUTH_EMAIL_PASSWORD` (mail transport required): verification before access, identical answers for new/registered/uninvited sign-ups (found and fixed in tests: the library's stand-in response had a different shape), scrypt, 12–128 character policy, single-use hashed reset tokens that sign out every device, explicit-only account linking. Provider-neutral mailer with a staging outbox (`/admin/mail`, refused in production). Per-IP limits in MongoDB plus per-address throttles. Sign-in with email, sign-up, forgot/reset password and email-confirmed pages. Account page: name/photo, language and currency preferences, marketing consent with history, sign-in methods (connect Google, add/change password, disconnect), signed-in devices, data download, account deletion with fresh-session confirmation, shared-device sign-out. Nightly maintenance command; releases back up the database before migrating. Tests: 186 unit/integration, e2e incl. the full password journey on Desktop Chrome and sign-up/account page on iPhone WebKit. | src/server/{auth,env,account,account-management,background,maintenance}.ts, src/server/{mail,security}/*, src/server/db/{collections,migrate}.ts, src/app/{sign-up,forgot-password,reset-password,email-verified}/, src/app/admin/{mail/,AdminShell.tsx,format.ts}, src/app/app/profile/actions.ts, src/app/api/me/export/, src/app/page.tsx, src/components/auth/*, src/components/account/*, src/components/shell/{ProfileScreen,account}.tsx, src/lib/{locale,user-agent,device-data,account}.ts, scripts/{db,e2e-server}.ts, deploy/{release.sh,maintenance.sh,README.md}, e2e/{password.spec.ts (new),accounts.spec.ts}, playwright.config.ts, .env.example, docs/roadmap/*, PROJECT.md |

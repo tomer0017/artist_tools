@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AccountSummary, ToolId } from '@/lib/account';
+import { clearDeviceWork } from '@/lib/device-data';
 import type { FeatureId } from '@/lib/plans';
 import { signInPath } from '@/lib/redirects';
 import { pathForView } from './tools';
@@ -130,10 +131,14 @@ export function useHasFeature(feature: FeatureId): boolean {
   return state ? state.account.features.includes(feature) : false;
 }
 
-/** Sign out on the server, then leave the studio with a full page load (dropping everything it held in memory). */
+/**
+ * Sign out on the server, then leave the studio with a full page load
+ * (dropping everything it held in memory). `clearDevice` also removes the
+ * work kept in this browser, for shared devices.
+ */
 export function useSignOut() {
   const [signingOut, setSigningOut] = useState(false);
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (options?: { clearDevice?: boolean }) => {
     setSigningOut(true);
     // Loaded on demand: the auth client is only needed for this one click.
     const { authClient } = await import('@/lib/auth-client');
@@ -142,12 +147,13 @@ export function useSignOut() {
       setSigningOut(false);
       return;
     }
+    if (options?.clearDevice) clearDeviceWork();
     window.location.assign(new URL('/', window.location.origin));
   }, []);
   return { signingOut, signOut };
 }
 
-/** The Google profile picture, or the person's initials when there is none (or it fails to load). */
+/** The profile picture (from Google), or the person's initials when there is none (or it fails to load). */
 export function AccountAvatar({ account, size = 32 }: { account: Pick<StudioAccount, 'name' | 'email' | 'image'>; size?: number }) {
   const [failed, setFailed] = useState(false);
   const initials = (account.name || account.email)
@@ -214,7 +220,7 @@ export function AccountLine() {
       {' · '}
       <button
         type="button"
-        onClick={signOut}
+        onClick={() => signOut()}
         disabled={signingOut}
         className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
       >

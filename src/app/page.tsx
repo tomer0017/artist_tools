@@ -15,11 +15,17 @@ const HERO_FADE = 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 30
 // The call to action follows the server's registration setting.
 export const dynamic = 'force-dynamic';
 
-export default function LandingPage() {
+export default async function LandingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const open = registrationMode() === 'open';
+  const deleted = (await searchParams).account === 'deleted';
   return (
     <main className="min-h-[100dvh] bg-background" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <LegacyHashRedirect />
+      {deleted && (
+        <p role="status" className="mx-auto mt-4 w-[calc(100%-2rem)] max-w-6xl rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          Your account was deleted. Thank you for using Studio Companion.
+        </p>
+      )}
       <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 pt-5 md:px-6 lg:px-8">
         <BrandMark />
         <nav aria-label="Site" className="flex items-center gap-1 text-sm">

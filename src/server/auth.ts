@@ -113,6 +113,9 @@ export function createAuth(deps: AuthDeps) {
     secret: deps.secret,
     database: mongodbAdapter(deps.db, { client: deps.client, usePlural: true }),
     telemetry: { enabled: false },
+    // Warnings and errors only: some of the library's info messages contain
+    // email addresses, which our logs never hold.
+    logger: { level: 'warn' },
     // Email + password only where enabled (and only with a mail transport):
     // the address must be verified before the account can be used; a sign-up
     // for an address that already has an account gets the same answer as a
@@ -280,6 +283,12 @@ export function createAuth(deps: AuthDeps) {
           } else if (!failed) {
             await clearThrottle(db, 'signin-fail', body.email);
           }
+        }
+        if (ctx.path === '/unlink-account' && !failed && ctx.context.session && typeof body.providerId === 'string') {
+          const user = ctx.context.session.user;
+          await safely('auth.audit_failed', () =>
+            recordAudit(db, { type: 'account.unlinked', userId: user.id, actor: `user:${user.id}`, metadata: { provider: body.providerId as string } }),
+          );
         }
         if (ctx.path === '/change-password' && !failed && ctx.context.session) {
           const user = ctx.context.session.user;

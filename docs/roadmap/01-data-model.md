@@ -141,10 +141,11 @@ webhooks or reconciliation, never from a redirect or a client claim.
 
 ## Audit (E, extended in P1–P4)
 `audit_events`: `type`, `userId`, `actor`, `at`, `metadata` (ids, enums and
-counts only). New types: `user.email_verified`, `user.password_set`,
+counts only). New types: `user.email_verified`,
 `user.password_changed`, `user.password_reset`, `user.profile_updated`,
 `user.consent_changed`, `user.session_revoked`, `user.sessions_revoked`,
-`account.linked`, `account.unlinked`, `account.data_exported`,
+`account.linked` (Google connected or a password added, by `provider`),
+`account.unlinked`, `account.data_exported`,
 `account.deleted`, `auth.login_failed`, `auth.throttled`, and in P2
 `admin.account_suspended`, `admin.account_reactivated`, `admin.grant_*`,
 `admin.config_*`, `admin.coupon_*`.

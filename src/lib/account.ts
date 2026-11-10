@@ -1,3 +1,4 @@
+import type { Currency, Locale } from './locale';
 import type { FeatureId, PlanId } from './plans';
 
 /** The five tools' ids (as in TabId), for checking what the browser sends. */
@@ -5,9 +6,10 @@ export const TOOL_IDS = ['measure', 'value', 'color', 'grid', 'compare'] as cons
 export type ToolId = (typeof TOOL_IDS)[number];
 
 /**
- * What the signed-in person may see about their own account: identity from
- * Google, role, plan and what it includes. Built by the server from the
- * database (src/server/account.ts); the studio only displays it.
+ * What the signed-in person may see about their own account: identity, role,
+ * plan and what it includes, preferences and sign-in methods. Built by the
+ * server from the database (src/server/account.ts); the studio only displays
+ * it.
  */
 export interface AccountSummary {
   id: string;
@@ -25,4 +27,11 @@ export interface AccountSummary {
   features: FeatureId[];
   /** Tools whose first-visit introduction this person has dismissed (on any device). */
   introsSeen: ToolId[];
+  locale: Locale;
+  currency: Currency;
+  marketingConsent: boolean;
+  /** How this person can sign in. */
+  methods: { google: boolean; password: boolean };
+  /** Whether this server offers email + password (adding a password, connecting Google to one). */
+  emailPasswordEnabled: boolean;
 }

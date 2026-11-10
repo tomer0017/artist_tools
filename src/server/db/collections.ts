@@ -119,7 +119,6 @@ export type AuditEventType =
   | 'user.login'
   | 'user.logout'
   | 'user.email_verified'
-  | 'user.password_set'
   | 'user.password_changed'
   | 'user.password_reset'
   | 'user.profile_updated'
