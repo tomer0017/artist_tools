@@ -44,6 +44,21 @@ variables are kept, the previous file is saved as `<env>.env.previous`, and
 nothing restarts until you run `systemctl restart studio-companion-<env>`.
 Registration stays invite-only: an empty allowlist means no new accounts.
 
+### Changing who may create an account
+
+Install the server side once (as root): `install -m 700 deploy/install-invites.sh /usr/local/sbin/studio-set-invites`.
+Then, on your own computer:
+
+```sh
+bash deploy/set-invites.sh staging
+```
+
+Enter the complete list, comma-separated. It replaces only
+`AUTH_SIGNUP_ALLOWLIST` (no secret is asked for), keeps the previous file as
+`<env>.env.previous`, restarts the app and waits for it to be healthy, and
+puts the old list back if it is not. Addresses left out can no longer sign
+up; existing accounts always keep working.
+
 ## Releasing
 
 ```sh
@@ -72,8 +87,15 @@ so older releases run against the newer schema.
 
 - Logs: `journalctl -u studio-companion-<env> -f` (JSON lines from the app).
 - Health: `curl -s http://127.0.0.1:<port>/api/health?ready=1`.
-- Accounts from the command line (as the site user, with the environment
-  loaded): `cd /home/<user>/app/current && sudo -u <user> bash -c 'set -a; . /etc/studio-companion/<env>.env; set +a; npm run db -- <command>'`
+- Accounts from the command line (as the site user, with its Node.js and the
+  environment loaded):
+
+  ```sh
+  . /etc/studio-companion/<env>.conf
+  cd "$APP_DIR/current" && sudo -u "$APP_USER" env PATH="$NODE_BIN:/usr/bin:/bin" \
+    bash -c 'set -a; . /etc/studio-companion/<env>.env; set +a; npm run db -- <command>'
+  ```
+
   - `list-users`: every account with emails masked, its Google link, role,
     plan and whether it is on the invite list;
   - `grant-admin <userId>`: the first admin (later admins can be made from
