@@ -167,5 +167,11 @@ so older releases run against the newer schema.
   or world-writable: the file must stay `root:root 0644`. Until 2026-11-10 it
   was `0664` and the job never ran (cron logged `INSECURE MODE`); check with
   `journalctl -u cron | grep studio-mongo` and `ls -lt /var/backups/mongodb`.
+- **Nightly maintenance** (staging since 2026-11-11): `/etc/cron.d/studio-maintenance`
+  (03:20, `root:root 0644`) runs `/usr/local/sbin/studio-maintenance staging`
+  (`deploy/maintenance.sh`).
+- **Phase 1 configuration change (2026-11-10):** staging's env file gained
+  `APP_ENV`, `AUTH_EMAIL_PASSWORD` and `MAIL_TRANSPORT`; the previous file and
+  release script are in `/root/backups/phase1-20261110T233138Z/`.
 - **Off-site backups:** see `deploy/offsite-backups-plan.md` (plan, not yet
   implemented).
