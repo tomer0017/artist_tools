@@ -72,8 +72,17 @@ so older releases run against the newer schema.
 
 - Logs: `journalctl -u studio-companion-<env> -f` (JSON lines from the app).
 - Health: `curl -s http://127.0.0.1:<port>/api/health?ready=1`.
-- Admin access: `cd /home/<user>/app/current && sudo -u <user> bash -c 'set -a; . /etc/studio-companion/<env>.env; set +a; npm run db -- find-user <email>'`,
-  then `… npm run db -- grant-admin <userId>`.
+- Accounts from the command line (as the site user, with the environment
+  loaded): `cd /home/<user>/app/current && sudo -u <user> bash -c 'set -a; . /etc/studio-companion/<env>.env; set +a; npm run db -- <command>'`
+  - `list-users`: every account with emails masked, its Google link, role,
+    plan and whether it is on the invite list;
+  - `grant-admin <userId>`: the first admin (later admins can be made from
+    `/admin`); refused unless the account is active, Google-verified and
+    linked to exactly one Google identity;
+  - `revoke-admin <userId>`: never removes the last admin;
+  - `set-plan <userId> free|pro`: assign a plan for testing (no billing).
+
+  All of them are recorded in the audit log (`/admin/activity`).
 
 ## Server notes
 

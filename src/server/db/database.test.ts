@@ -2,6 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MongoClient, ObjectId } from 'mongodb';
 import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
+import { PLAN_FEATURES } from '@/lib/plans';
 import { FEATURES, collections, isDuplicateKeyError, toObjectId } from './collections';
 import { INDEXES, migrate } from './migrate';
 import { closeMongo, getDb, pingDb } from './client';
@@ -19,9 +20,9 @@ afterAll(async () => {
 });
 
 describe('migration', () => {
-  it('creates every index and seeds Free and Pro with all features and no limits', async () => {
+  it('creates every index and seeds Free and Pro from the plan definitions', async () => {
     const report = await migrate(mongo.db);
-    expect(report).toEqual({ indexes: INDEXES.length, plansInserted: 2 });
+    expect(report).toEqual({ indexes: INDEXES.length, plansInserted: 2, plansUpdated: 0, usersBackfilled: 0 });
 
     for (const index of INDEXES) {
       const names = (await mongo.db.collection(index.collection).listIndexes().toArray()).map((i) => i.name);
@@ -30,18 +31,38 @@ describe('migration', () => {
     const plans = await collections(mongo.db).plans.find().sort({ _id: 1 }).toArray();
     expect(plans.map((p) => p._id)).toEqual(['free', 'pro']);
     for (const plan of plans) {
-      expect(plan.features).toEqual([...FEATURES]);
+      expect(plan.features).toEqual(PLAN_FEATURES[plan._id]);
       expect(plan.limits).toEqual({});
       expect(plan.active).toBe(true);
     }
+    // Free keeps every tool and every existing save; only the two Pro GIF options differ.
+    expect(FEATURES.filter((f) => !PLAN_FEATURES.free.includes(f))).toEqual(['export.gif_large', 'export.gif_difference']);
+    expect(PLAN_FEATURES.pro).toEqual([...FEATURES]);
   });
 
-  it('is idempotent and never overwrites an edited plan', async () => {
-    await collections(mongo.db).plans.updateOne({ _id: 'pro' }, { $set: { name: 'Pro (edited)' } });
-    const report = await migrate(mongo.db);
-    expect(report.plansInserted).toBe(0);
-    expect(await collections(mongo.db).plans.countDocuments()).toBe(2);
-    expect((await collections(mongo.db).plans.findOne({ _id: 'pro' }))?.name).toBe('Pro (edited)');
+  it('is idempotent and keeps stored plans in step with the code', async () => {
+    const { plans } = collections(mongo.db);
+    expect(await migrate(mongo.db)).toMatchObject({ plansInserted: 0, plansUpdated: 0 });
+    // A plan edited (or seeded by an older release) in the database is brought back.
+    await plans.updateOne({ _id: 'free' }, { $set: { features: [...FEATURES], name: 'Free (edited)' } });
+    expect(await migrate(mongo.db)).toMatchObject({ plansInserted: 0, plansUpdated: 1 });
+    expect(await plans.findOne({ _id: 'free' })).toMatchObject({ name: 'Free', features: PLAN_FEATURES.free });
+    expect(await plans.countDocuments()).toBe(2);
+  });
+
+  it('puts accounts from before plans existed on Free, and leaves assigned plans alone', async () => {
+    const { users } = collections(mongo.db);
+    const legacy = new ObjectId();
+    const pro = new ObjectId();
+    const base = { name: 'L', emailVerified: true, createdAt: new Date(), updatedAt: new Date(), role: 'user' as const, status: 'active' as const, marketingConsent: false };
+    await users.insertMany([
+      { _id: legacy, email: 'legacy@example.com', ...base },
+      { _id: pro, email: 'assigned-pro@example.com', plan: 'pro', ...base },
+    ]);
+    expect((await migrate(mongo.db)).usersBackfilled).toBe(1);
+    expect((await users.findOne({ _id: legacy }))?.plan).toBe('free');
+    expect((await users.findOne({ _id: pro }))?.plan).toBe('pro');
+    expect((await migrate(mongo.db)).usersBackfilled).toBe(0);
   });
 
   it('expires sessions by their expiresAt', async () => {

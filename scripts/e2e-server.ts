@@ -23,7 +23,7 @@ const DB_NAME = 'studio_e2e';
 /** The signed cookie value Better Auth expects: `token.HMAC-SHA256(token)`, URL-encoded. */
 const signedCookie = (token: string) => encodeURIComponent(`${token}.${createHmac('sha256', SECRET).update(token).digest('base64')}`);
 
-async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin') {
+async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin', plan: 'free' | 'pro' = 'free', sessionExpired = false) {
   const userId = new ObjectId();
   const now = new Date();
   await db.collection('users').insertOne({
@@ -36,15 +36,18 @@ async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin') {
     updatedAt: now,
     role,
     status: 'active',
+    plan,
+    lastLoginAt: now,
     marketingConsent: false,
   });
+  await db.collection('audit_events').insertOne({ type: 'user.registered', userId, actor: `user:${userId}`, at: now, metadata: { provider: 'google' } });
   await db.collection('accounts').insertOne({ _id: new ObjectId(), userId, providerId: 'google', accountId: `e2e-${name}`, createdAt: now, updatedAt: now });
   const token = randomBytes(24).toString('base64url');
   await db.collection('sessions').insertOne({
     _id: new ObjectId(),
     userId,
     token,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + (sessionExpired ? -60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000)),
     createdAt: now,
     updatedAt: now,
     ipAddress: '',
@@ -65,9 +68,15 @@ await client.connect();
 const db = client.db(DB_NAME);
 await migrate(db);
 mkdirSync('e2e/.auth', { recursive: true });
-await seedSignedInUser(db, 'user', 'user');
+await seedSignedInUser(db, 'user', 'user'); // Free: what specs are signed in as by default
+await seedSignedInUser(db, 'pro', 'user', 'pro');
 await seedSignedInUser(db, 'admin', 'admin');
 await seedSignedInUser(db, 'signout', 'user');
+// Accounts the admin specs change (plan, role); nothing else relies on them.
+await seedSignedInUser(db, 'target', 'user');
+await seedSignedInUser(db, 'promote', 'user');
+await seedSignedInUser(db, 'leaver', 'user');
+await seedSignedInUser(db, 'expired', 'user', 'free', true);
 await client.close();
 
 const server = spawn('node', ['.next/standalone/server.js'], {

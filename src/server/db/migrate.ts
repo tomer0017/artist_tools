@@ -1,6 +1,7 @@
 import 'server-only';
 import type { Db, IndexSpecification, CreateIndexesOptions } from 'mongodb';
-import { FEATURES, collections, type PlanDoc } from './collections';
+import { PLAN_FEATURES, PLAN_IDS, PLAN_NAMES } from '@/lib/plans';
+import { collections, type PlanDoc } from './collections';
 
 // Idempotent schema setup: safe to run on every deploy (`npm run db:migrate`).
 // Better Auth creates its own basic indexes (unique email and session token,
@@ -42,22 +43,49 @@ export const INDEXES: IndexPlan[] = [
   { collection: 'analytics_events', key: { name: 1, at: -1 }, options: { name: 'analytics_by_name' } },
 ];
 
-/** Plans as first created. Existing plan documents are never overwritten. */
-export function seedPlans(now = new Date()): PlanDoc[] {
-  return [
-    { _id: 'free', name: 'Free', active: true, features: [...FEATURES], limits: {}, updatedAt: now },
-    { _id: 'pro', name: 'Pro', active: true, features: [...FEATURES], limits: {}, updatedAt: now },
-  ];
+/** Plans as the code defines them (src/lib/plans.ts). */
+export function planDefinitions(now = new Date()): PlanDoc[] {
+  return PLAN_IDS.map((id) => ({ _id: id, name: PLAN_NAMES[id], active: true, features: [...PLAN_FEATURES[id]], limits: {}, updatedAt: now }));
 }
 
-export async function migrate(db: Db): Promise<{ indexes: number; plansInserted: number }> {
+const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((item, i) => item === b[i]);
+
+export interface MigrationReport {
+  indexes: number;
+  plansInserted: number;
+  plansUpdated: number;
+  usersBackfilled: number;
+}
+
+export async function migrate(db: Db): Promise<MigrationReport> {
   for (const index of INDEXES) {
     await db.collection(index.collection).createIndex(index.key, index.options);
   }
+
+  // The code owns plan definitions: missing plans are inserted, and a plan
+  // whose stored features, limits or name differ is brought back in step.
+  const { plans, users } = collections(db);
   let plansInserted = 0;
-  for (const plan of seedPlans()) {
-    const result = await collections(db).plans.updateOne({ _id: plan._id }, { $setOnInsert: plan }, { upsert: true });
-    plansInserted += result.upsertedCount;
+  let plansUpdated = 0;
+  for (const plan of planDefinitions()) {
+    const stored = await plans.findOne({ _id: plan._id });
+    if (!stored) {
+      await plans.insertOne(plan);
+      plansInserted += 1;
+    } else if (
+      stored.name !== plan.name ||
+      stored.active !== plan.active ||
+      !sameList(stored.features ?? [], plan.features) ||
+      JSON.stringify(stored.limits ?? {}) !== JSON.stringify(plan.limits)
+    ) {
+      const { _id, ...definition } = plan;
+      await plans.updateOne({ _id }, { $set: definition });
+      plansUpdated += 1;
+    }
   }
-  return { indexes: INDEXES.length, plansInserted };
+
+  // Accounts created before plans existed are on Free.
+  const { modifiedCount: usersBackfilled } = await users.updateMany({ plan: { $exists: false } }, { $set: { plan: 'free' } });
+
+  return { indexes: INDEXES.length, plansInserted, plansUpdated, usersBackfilled };
 }

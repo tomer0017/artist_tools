@@ -158,7 +158,7 @@ describe('the Google callback', () => {
 
     const { users, accounts, sessions, auditEvents, analyticsEvents } = collections(mongo.db);
     const user = await users.findOne({ email: ada.email });
-    expect(user).toMatchObject({ emailVerified: true, role: 'user', status: 'active', marketingConsent: false });
+    expect(user).toMatchObject({ emailVerified: true, role: 'user', plan: 'free', status: 'active', marketingConsent: false });
     expect(user!.lastLoginAt).toBeInstanceOf(Date);
 
     const account = await accounts.findOne({ userId: user!._id });
@@ -250,6 +250,24 @@ describe('sessions', () => {
     expect(new URL(callback.headers.get('location')!, BASE).pathname).toBe('/sign-in');
     expect(sessionTokenCookie(cookies)).toBe('');
     expect(await sessions.countDocuments({ userId: user!._id })).toBe(sessionsBefore);
+  });
+});
+
+describe('no privilege escalation through the auth API', () => {
+  it('cannot be used to change your own role, plan or status', async () => {
+    const mallory: GoogleUser = { sub: 'google-sub-mallory', email: 'mallory@example.com' };
+    const { cookies } = await signInAs(mallory);
+    for (const body of [{ role: 'admin' }, { plan: 'pro' }, { name: 'Mallory', role: 'admin', plan: 'pro', status: 'active' }]) {
+      const response = await auth.handler(
+        new Request(`${BASE}/api/auth/update-user`, {
+          method: 'POST',
+          headers: { cookie: cookies, origin: BASE, 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(response.status).toBeGreaterThanOrEqual(400);
+    }
+    expect(await collections(mongo.db).users.findOne({ email: mallory.email })).toMatchObject({ role: 'user', plan: 'free', status: 'active' });
   });
 });
 

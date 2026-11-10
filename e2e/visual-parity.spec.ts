@@ -36,9 +36,10 @@ const HEADINGS: Record<string, string | RegExp> = {
 };
 
 async function settle(page: Page) {
-  // The "Signed in as … · Sign out" line under Home is a deliberate addition of
-  // the SaaS migration; hide it so everything else is compared pixel for pixel.
-  if (TARGET === 'next') await page.addStyleTag({ content: '[data-account-line]{display:none!important}' });
+  // The "Signed in as … · Sign out" line under Home and the account avatar are
+  // deliberate additions of the SaaS migration; hide them so everything else
+  // is compared pixel for pixel.
+  if (TARGET === 'next') await page.addStyleTag({ content: '[data-account-line],[data-account-ui]{display:none!important}' });
   await page.waitForLoadState('networkidle');
   await page.evaluate(async () => {
     await document.fonts.ready;

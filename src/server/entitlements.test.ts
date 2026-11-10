@@ -5,7 +5,9 @@ import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mo
 import { FEATURES, collections, type PlanDoc, type PlanId, type SubscriptionDoc } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { recordUsage } from '@/server/usage';
-import { canUse, clearPlanCache, computeEntitlements, getEntitlements, remaining, subscriptionGrantsPlan, GRACE_DAYS } from './entitlements';
+import { PLAN_FEATURES } from '@/lib/plans';
+import { authorizeFeatureUse, canUse, clearPlanCache, computeEntitlements, getEntitlements, remaining, subscriptionGrantsPlan, GRACE_DAYS } from './entitlements';
+import { getUsage } from '@/server/usage';
 
 const NOW = new Date('2026-11-09T12:00:00Z');
 const day = (n: number) => new Date(NOW.getTime() + n * 24 * 60 * 60 * 1000);
@@ -63,6 +65,38 @@ describe('computeEntitlements', () => {
     expect(computeEntitlements({ user: active, subscription: sub('active', day(10)), plans, usage: {}, now: NOW }).planId).toBe('free');
   });
 
+  it('gives administrators every feature, whatever their plan or subscription', () => {
+    for (const subscription of [null, sub('expired', day(-30))]) {
+      const e = computeEntitlements({ user: { status: 'active', role: 'admin', plan: 'free' }, subscription, plans: PLANS, usage: {}, now: NOW });
+      expect(e).toMatchObject({ access: 'admin', role: 'admin', accountActive: true, planId: 'free' });
+      expect(e.features).toEqual([...FEATURES]);
+      expect(e.limits).toEqual({});
+    }
+    // …but a suspended admin gets nothing.
+    const suspended = computeEntitlements({ user: { status: 'suspended', role: 'admin' }, subscription: null, plans: PLANS, usage: {}, now: NOW });
+    expect(suspended).toMatchObject({ access: 'none', features: [] });
+  });
+
+  it('honours a plan assigned by an administrator, without any subscription', () => {
+    const e = computeEntitlements({ user: { status: 'active', plan: 'pro' }, subscription: null, plans: PLANS, usage: {}, now: NOW });
+    expect(e).toMatchObject({ assignedPlan: 'pro', planId: 'pro', access: 'pro', subscriptionActive: false, subscriptionStatus: null });
+    expect(canUse(e, 'tool.compare')).toBe(true);
+  });
+
+  it('uses the better of the assigned plan and an active subscription', () => {
+    const subscribed = computeEntitlements({ user: { status: 'active', plan: 'free' }, subscription: sub('active', day(10)), plans: PLANS, usage: {}, now: NOW });
+    expect(subscribed).toMatchObject({ assignedPlan: 'free', planId: 'pro', subscriptionActive: true });
+    const lapsed = computeEntitlements({ user: { status: 'active', plan: 'pro' }, subscription: sub('expired', day(-1)), plans: PLANS, usage: {}, now: NOW });
+    expect(lapsed.planId).toBe('pro');
+  });
+
+  it('never makes anyone an admin through a plan, and ignores unknown plan or role values', () => {
+    const e = computeEntitlements({ user: { status: 'active', plan: 'pro', role: 'superuser' }, subscription: sub('active', day(10)), plans: PLANS, usage: {}, now: NOW });
+    expect(e).toMatchObject({ role: 'user', access: 'pro' });
+    const odd = computeEntitlements({ user: { status: 'active', plan: 'enterprise' }, subscription: null, plans: PLANS, usage: {}, now: NOW });
+    expect(odd).toMatchObject({ assignedPlan: 'free', planId: 'free' });
+  });
+
   it('enforces monthly limits and reports what is left', () => {
     const e = (used: number) => computeEntitlements({ user: active, subscription: null, plans: { free: plan([...FEATURES], { 'export.gif': 3 }) }, usage: { 'export.gif': used }, now: NOW });
     expect(remaining(e(1), 'export.gif')).toBe(2);
@@ -89,16 +123,21 @@ describe('getEntitlements (from the database only)', () => {
     return _id;
   }
 
-  it('gives a new account the Free plan with every current tool', async () => {
-    const e = await getEntitlements(mongo.db, await newUser(), NOW);
-    expect(e).toMatchObject({ authenticated: true, accountActive: true, planId: 'free', subscriptionActive: false });
-    expect(e.features).toEqual([...FEATURES]);
+  it('gives a new account the Free plan with every tool, and Pro features only on Pro', async () => {
+    const e = await getEntitlements(mongo.db, await newUser({ plan: 'free' }), NOW);
+    expect(e).toMatchObject({ authenticated: true, accountActive: true, access: 'free', planId: 'free', subscriptionActive: false });
+    expect(e.features).toEqual(PLAN_FEATURES.free);
+    for (const tool of ['tool.measure', 'tool.study', 'tool.color', 'tool.grid', 'tool.compare'] as const) expect(canUse(e, tool)).toBe(true);
+    expect(canUse(e, 'export.gif_large')).toBe(false);
+    const pro = await getEntitlements(mongo.db, await newUser({ plan: 'pro' }), NOW);
+    expect(pro.features).toEqual(PLAN_FEATURES.pro);
   });
 
-  it('ignores plan or payment claims stored anywhere but a server-written subscription', async () => {
-    // As if a client had smuggled these fields into the user document.
-    const userId = await newUser({ plan: 'pro', planId: 'pro', subscriptionStatus: 'active', isPro: true });
-    expect((await getEntitlements(mongo.db, userId, NOW)).planId).toBe('free');
+  it('ignores plan or payment claims stored anywhere but the server-owned fields', async () => {
+    // As if these had been smuggled into the user document; only `plan` (written
+    // by admins through the server) and server-written subscriptions count.
+    const userId = await newUser({ planId: 'pro', subscriptionStatus: 'active', isPro: true, plan: 'PRO' });
+    expect(await getEntitlements(mongo.db, userId, NOW)).toMatchObject({ planId: 'free', role: 'user' });
   });
 
   it('reflects subscription changes written by the server', async () => {
@@ -120,6 +159,19 @@ describe('getEntitlements (from the database only)', () => {
     const e = await getEntitlements(mongo.db, userId);
     expect(canUse(e, 'export.gif')).toBe(false);
     await collections(mongo.db).plans.updateOne({ _id: 'free' }, { $set: { limits: {} } });
+  });
+
+  it('authorizes a feature use on the server and counts it, refusing what the plan lacks', async () => {
+    const free = await newUser({ plan: 'free' });
+    expect(await authorizeFeatureUse(mongo.db, free, ['export.gif'], NOW)).toEqual({ status: 'recorded' });
+    expect(await authorizeFeatureUse(mongo.db, free, ['export.gif', 'export.gif_large'], NOW)).toEqual({ status: 'denied', missing: ['export.gif_large'] });
+    expect(await getUsage(mongo.db, free, '2026-11')).toEqual({ 'export.gif': 1 });
+
+    const admin = await newUser({ role: 'admin', plan: 'free' });
+    expect(await authorizeFeatureUse(mongo.db, admin, ['export.gif', 'export.gif_difference'], NOW)).toEqual({ status: 'recorded' });
+    const suspended = await newUser({ status: 'suspended', plan: 'pro' });
+    expect((await authorizeFeatureUse(mongo.db, suspended, ['export.gif'], NOW)).status).toBe('denied');
+    expect((await authorizeFeatureUse(mongo.db, new ObjectId(), ['export.gif'], NOW)).status).toBe('denied');
   });
 
   it('gives nothing to an account that does not exist', async () => {

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { BrandMark } from './BrandMark';
-import { AccountLine } from './account';
+import { AccountButton, AccountLine } from './account';
 import { HOME_ORDER, TOOLS, pathForView } from './tools';
 import type { TabId } from '@/types/project';
 
@@ -53,7 +53,12 @@ export default function HomeScreen() {
           </div>
 
           <div className="relative">
-            {isMobile && <div className="mb-5"><BrandMark /></div>}
+            {isMobile && (
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <BrandMark />
+                <AccountButton />
+              </div>
+            )}
             <h1 className="text-[28px] font-bold leading-[1.1] tracking-tight text-foreground md:text-[40px] lg:text-[46px]">
               Your All-in-One
               <span className="relative block w-fit text-primary">

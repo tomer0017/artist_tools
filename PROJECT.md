@@ -105,7 +105,7 @@ download.
   `LegacyHashRedirect` (unknown tools → `/app`), because a hash never reaches
   the server.
 
-### Studio — routes `/app` and `/app/[tool]` (`src/components/shell/Studio.tsx`)
+### Studio — routes `/app`, `/app/[tool]` and `/app/profile` (`src/components/shell/Studio.tsx`)
 - **Purpose:** The Home / Tool Hub and the five tools. Every view has its own
   URL (`/app`, `/app/measure`, `/app/study`, `/app/color`, `/app/grid`,
   `/app/compare`); they share one layout, so switching tools never remounts
@@ -129,7 +129,18 @@ download.
     `visualViewport.height`, so iOS Safari/Chrome toolbars and the on-screen
     keyboard don't cause `100vh` layout jumps. The root element uses
     `height: var(--app-height, 100vh)`.
-- **Key components used:** `HomeScreen`, `TopNav`/`BottomNav`, `MeasureTab`,
+  - **Account page** (`/app/profile`, `ProfileScreen.tsx`): Google name,
+    verified email, plan, role (admins), subscription status, member-since
+    date, what the plan includes (the Free/Pro matrix below), a disabled
+    "Upgrade: coming soon" for Free accounts, a link to the admin dashboard for
+    admins, and Sign out. Reached from the avatar at the top right of Home
+    (phones) and of the top bar (wider screens). It is a studio view like the
+    tools, so the tools stay alive behind it.
+  - `AccountProvider` (`account.tsx`) holds the account the server rendered
+    the studio with (`getAccountSummary`) and re-reads `/api/me` when the
+    studio comes back into view or the account page opens; a 401 sends the
+    person to sign in and back.
+- **Key components used:** `HomeScreen`, `ProfileScreen`, `TopNav`/`BottomNav`, `MeasureTab`,
   `ValueTab`, `ColorTab`, `GridTab`, `CompareArt` (lazy), all wrapped in
   `ProjectProvider` + `OnboardingProvider`.
 - **State & data:** Reads `activeTab` from the project store. All tool state
@@ -141,11 +152,23 @@ download.
   message. `?callbackURL=` is accepted only for internal `/app` and `/admin`
   paths (`src/lib/redirects.ts`).
 
-### Admin — route `/admin` (`src/app/admin/page.tsx`)
-- **Purpose:** Who uses the app: registration date, last login, status, plan,
-  subscription status and uses this month, 50 per page. Server rendered; the
-  admin role is re-read from the database on every request and everyone else
-  gets a 404. There is no API that lists users.
+### Admin — routes `/admin`, `/admin/users/[id]`, `/admin/activity` (`src/app/admin/`)
+- **Purpose:** Supporting accounts. `/admin`: search by email, headline counts
+  (accounts, admins, Pro), every account with its Google link (last four
+  characters of the provider id only), registration, last login, role, plan,
+  subscription, sign-ins and GIFs this month — cards on phones, a table on
+  wider screens — plus recent activity. `/admin/users/[id]`: one account
+  (sessions, access in force, usage, its audit trail) and the two changes an
+  admin can make, each behind a confirmation: **plan** Free ↔ Pro (testing
+  only, no billing) and **role** (make / remove admin). `/admin/activity`: the
+  latest 100 audit events.
+- **Protection:** every page calls `requireAdmin()` (role re-read from the
+  database; everyone else gets a 404). Changes are server actions
+  (`actions.ts`): Next.js accepts them only from this site's pages, and each
+  re-checks `currentAdmin()`, validates its input with zod, and writes an audit
+  event. An admin cannot remove their own admin role, and the last active admin
+  can never be demoted (`setUserRole`). No tokens, session secrets or full
+  Google ids are ever sent to the page. There is no API that lists users.
 
 ### Not Found — route `*` (`src/app/not-found.tsx`)
 - **Purpose:** Catch-all for unknown routes.
@@ -196,23 +219,58 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   users/accounts/sessions/verifications (Better Auth), plans, subscriptions,
   usage (per user/feature/month), audit_events, payment_events,
   analytics_events. User references are ObjectIds.
+- **Account model:** three separate things. **Role** (`users.role`: `user` |
+  `admin`) decides who may administer; **plan** (`users.plan`: `free` | `pro`)
+  is what an admin assigned (every new invited account starts on Free);
+  **subscription status** (`none` | `trialing` | `active` | `past_due` |
+  `canceled` | `expired`, from server-written `subscriptions`) is billing,
+  which is not live, so it is `none` for everyone. The plan in force is the
+  better of the assigned plan and what an active subscription grants. Role,
+  status and plan are Better Auth fields with `input: false`, so no auth
+  endpoint can set them (tested: update-user refuses them).
 - **Entitlements** (`src/server/entitlements.ts`): one pure function decides
-  plan, features and limits from the database only (user status,
-  server-written subscription, plans, usage). Free and Pro both include every
-  tool today; no limits are set. Client-supplied plan or payment claims are
-  never inputs (tested).
+  access, plan, features and limits from the database only (user status, role,
+  assigned plan, server-written subscription, plans, usage). **Admins get every
+  feature whatever their plan or subscription; no plan ever grants the admin
+  role.** Client-supplied plan or payment claims are never inputs (tested).
+- **Free / Pro feature matrix** (defined in `src/lib/plans.ts`; the migration
+  writes it to `plans`):
+
+  | Capability | Free | Pro | Admin |
+  |---|---|---|---|
+  | All five tools (Measure, Study, Color, Grid, Compare) | ✓ | ✓ | ✓ |
+  | Save images (grids, studies, comparisons) | ✓ | ✓ | ✓ |
+  | Comparison GIFs: opacity pulse and blink, S and M sizes | ✓ | ✓ | ✓ |
+  | Large GIFs (L, up to 800 px) | locked | ✓ | ✓ |
+  | Compare + Difference GIF animation | locked | ✓ | ✓ |
+
+  No monthly limits are set. Locked options stay visible with a lock; choosing
+  one explains it is part of Pro and that paid plans are coming soon.
+- **Using a plan-gated feature:** before any GIF is encoded the studio calls
+  `POST /api/usage` with the features it needs; the server checks them from
+  the database (`authorizeFeatureUse`) and counts the use (these counts are
+  the admin's "GIFs this month"). Cross-site requests are refused.
+- **Testing Free and Pro:** an admin switches an account's plan on
+  `/admin/users/[id]` (or `npm run db -- set-plan <userId> free|pro`); the
+  account sees it on its next request.
 - **Payments (not active):** `src/server/billing/` defines the provider
   contract (verified webhooks only) and an idempotent processor keyed on the
   provider's event id; there is no HTTP route and no real billing yet.
-- **Admin access** is granted only with `npm run db -- grant-admin <userId>` on
-  a machine with database access — never from configuration or an email
-  address — and every change is audited.
+- **Admin access** is granted by user id only: by an existing admin on
+  `/admin/users/[id]`, or with `npm run db -- grant-admin <userId>` on a
+  machine with database access (which refuses accounts that are not active,
+  not Google-verified, or not linked to exactly one Google identity) — never
+  from configuration or an email address. Every change is audited.
 - **Analytics:** first-party, allow-listed events without personal data;
   one-off events are de-duplicated. Registration and login are recorded on the
   server; the browser-side events (landing, first tool use, first export) are
   defined but not wired yet. Marketing consent is a separate, default-off field.
-- **Limits to know:** tools run in the browser, so their features cannot be
-  truly paywalled by hiding UI — only server-side features can be enforced.
+- **Limits to know:** tools run in the browser. The server decides who may
+  use a Pro option and counts it, but the work itself happens on the device,
+  so a modified browser could make a Large GIF without asking; only features
+  with server-side work could be enforced completely. That is acceptable for
+  options without server cost, and is why nothing secret or costly depends on
+  the browser's copy of the plan.
   The last project lives in the browser's `localStorage`, so on a shared device
   the next person to sign in on that browser sees it (no per-account local data
   yet).
@@ -836,3 +894,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-09 | **Migrated from Vite to Next.js 16 (App Router) + React 19**, behaviour-preserving. Public landing at `/`; the studio under `/app` (`/app/<tool>`), rendered once by a shared layout so tools stay mounted across URLs (KeepAlive preserved); client-only studio rendering with its code in the first download; old `/#/tool` links forwarded; unknown tools → `/app`. Removed react-router-dom, gh-pages and the unused calendar/drawer components (React-18-only deps). Lint errors fixed (0 errors). Tests: 78 unit, 19 e2e (4 new routing specs), 36/36 visual-parity screenshots identical to the pre-migration build. Checkpoint tag `pre-nextjs-migration-2026-11-09`. | src/app/*, src/components/shell/{Studio,StudioClient,BrandMark,LegacyHashRedirect,AppNav,HomeScreen,tools}, next.config.ts, tsconfig.json, eslint.config.js, package.json, playwright.config.ts, e2e/*, scripts/prepare-standalone.mjs, README.md, PROJECT.md |
 | 2026-11-10 | **Google sign-in, MongoDB and SaaS foundation (phases C–E), local only.** Better Auth (Google OIDC, PKCE, database sessions, origin checks forced on, no stored Google tokens, identity = Google `sub`); proxy + server-verified sessions on every studio page/API; sign-in page; account line + sign-out under Home; MongoDB data model, idempotent migrations and Free/Pro plans; server-only entitlements; inactive payment-event processor (idempotent, audited); admin users page + CLI role grants; first-party analytics; /api/me, /api/health; security headers. Tests: 120 unit/integration (real MongoDB 8 replica set, full Google OAuth flow with a simulated Google), 36 e2e incl. 17 auth/security, 36/36 visual parity. | src/server/**, src/proxy.ts, src/app/{sign-in,admin,api,error}, src/app/app/*, src/components/{auth,shell/account,shell/Studio*,shell/HomeScreen}, src/lib/{auth-client,redirects}, scripts/{db,e2e-server}.ts, .env.example, e2e/*, playwright.config.ts, next.config.ts, README.md, PROJECT.md |
 | 2026-11-10 | **Staging on the VPS.** MongoDB 8.0 (localhost, auth, replica set, nightly local dumps); CloudPanel Node.js site `staging.185-176-255-3.sslip.io` with Let's Encrypt; systemd unit + `deploy/release.sh` (build exact commit, migrate, atomic switch, health-gated auto switch-back; drill verified). Google sign-in optional until its OAuth client exists. Security headers aligned with CloudPanel's nginx + HSTS; health check validates config. | deploy/*, next.config.ts, src/app/api/health, src/server/{env,auth}.ts, src/app/sign-in, src/components/auth, PROJECT.md |
+| 2026-11-10 | **Roles, Free/Pro plans, admin dashboard and account page (staging).** Account model: role (`user`/`admin`) separate from an admin-assigned plan (`users.plan`, Free for every new account; Better Auth field with `input: false`) and from subscription status (billing not live). Entitlements: admins get every feature on any plan; effective plan = better of assigned plan and an active subscription; Pro never grants admin. Free/Pro matrix in `src/lib/plans.ts` (Free keeps all five tools and every save; Pro adds Large GIFs and Compare+Difference GIFs), synced to `plans` by the migration (which also moves existing accounts to Free). `POST /api/usage` authorizes and counts plan-gated feature use on the server before any GIF is encoded. Admin dashboard: search by email, phone cards / desktop table, account detail (Google link without the full id, sessions, access, usage, audit trail), plan Free↔Pro and make/remove admin behind confirmations, with server actions that re-check the admin from the database and audit every change; no self-demotion, never the last admin. Account page `/app/profile` (plan, role, subscription, member since, what is included, Upgrade: coming soon, sign out), reached from a new avatar on Home and the top bar. CLI: `list-users` (masked), guarded `grant-admin`, `revoke-admin`, `set-plan`. An expired session now returns to the page it was on after sign-in (the proxy passes the requested path to the studio layout). Tests: 146 unit/integration, 59 e2e (Desktop Chrome + iPhone WebKit; 23 new account/admin/plan specs), 36/36 visual parity with the new avatar hidden. | src/lib/{plans,account,features-client}.ts, src/server/{account,request,admin,entitlements,session,auth}.ts, src/server/db/{collections,migrate}.ts, src/app/admin/**, src/app/api/{me,usage}, src/app/app/{layout.tsx,profile/}, src/proxy.ts, src/lib/redirects.ts, src/components/shell/{account,ProfileScreen,AppNav,HomeScreen,Studio,tools}, src/components/common/ProFeature.tsx, src/features/compare-art/{CompareExportSheet.tsx,useCompareGif.ts}, src/onboarding/OnboardingHost.tsx, src/types/project.ts, scripts/{db,e2e-server}.ts, e2e/{accounts.spec.ts (new),visual-parity.spec.ts}, playwright.config.ts, deploy/README.md, PROJECT.md |

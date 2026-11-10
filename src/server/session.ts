@@ -27,13 +27,25 @@ export async function requireUser(returnTo: string) {
 }
 
 /**
- * Admin pages: the role is re-read from the database (never from the session's
- * cookie cache), and anyone else gets a plain 404 — the page does not exist
- * for them.
+ * The signed-in administrator, or null. The role is re-read from the database
+ * (never from the session's cookie cache), so a revoked admin loses access on
+ * their very next request. Server actions call this before doing anything.
+ */
+export async function currentAdmin() {
+  const session = await getSession();
+  const id = session ? toObjectId(session.user.id) : null;
+  if (!id) return null;
+  const fresh = await collections(getDb()).users.findOne({ _id: id }, { projection: { role: 1, status: 1 } });
+  return fresh?.role === 'admin' && fresh.status === 'active' ? { id, user: session!.user } : null;
+}
+
+/**
+ * Admin pages: anyone who is not an administrator gets a plain 404 — the page
+ * does not exist for them.
  */
 export async function requireAdmin(returnTo = '/admin') {
-  const user = await requireUser(returnTo);
-  const fresh = await collections(getDb()).users.findOne({ _id: toObjectId(user.id) }, { projection: { role: 1, status: 1 } });
-  if (fresh?.role !== 'admin' || fresh.status !== 'active') notFound();
-  return user;
+  await requireUser(returnTo);
+  const admin = await currentAdmin();
+  if (!admin) notFound();
+  return admin;
 }

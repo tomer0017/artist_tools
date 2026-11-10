@@ -3,10 +3,18 @@
 // Every export renders through the SAME canonical scene renderer used on screen,
 // so the output matches the visible alignment exactly. GIF encoding is chunked
 // and cancellable so the UI never freezes.
+//
+// Large GIFs and the Compare+Diff animation are Pro features: they stay
+// visible with a lock for other plans, and the server confirms the account's
+// plan before any GIF is encoded.
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Loader2, X } from 'lucide-react';
+import { Download, Loader2, Lock, X } from 'lucide-react';
+import { ProNotice } from '@/components/common/ProFeature';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { useAccount, useHasFeature } from '@/components/shell/account';
+import { authorizeFeatures } from '@/lib/features-client';
+import type { FeatureId } from '@/lib/plans';
 import { canvasToBlob } from '@/lib/saveMedia';
 import { useCompare } from './compareArtState';
 import {
@@ -37,26 +45,40 @@ function Seg<T extends string>({
   options,
   onChange,
   ariaLabel,
+  locked,
+  onLocked,
 }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
   ariaLabel: string;
+  /** Options the account's plan does not include: shown with a lock, choosing one calls onLocked. */
+  locked?: T[];
+  onLocked?: (v: T) => void;
 }) {
   return (
     <div className="flex gap-1 rounded-lg bg-secondary/60 p-1" role="group" aria-label={ariaLabel}>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          aria-pressed={value === o.value}
-          className={`flex-1 rounded-md px-2 py-2 text-xs font-medium ${
-            value === o.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
+      {options.map((o) => {
+        const isLocked = locked?.includes(o.value) ?? false;
+        return (
+          <button
+            key={o.value}
+            onClick={() => (isLocked ? onLocked?.(o.value) : onChange(o.value))}
+            aria-pressed={value === o.value}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-2 text-xs font-medium ${
+              value === o.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+            }`}
+          >
+            {o.label}
+            {isLocked && (
+              <>
+                <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="sr-only">(Pro)</span>
+              </>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -73,6 +95,16 @@ export default function CompareExportSheet() {
   const [progress, setProgress] = useState<GifProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const gifHandle = useRef<{ cancel: () => void } | null>(null);
+  const account = useAccount();
+  const largeAllowed = useHasFeature('export.gif_large');
+  const differenceAllowed = useHasFeature('export.gif_difference');
+  const [proNotice, setProNotice] = useState<string | null>(null);
+
+  // A setting saved before the plan changed falls back to what the plan includes.
+  useEffect(() => {
+    if (!largeAllowed && session.gif.size === 'high') store.setGif({ size: 'standard' });
+    if (!differenceAllowed && session.gif.animation === 'compare-diff') store.setGif({ animation: 'opacity-pulse' });
+  }, [largeAllowed, differenceAllowed, session.gif.size, session.gif.animation, store]);
 
   // Decode high-resolution copies for export when the sheet opens.
   useEffect(() => {
@@ -159,7 +191,20 @@ export default function CompareExportSheet() {
   const exportGif = async () => {
     if (!artRef.current || !refRef.current) return;
     setError(null);
+    setProNotice(null);
     setBusy('gif');
+    const needed: FeatureId[] = ['export.gif'];
+    if (session.gif.size === 'high') needed.push('export.gif_large');
+    if (session.gif.animation === 'compare-diff') needed.push('export.gif_difference');
+    const access = await authorizeFeatures(needed);
+    if (access !== 'ok' && access !== 'unavailable') {
+      setBusy(null);
+      if (access === 'locked') {
+        setProNotice('Your plan does not include this GIF.');
+        void account?.refresh();
+      }
+      return;
+    }
     setProgress({ phase: 'frames', current: 0, total: gifFrames });
     try {
       const scene = gifScene;
@@ -237,6 +282,11 @@ export default function CompareExportSheet() {
       {/* GIF export */}
       <section className="space-y-3 border-t border-border pt-4">
         <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Animated GIF</p>
+        {(!largeAllowed || !differenceAllowed) && (
+          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Lock className="h-3 w-3 shrink-0" aria-hidden="true" /> Large size and Compare+Diff are Pro features.
+          </p>
+        )}
 
         <Seg<GifAnimation>
           value={session.gif.animation}
@@ -247,6 +297,8 @@ export default function CompareExportSheet() {
           ]}
           onChange={(v) => store.setGif({ animation: v })}
           ariaLabel="GIF animation type"
+          locked={differenceAllowed ? [] : ['compare-diff']}
+          onLocked={() => setProNotice('Compare + Difference GIFs are part of Pro.')}
         />
 
         <div className="grid grid-cols-2 gap-3">
@@ -274,9 +326,13 @@ export default function CompareExportSheet() {
               ]}
               onChange={(v) => store.setGif({ size: v })}
               ariaLabel="GIF output size"
+              locked={largeAllowed ? [] : ['high']}
+              onLocked={() => setProNotice('Large GIFs (up to 800 px) are part of Pro.')}
             />
           </div>
         </div>
+
+        {proNotice && <ProNotice title={proNotice} onClose={() => setProNotice(null)} />}
 
         <div className="flex items-center justify-between gap-4">
           <label className="flex items-center gap-2 text-sm text-foreground">

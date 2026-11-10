@@ -7,6 +7,9 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { useAccount, useHasFeature } from '@/components/shell/account';
+import { authorizeFeatures } from '@/lib/features-client';
+import type { FeatureId } from '@/lib/plans';
 import { useCompare } from './compareArtState';
 import {
   ANALYSIS_MAX_DIM,
@@ -37,21 +40,42 @@ export function useCompareGif(): QuickGifState {
   const [progress, setProgress] = useState<GifProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const handle = useRef<{ cancel: () => void } | null>(null);
+  const account = useAccount();
+  const largeAllowed = useHasFeature('export.gif_large');
+  const differenceAllowed = useHasFeature('export.gif_difference');
 
   const cancel = useCallback(() => handle.current?.cancel(), []);
 
   const generate = useCallback(
     async (animation: GifAnimation = 'opacity-pulse') => {
       if (!session.artwork || !session.reference) return;
+      if (animation === 'compare-diff' && !differenceAllowed) {
+        setError('Compare + Difference GIFs are part of Pro.');
+        return;
+      }
+      // The one-tap GIF uses the saved size, or the largest the plan includes.
+      const size = session.gif.size === 'high' && !largeAllowed ? 'standard' : session.gif.size;
       setError(null);
       setBusy(true);
       setProgress(null); // "Preparing…" until frames start
+      const needed: FeatureId[] = ['export.gif'];
+      if (size === 'high') needed.push('export.gif_large');
+      if (animation === 'compare-diff') needed.push('export.gif_difference');
+      const access = await authorizeFeatures(needed);
+      if (access !== 'ok' && access !== 'unavailable') {
+        setBusy(false);
+        if (access === 'locked') {
+          setError('Your plan does not include this GIF.');
+          void account?.refresh();
+        }
+        return;
+      }
       try {
         const art = await prepareImage(session.artwork);
         const ref = await prepareImage(session.reference);
         const scene = sceneSizeForArtwork(
           { width: art.width, height: art.height },
-          GIF_SIZE_MAX_DIM[session.gif.size],
+          GIF_SIZE_MAX_DIM[size],
         );
         const overlay =
           animation === 'compare-diff'
@@ -103,7 +127,7 @@ export function useCompareGif(): QuickGifState {
         handle.current = null;
       }
     },
-    [session, save],
+    [session, save, account, largeAllowed, differenceAllowed],
   );
 
   return { busy, progress, error, generate, cancel };

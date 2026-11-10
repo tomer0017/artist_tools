@@ -24,7 +24,7 @@ export default function OnboardingHost() {
 
   useEffect(() => {
     if (!AUTO_START_TUTORIALS) return;
-    if (activeTab === 'home') return;
+    if (activeTab === 'home' || activeTab === 'profile') return;
     const id = activeTab;
     if (!ONBOARDING[id]) return;
     if (hasSeenOnboarding(id)) return;

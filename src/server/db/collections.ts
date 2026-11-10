@@ -1,10 +1,13 @@
 import 'server-only';
 import { ObjectId, type Db } from 'mongodb';
+import { FEATURES, PLAN_IDS, type FeatureId, type PlanId } from '@/lib/plans';
 
 // ─── Data model ────────────────────────────────────────────────────────────────
 // `users`, `sessions`, `accounts` and `verifications` are owned by Better Auth
 // (see src/server/auth.ts); everything else belongs to the app. All user
 // references are ObjectIds, the same type Better Auth stores.
+
+export { FEATURES, PLAN_IDS, type FeatureId, type PlanId };
 
 export type UserRole = 'user' | 'admin';
 export type AccountStatus = 'active' | 'suspended';
@@ -18,8 +21,18 @@ export interface UserDoc {
   image?: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** What the account may administer. Independent of the plan: Pro never makes anyone an admin. */
   role: UserRole;
   status: AccountStatus;
+  /**
+   * The plan an administrator assigned ('free' for every new account). Written
+   * only by the server (admin dashboard, operator CLI); paid plans arrive
+   * through `subscriptions` instead, and the better of the two applies.
+   */
+  plan?: PlanId;
+  planUpdatedAt?: Date | null;
+  /** Who last assigned the plan: 'admin:<id>' or 'cli'. */
+  planUpdatedBy?: string | null;
   lastLoginAt?: Date | null;
   /** Marketing email consent is opt-in and recorded separately from sign-up. */
   marketingConsent: boolean;
@@ -49,21 +62,7 @@ export interface SessionDoc {
 }
 
 // Features are stable identifiers the server checks; plans list which ones they
-// include. Today every plan includes every feature (no limits yet).
-export const FEATURES = [
-  'tool.measure',
-  'tool.study',
-  'tool.color',
-  'tool.grid',
-  'tool.compare',
-  'export.image',
-  'export.gif',
-] as const;
-export type FeatureId = (typeof FEATURES)[number];
-
-export const PLAN_IDS = ['free', 'pro'] as const;
-export type PlanId = (typeof PLAN_IDS)[number];
-
+// include. Both are defined in src/lib/plans.ts.
 export interface PlanDoc {
   _id: PlanId;
   name: string;
@@ -110,6 +109,7 @@ export type AuditEventType =
   | 'user.logout'
   | 'admin.role_granted'
   | 'admin.role_revoked'
+  | 'admin.plan_changed'
   | 'account.status_changed'
   | 'subscription.changed';
 

@@ -24,3 +24,11 @@ export function safeCallbackPath(input: unknown): string {
 
 /** The sign-in page, set to come back to `returnTo` afterwards. */
 export const signInPath = (returnTo: string): string => `/sign-in?callbackURL=${encodeURIComponent(safeCallbackPath(returnTo))}`;
+
+/**
+ * Request header the proxy (src/proxy.ts) sets to the page being requested, so
+ * a layout that finds the session expired can send the person back there
+ * after sign-in (layouts do not see the URL). Set from the real URL on every
+ * request, and still passed through safeCallbackPath before use.
+ */
+export const RETURN_TO_HEADER = 'x-studio-return-to';

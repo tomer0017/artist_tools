@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useProject } from '@/hooks/useProjectStore';
-import type { ViewId } from '@/types/project';
+import type { NavViewId } from '@/types/project';
+import { AccountButton } from './account';
 import { BrandMark } from './BrandMark';
 import { NAV_ORDER, navItem, pathForView } from './tools';
 
@@ -30,7 +31,7 @@ export function BottomNav() {
   );
 }
 
-/** Tablet / desktop: brand on the left, the same six destinations on the right. */
+/** Tablet / desktop: brand on the left, the same six destinations on the right, then the account. */
 export function TopNav() {
   const { activeTab } = useProject();
   return (
@@ -47,11 +48,12 @@ export function TopNav() {
           ))}
         </ul>
       </nav>
+      <AccountButton />
     </header>
   );
 }
 
-function NavItemLink({ id, active, variant }: { id: ViewId; active: boolean; variant: 'bottom' | 'top' }) {
+function NavItemLink({ id, active, variant }: { id: NavViewId; active: boolean; variant: 'bottom' | 'top' }) {
   const item = navItem(id);
   const Icon = item.icon;
   if (variant === 'bottom') {

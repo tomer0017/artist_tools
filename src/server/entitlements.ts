@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Db, ObjectId } from 'mongodb';
+import { FEATURES, betterPlan, isPlanId } from '@/lib/plans';
 import {
   collections,
   type AccountStatus,
@@ -8,15 +9,20 @@ import {
   type PlanId,
   type SubscriptionDoc,
   type SubscriptionStatus,
+  type UserRole,
 } from '@/server/db/collections';
-import { getUsage } from '@/server/usage';
+import { getUsage, recordUsage } from '@/server/usage';
 
 // ─── Entitlements ──────────────────────────────────────────────────────────────
 // The single place that decides what an account may use. Inputs come only from
-// the database (user status, server-written subscriptions, plans, usage);
-// nothing the browser sends — a plan name, a payment status, a counter — is
-// ever an input. UI may hide or show things from a read-only copy of the
-// result, but that is presentation, not protection.
+// the database (user status, role and assigned plan, server-written
+// subscriptions, plans, usage); nothing the browser sends — a plan name, a
+// payment status, a counter — is ever an input. UI may hide or show things
+// from a read-only copy of the result, but that is presentation, not
+// protection.
+//
+// Role and plan are independent: admins get every feature whatever their plan
+// or subscription, and no plan ever grants the admin role.
 
 /** Days a subscription keeps its plan after its period ends while renewal or a failed payment resolves. */
 export const GRACE_DAYS = 3;
@@ -25,6 +31,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export interface Entitlements {
   authenticated: boolean;
   accountActive: boolean;
+  /** What decided the features: the admin role, the plan in force, or nothing (signed out or suspended). */
+  access: 'admin' | PlanId | 'none';
+  role: UserRole;
+  /** The plan an administrator assigned to the account. */
+  assignedPlan: PlanId;
+  /** The plan in force: the better of the assigned plan and an active subscription. */
   planId: PlanId;
   subscriptionStatus: SubscriptionStatus | null;
   subscriptionActive: boolean;
@@ -36,6 +48,7 @@ export interface Entitlements {
 
 type SubscriptionState = Pick<SubscriptionDoc, 'planId' | 'status' | 'currentPeriodEnd'>;
 type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits'>;
+type UserState = { status: AccountStatus; role?: unknown; plan?: unknown };
 
 /** Whether a subscription currently grants its plan. */
 export function subscriptionGrantsPlan(subscription: SubscriptionState | null, now: Date): boolean {
@@ -56,16 +69,31 @@ export function subscriptionGrantsPlan(subscription: SubscriptionState | null, n
   }
 }
 
+/** The plan an administrator assigned; anything unexpected in the document counts as Free. */
+export function assignedPlanOf(user: { plan?: unknown } | null): PlanId {
+  const plan = user?.plan;
+  return isPlanId(plan) ? plan : 'free';
+}
+
+/** The plan in force for an account: the better of its assigned plan and what an active subscription grants. */
+export function effectivePlan(user: { plan?: unknown }, subscription: SubscriptionState | null, now: Date): PlanId {
+  return betterPlan(assignedPlanOf(user), subscriptionGrantsPlan(subscription, now) ? subscription!.planId : null);
+}
+
 export function computeEntitlements(input: {
-  user: { status: AccountStatus } | null;
+  user: UserState | null;
   subscription: SubscriptionState | null;
   plans: Partial<Record<PlanId, PlanState>>;
   usage: Partial<Record<FeatureId, number>>;
   now: Date;
 }): Entitlements {
+  const role: UserRole = input.user?.role === 'admin' ? 'admin' : 'user';
   const none: Entitlements = {
     authenticated: input.user !== null,
     accountActive: false,
+    access: 'none',
+    role,
+    assignedPlan: assignedPlanOf(input.user),
     planId: 'free',
     subscriptionStatus: input.subscription?.status ?? null,
     subscriptionActive: false,
@@ -76,14 +104,20 @@ export function computeEntitlements(input: {
   if (!input.user || input.user.status !== 'active') return none;
 
   const subscriptionActive = subscriptionGrantsPlan(input.subscription, input.now);
-  const wanted: PlanId = subscriptionActive ? input.subscription!.planId : 'free';
+  const wanted = effectivePlan(input.user, input.subscription, input.now);
   const planId: PlanId = input.plans[wanted]?.active ? wanted : 'free';
   const plan = input.plans[planId];
-  if (!plan?.active) return { ...none, accountActive: true, subscriptionActive };
+
+  // Administrators can use everything, on any plan, paid or not.
+  if (role === 'admin') {
+    return { ...none, accountActive: true, access: 'admin', planId, subscriptionActive, features: [...FEATURES] };
+  }
+  if (!plan?.active) return { ...none, accountActive: true, planId, subscriptionActive };
 
   return {
     ...none,
     accountActive: true,
+    access: planId,
     planId,
     subscriptionActive,
     features: [...plan.features],
@@ -126,16 +160,32 @@ export const clearPlanCache = () => {
 export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()): Promise<Entitlements> {
   const { users, subscriptions } = collections(db);
   const [user, subscription, plans, usage] = await Promise.all([
-    users.findOne({ _id: userId }, { projection: { status: 1 } }),
+    users.findOne({ _id: userId }, { projection: { status: 1, role: 1, plan: 1 } }),
     subscriptions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { planId: 1, status: 1, currentPeriodEnd: 1 } }),
     loadPlans(db, now.getTime()),
     getUsage(db, userId),
   ]);
   return computeEntitlements({
-    user: user ? { status: user.status ?? 'active' } : null,
+    user: user ? { status: user.status ?? 'active', role: user.role, plan: user.plan } : null,
     subscription,
     plans,
     usage,
     now,
   });
+}
+
+export type FeatureUseResult = { status: 'recorded' } | { status: 'denied'; missing: FeatureId[] };
+
+/**
+ * Authorize one use of `features` right now and count it (a large GIF needs
+ * 'export.gif' and 'export.gif_large'). Decided from the database only. Caps
+ * are checked and then counted, so two simultaneous requests could each take
+ * the last unit of a cap; no plan has caps today.
+ */
+export async function authorizeFeatureUse(db: Db, userId: ObjectId, features: FeatureId[], now = new Date()): Promise<FeatureUseResult> {
+  const entitlements = await getEntitlements(db, userId, now);
+  const missing = features.filter((feature) => !canUse(entitlements, feature));
+  if (missing.length > 0) return { status: 'denied', missing };
+  for (const feature of new Set(features)) await recordUsage(db, userId, feature, 1, now);
+  return { status: 'recorded' };
 }

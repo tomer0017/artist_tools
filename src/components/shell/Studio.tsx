@@ -15,6 +15,7 @@ import ValueTab from '@/components/value/ValueTab';
 import ColorTab from '@/components/color/ColorTab';
 import GridTab from '@/components/grid/GridTab';
 import HomeScreen from '@/components/shell/HomeScreen';
+import ProfileScreen from '@/components/shell/ProfileScreen';
 import { BottomNav, TopNav } from '@/components/shell/AppNav';
 import { pathForView, viewFromPathname } from '@/components/shell/tools';
 import { OnboardingProvider, OnboardingHost } from '@/onboarding';
@@ -145,6 +146,7 @@ function Workspace() {
           content (e.g. a full-resolution image) and pushes controls offscreen. */}
       <main className="flex min-h-0 min-w-0 flex-1 [&>*]:min-w-0">
         {activeTab === 'home' && <HomeScreen />}
+        {activeTab === 'profile' && <ProfileScreen />}
         {/* Measure keeps all of its work in the persisted project store and
             listens for keyboard shortcuts on window, so it mounts only while
             visible rather than being kept alive. Grid is fully persisted too. */}
@@ -169,10 +171,10 @@ function Workspace() {
   );
 }
 
-/** The whole studio: Home and every tool, with the providers they share. */
+/** The whole studio: Home, every tool and the account page, with the providers they share. */
 export default function Studio({ account }: { account: StudioAccount }) {
   return (
-    <AccountProvider value={account}>
+    <AccountProvider initial={account}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />

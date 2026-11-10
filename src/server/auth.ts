@@ -94,9 +94,12 @@ export function createAuth(deps: AuthDeps) {
         log.warn('auth.signup_refused', { reason: user.emailVerified ? 'not_invited' : 'email_not_verified' });
         return { error: 'not_invited', errorDescription: 'This account has not been invited yet.' };
       },
+      // `input: false`: none of these can be set through any auth endpoint
+      // (sign-up, update-user); only the server writes them.
       additionalFields: {
         role: { type: 'string', required: false, defaultValue: 'user', input: false },
         status: { type: 'string', required: false, defaultValue: 'active', input: false },
+        plan: { type: 'string', required: false, defaultValue: 'free', input: false },
         lastLoginAt: { type: 'date', required: false, input: false },
         marketingConsent: { type: 'boolean', required: false, defaultValue: false, input: false },
         marketingConsentAt: { type: 'date', required: false, input: false },

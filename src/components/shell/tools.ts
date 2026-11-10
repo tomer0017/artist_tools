@@ -1,5 +1,5 @@
 import { Grid3X3, Home, Palette, Ruler, SquareSplitHorizontal, Sun, type LucideIcon } from 'lucide-react';
-import type { TabId, ViewId } from '@/types/project';
+import type { NavViewId, TabId, ViewId } from '@/types/project';
 
 // ─── Tool registry ────────────────────────────────────────────────────────────
 // The single source of truth for how every tool is named and explained — the
@@ -69,11 +69,11 @@ export const TOOLS: Record<TabId, ToolInfo> = {
 export const HOME_ORDER: TabId[] = ['measure', 'value', 'color', 'grid', 'compare'];
 
 /** Order of the navigation bars. */
-export const NAV_ORDER: ViewId[] = ['home', 'measure', 'value', 'grid', 'compare', 'color'];
+export const NAV_ORDER: NavViewId[] = ['home', 'measure', 'value', 'grid', 'compare', 'color'];
 
 export const HOME_NAV = { id: 'home' as const, navLabel: 'Home', title: 'Home', icon: Home };
 
-export function navItem(id: ViewId) {
+export function navItem(id: NavViewId) {
   return id === 'home' ? HOME_NAV : TOOLS[id];
 }
 
@@ -90,18 +90,21 @@ const SLUGS: Record<TabId, string> = {
 /** URL segments of the tools, e.g. for the router to know which tool pages exist. */
 export const TOOL_SLUGS: string[] = Object.values(SLUGS);
 
+/** Every view's URL segment: the tools plus the account page. */
+const VIEW_SLUGS: Record<Exclude<ViewId, 'home'>, string> = { ...SLUGS, profile: 'profile' };
+
 /** The studio lives under /app; the site root is the public landing page. */
 const STUDIO_ROOT = '/app';
 
 /** URL path for each view (Home is the studio root). */
 export function pathForView(view: ViewId): string {
-  return view === 'home' ? STUDIO_ROOT : `${STUDIO_ROOT}/${SLUGS[view]}`;
+  return view === 'home' ? STUDIO_ROOT : `${STUDIO_ROOT}/${VIEW_SLUGS[view]}`;
 }
 
 /** Parse a URL segment into a view; undefined segment = Home, unknown = null. */
 export function viewFromPath(segment: string | undefined): ViewId | null {
   if (!segment) return 'home';
-  const hit = (Object.keys(SLUGS) as TabId[]).find((id) => SLUGS[id] === segment);
+  const hit = (Object.keys(VIEW_SLUGS) as Exclude<ViewId, 'home'>[]).find((id) => VIEW_SLUGS[id] === segment);
   return hit ?? null;
 }
 

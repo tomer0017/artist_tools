@@ -1,24 +1,83 @@
 'use client';
 
-import { createContext, useContext, useState } from 'react';
+import Link from 'next/link';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { AccountSummary } from '@/lib/account';
+import type { FeatureId } from '@/lib/plans';
+import { signInPath } from '@/lib/redirects';
+import { pathForView } from './tools';
 
-/** Who is signed in, as given to the studio by the server (display only). */
-export interface StudioAccount {
-  name: string;
-  email: string;
-  image: string | null;
+/** Who is signed in and what their account includes, as the server reported it (display only). */
+export type StudioAccount = AccountSummary;
+
+interface AccountState {
+  account: StudioAccount;
+  /** Re-read the account from the server (/api/me). */
+  refresh: () => Promise<void>;
 }
 
-const AccountContext = createContext<StudioAccount | null>(null);
-export const AccountProvider = AccountContext.Provider;
+const AccountContext = createContext<AccountState | null>(null);
 
-/** "Signed in as … · Sign out", under the Home screen. */
-export function AccountLine() {
-  const account = useContext(AccountContext);
+/** Coming back to the studio re-reads the account at most this often. */
+const REFRESH_AFTER_MS = 30_000;
+
+/**
+ * Holds the account the server rendered the studio with, and keeps it current:
+ * a plan or role change made by an admin shows up when the studio comes back
+ * into view (or the profile opens). If the session has ended, it sends the
+ * person to sign in and back to where they were.
+ */
+export function AccountProvider({ initial, children }: { initial: StudioAccount; children: React.ReactNode }) {
+  const [account, setAccount] = useState(initial);
+  const lastRefresh = useRef(Date.now());
+
+  const refresh = useCallback(async () => {
+    lastRefresh.current = Date.now();
+    try {
+      const response = await fetch('/api/me', { cache: 'no-store', credentials: 'same-origin' });
+      if (response.status === 401) {
+        window.location.assign(signInPath(window.location.pathname));
+        return;
+      }
+      if (!response.ok) return;
+      const body = (await response.json()) as { user: StudioAccount };
+      setAccount(body.user);
+    } catch {
+      // Offline or the server is restarting: keep what we have.
+    }
+  }, []);
+
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastRefresh.current > REFRESH_AFTER_MS) void refresh();
+    };
+    document.addEventListener('visibilitychange', onReturn);
+    window.addEventListener('focus', onReturn);
+    return () => {
+      document.removeEventListener('visibilitychange', onReturn);
+      window.removeEventListener('focus', onReturn);
+    };
+  }, [refresh]);
+
+  const value = useMemo(() => ({ account, refresh }), [account, refresh]);
+  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
+}
+
+export const useAccount = () => useContext(AccountContext);
+
+/**
+ * Whether the account includes a feature — a copy of the server's decision,
+ * for showing locks. The server checks again before the feature is used.
+ */
+export function useHasFeature(feature: FeatureId): boolean {
+  const state = useContext(AccountContext);
+  return state ? state.account.features.includes(feature) : false;
+}
+
+/** Sign out on the server, then leave the studio with a full page load (dropping everything it held in memory). */
+export function useSignOut() {
   const [signingOut, setSigningOut] = useState(false);
-  if (!account) return null;
-
-  async function signOut() {
+  const signOut = useCallback(async () => {
     setSigningOut(true);
     // Loaded on demand: the auth client is only needed for this one click.
     const { authClient } = await import('@/lib/auth-client');
@@ -27,13 +86,71 @@ export function AccountLine() {
       setSigningOut(false);
       return;
     }
-    // A full page load drops everything the studio held in memory.
     window.location.assign(new URL('/', window.location.origin));
+  }, []);
+  return { signingOut, signOut };
+}
+
+/** The Google profile picture, or the person's initials when there is none (or it fails to load). */
+export function AccountAvatar({ account, size = 32 }: { account: Pick<StudioAccount, 'name' | 'email' | 'image'>; size?: number }) {
+  const [failed, setFailed] = useState(false);
+  const initials = (account.name || account.email)
+    .trim()
+    .split(/\s+/)
+    .map((word) => word[0] ?? '')
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  if (account.image && !failed) {
+    return (
+      <img
+        src={account.image}
+        alt=""
+        width={size}
+        height={size}
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className="shrink-0 rounded-full object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
   }
+  return (
+    <span
+      aria-hidden="true"
+      className="flex shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }}
+    >
+      {initials}
+    </span>
+  );
+}
+
+/** The way into the account page: the person's avatar, top right. */
+export function AccountButton() {
+  const state = useAccount();
+  if (!state) return null;
+  return (
+    <Link
+      href={pathForView('profile')}
+      aria-label="Your account"
+      data-account-ui
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background/60 ring-1 ring-border/70 transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <AccountAvatar account={state.account} size={32} />
+    </Link>
+  );
+}
+
+/** "Signed in as … · Sign out", under the Home screen. */
+export function AccountLine() {
+  const state = useAccount();
+  const { signingOut, signOut } = useSignOut();
+  if (!state) return null;
 
   return (
     <p data-account-line className="mt-2 px-4 text-center text-xs text-muted-foreground md:px-6">
-      Signed in as <span className="text-foreground/80">{account.email}</span>
+      Signed in as <span className="text-foreground/80">{state.account.email}</span>
       {' · '}
       <button
         type="button"
