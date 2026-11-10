@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
+import { isTool } from '@/components/shell/tools';
 import { useOnboarding } from './onboardingContext';
 import { ONBOARDING, AUTO_START_TUTORIALS } from './onboardingConfig';
 import { hasSeenOnboarding } from './onboardingStorage';
@@ -24,7 +25,7 @@ export default function OnboardingHost() {
 
   useEffect(() => {
     if (!AUTO_START_TUTORIALS) return;
-    if (activeTab === 'home' || activeTab === 'profile') return;
+    if (!isTool(activeTab)) return;
     const id = activeTab;
     if (!ONBOARDING[id]) return;
     if (hasSeenOnboarding(id)) return;

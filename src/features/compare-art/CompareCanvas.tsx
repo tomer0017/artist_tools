@@ -68,6 +68,19 @@ interface PointerRec {
   canvas: Vec2;
 }
 
+// The canvas is driven by Pointer Events, but on iPhone a press-and-hold (how
+// Smart Align points are placed, with the magnifier) also starts Safari's own
+// long-press behaviour: blue text selection, the copy/save callout and the tap
+// highlight. None of that may happen on the interaction surface, and only
+// there — the rest of the page stays selectable and scrolls as usual.
+const NO_NATIVE_TOUCH: React.CSSProperties = {
+  touchAction: 'none',
+  userSelect: 'none',
+  WebkitUserSelect: 'none',
+  WebkitTouchCallout: 'none',
+  WebkitTapHighlightColor: 'transparent',
+};
+
 export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, onGestureActivity, onGestureEnd, viewLocked = false }: Props) {
   const store = useCompare();
   const { session } = store;
@@ -114,6 +127,30 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
   const magRef = useRef<HTMLCanvasElement>(null);
   const anchorSrc = useRef<HTMLCanvasElement | null>(null);
   const [anchorLoupe, setAnchorLoupe] = useState<{ screen: Vec2; scene: Vec2 } | null>(null);
+
+  // CSS alone does not stop iOS from starting a selection on a held touch, so
+  // touches that begin on the canvas are cancelled as touches (non-passive, so
+  // the cancel counts). Pointer events, which do all the work here, still
+  // arrive; nothing outside the canvas is affected.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const cancelTouch = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    const cancel = (e: Event) => e.preventDefault();
+    canvas.addEventListener('touchstart', cancelTouch, { passive: false });
+    canvas.addEventListener('touchmove', cancelTouch, { passive: false });
+    container.addEventListener('selectstart', cancel);
+    container.addEventListener('contextmenu', cancel);
+    return () => {
+      canvas.removeEventListener('touchstart', cancelTouch);
+      canvas.removeEventListener('touchmove', cancelTouch);
+      container.removeEventListener('selectstart', cancel);
+      container.removeEventListener('contextmenu', cancel);
+    };
+  }, []);
 
   // ── Decode images when their source changes ────────────────────────────────
   useEffect(() => {
@@ -749,12 +786,12 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
       ref={containerRef}
       data-onboarding="compare-canvas"
       className="relative flex-1 min-h-0 overflow-hidden"
-      style={{ touchAction: 'none' }}
+      style={NO_NATIVE_TOUCH}
     >
       <canvas
         ref={canvasRef}
         className="absolute inset-0"
-        style={{ touchAction: 'none' }}
+        style={NO_NATIVE_TOUCH}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endGesture}
@@ -779,7 +816,7 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
           <canvas
             ref={magRef}
             className="rounded-full shadow-2xl"
-            style={{ width: LOUPE_SIZE, height: LOUPE_SIZE }}
+            style={{ ...NO_NATIVE_TOUCH, width: LOUPE_SIZE, height: LOUPE_SIZE }}
           />
         </div>
       )}

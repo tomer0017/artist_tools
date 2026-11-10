@@ -34,12 +34,13 @@ interface AuthDeps {
 /**
  * Whether a brand-new account may be created. Only gates registration: the
  * account's identity remains its Google `sub`, and no role or permission is
- * ever derived from an email address. Google must have verified the address.
+ * ever derived from an email address. Google must have verified the address,
+ * in both modes. New accounts are always role `user` on the Free plan.
  */
 export function signupAllowed(policy: SignupPolicy, user: { email?: string | null; emailVerified?: boolean | null }): boolean {
-  if (policy === '*') return true;
   if (!user.emailVerified || !user.email) return false;
-  return policy.includes(user.email.trim().toLowerCase());
+  if (policy.mode === 'open') return true;
+  return policy.invited.includes(user.email.trim().toLowerCase());
 }
 
 /** Side work after sign-in must never undo a sign-in that already succeeded. */
@@ -191,3 +192,6 @@ export function getAuth(): Auth {
 
 /** Whether this server can offer Google sign-in (its OAuth client is configured). */
 export const googleSignInAvailable = (): boolean => authConfig().google !== null;
+
+/** Whether new visitors can create an account themselves ('open') or need an invitation ('invite'). */
+export const registrationMode = (): SignupPolicy['mode'] => authConfig().signups.mode;

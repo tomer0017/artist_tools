@@ -98,7 +98,8 @@ export default function CompareExportSheet() {
   const account = useAccount();
   const largeAllowed = useHasFeature('export.gif_large');
   const differenceAllowed = useHasFeature('export.gif_difference');
-  const [proNotice, setProNotice] = useState<string | null>(null);
+  // Which Pro option to explain (null: none); 'refused' when the server said no.
+  const [proNotice, setProNotice] = useState<FeatureId | 'refused' | null>(null);
 
   // A setting saved before the plan changed falls back to what the plan includes.
   useEffect(() => {
@@ -200,7 +201,7 @@ export default function CompareExportSheet() {
     if (access !== 'ok' && access !== 'unavailable') {
       setBusy(null);
       if (access === 'locked') {
-        setProNotice('Your plan does not include this GIF.');
+        setProNotice(needed.find((f) => f !== 'export.gif') ?? 'refused');
         void account?.refresh();
       }
       return;
@@ -298,7 +299,7 @@ export default function CompareExportSheet() {
           onChange={(v) => store.setGif({ animation: v })}
           ariaLabel="GIF animation type"
           locked={differenceAllowed ? [] : ['compare-diff']}
-          onLocked={() => setProNotice('Compare + Difference GIFs are part of Pro.')}
+          onLocked={() => setProNotice('export.gif_difference')}
         />
 
         <div className="grid grid-cols-2 gap-3">
@@ -327,12 +328,12 @@ export default function CompareExportSheet() {
               onChange={(v) => store.setGif({ size: v })}
               ariaLabel="GIF output size"
               locked={largeAllowed ? [] : ['high']}
-              onLocked={() => setProNotice('Large GIFs (up to 800 px) are part of Pro.')}
+              onLocked={() => setProNotice('export.gif_large')}
             />
           </div>
         </div>
 
-        {proNotice && <ProNotice title={proNotice} onClose={() => setProNotice(null)} />}
+        {proNotice && <ProNotice feature={proNotice === 'refused' ? null : proNotice} onClose={() => setProNotice(null)} />}
 
         <div className="flex items-center justify-between gap-4">
           <label className="flex items-center gap-2 text-sm text-foreground">

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { BrandMark } from '@/components/shell/BrandMark';
 import { authClient } from '@/lib/auth-client';
 
@@ -16,15 +17,20 @@ function GoogleLogo() {
   );
 }
 
+const INCLUDED = ['All five tools, free with no time limit', 'No password: Google signs you in', 'Your images stay on your device'];
+
 export default function SignInCard({
   callbackPath,
   available,
   error,
+  registration,
 }: {
   callbackPath: string;
   /** False until this server's Google OAuth client is configured. */
   available: boolean;
   error: string | null;
+  /** 'open': anyone can create an account; 'invite': only invited Google accounts can. */
+  registration: 'open' | 'invite';
 }) {
   const [state, setState] = useState<'idle' | 'redirecting' | 'failed'>('idle');
 
@@ -44,9 +50,24 @@ export default function SignInCard({
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-sm md:p-8">
-        <BrandMark />
-        <h1 className="mt-6 text-2xl font-bold tracking-tight text-foreground">Sign in to Studio Companion</h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Use your Google account to open the studio.</p>
+        <Link href="/" aria-label="Studio Companion home" className="inline-block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <BrandMark />
+        </Link>
+        <h1 className="mt-6 text-2xl font-bold tracking-tight text-foreground">
+          {registration === 'open' ? 'Sign in or create your free account' : 'Sign in to Studio Companion'}
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {registration === 'open'
+            ? 'Continue with Google. If you are new, your free account is created automatically; if you already have one, the same button signs you in.'
+            : 'Studio Companion is invite-only while we test it. Continue with Google: if your account has been invited, your free account is created automatically the first time.'}
+        </p>
+        <ul className="mt-4 space-y-1.5" aria-label="What you get">
+          {INCLUDED.map((item) => (
+            <li key={item} className="flex items-center gap-2 text-sm text-foreground">
+              <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> {item}
+            </li>
+          ))}
+        </ul>
 
         {!available && (
           <p className="mt-5 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground">
@@ -73,6 +94,12 @@ export default function SignInCard({
         <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
           We use your name, email address and profile picture from Google to create your account. Signing in never subscribes you to
           marketing emails.
+        </p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Free now, Pro coming soon:{' '}
+          <Link href="/pricing" className="font-medium text-primary underline-offset-2 hover:underline">
+            compare plans
+          </Link>
         </p>
       </div>
     </main>

@@ -52,6 +52,29 @@ test.describe('Free account', () => {
     await expect(included.getByRole('listitem').filter({ hasText: 'Large GIFs' })).toContainText('Pro');
     await expect(page.getByRole('button', { name: 'Upgrade: coming soon' })).toBeDisabled();
     await expect(page.getByRole('link', { name: 'Open the admin dashboard' })).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Compare plans' }).click();
+    await expect(page).toHaveURL(/\/app\/plans$/);
+    await expect(page.getByRole('region', { name: 'Free', exact: true })).toContainText('Your current plan');
+    const pro = page.getByRole('region', { name: 'Pro', exact: true });
+    await expect(pro).toContainText('Coming soon');
+    await expect(pro.getByRole('button', { name: 'Coming soon' })).toBeDisabled();
+  });
+
+  test('a locked option explains itself and leads to the plans, keeping the Compare work', async ({ page }) => {
+    await openCompareExport(page);
+    await page.getByRole('group', { name: 'GIF output size' }).getByRole('button', { name: /^L\s*\(Pro\)$/ }).click();
+    const notice = page.getByRole('status').filter({ hasText: 'Large GIFs are part of Pro' });
+    await expect(notice).toContainText('Saves your comparison GIF at up to 800 px');
+    await expect(notice).toContainText('Free includes small and medium GIFs');
+    await expect(notice).toContainText('Pro is coming soon and cannot be bought yet');
+    await notice.getByRole('link', { name: 'Compare plans' }).click();
+    await expect(page).toHaveURL(/\/app\/plans$/);
+    await expect(page.getByRole('heading', { name: 'Plans', exact: true })).toBeVisible();
+    // Back to Compare: its images and the open save options are still there.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/app\/compare$/);
+    await expect(page.getByRole('group', { name: 'GIF output size' })).toBeVisible();
   });
 
   test('the account page has its own URL and survives a reload', async ({ page }) => {
@@ -72,13 +95,13 @@ test.describe('Free account', () => {
 
     const size = page.getByRole('group', { name: 'GIF output size' });
     await size.getByRole('button', { name: /^L\s*\(Pro\)$/ }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Large GIFs (up to 800 px) are part of Pro.' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Large GIFs are part of Pro' })).toBeVisible();
     await expect(size.getByRole('button', { name: /^L\s*\(Pro\)$/ })).toHaveAttribute('aria-pressed', 'false');
     await expect(size.getByRole('button', { name: 'M', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
     const animation = page.getByRole('group', { name: 'GIF animation type' });
     await animation.getByRole('button', { name: /^Compare\+Diff\s*\(Pro\)$/ }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Compare + Difference GIFs are part of Pro.' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Compare + Difference GIFs are part of Pro' })).toBeVisible();
 
     // The lock is not only on screen: the server decides, from the database.
     const refused = await page.request.post('/api/usage', { data: { features: ['export.gif', 'export.gif_large'] } });
@@ -104,6 +127,9 @@ test.describe('Pro account', () => {
     await expect(page.getByRole('list', { name: 'What your plan includes' }).getByText('Pro', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Upgrade/ })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Profile', exact: true })).toContainText('Member');
+    await page.getByRole('link', { name: 'Compare plans' }).click();
+    await expect(page.getByRole('region', { name: 'Pro', exact: true })).toContainText('Your current plan');
+    await expect(page.getByRole('region', { name: 'Free', exact: true })).not.toContainText('Your current plan');
   });
 
   test('Pro GIF options can be chosen, and the server agrees', async ({ page }) => {
@@ -132,6 +158,9 @@ test.describe('admin', () => {
     await expect(page.getByRole('region', { name: 'Profile', exact: true })).toContainText('Administrator');
     await expect(page.getByRole('region', { name: 'Plan', exact: true })).toContainText('As an administrator you have every feature, whatever your plan.');
     await expect(page.getByRole('button', { name: /Upgrade/ })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Compare plans' }).click();
+    await expect(page.getByText('You are an administrator, so every feature is already open to you')).toBeVisible();
+    await page.goBack();
     await page.getByRole('link', { name: 'Open the admin dashboard' }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
@@ -287,7 +316,7 @@ test.describe('mobile', () => {
     await openCompareExport(page);
     const size = page.getByRole('group', { name: 'GIF output size' });
     await size.getByRole('button', { name: /^L\s*\(Pro\)$/ }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Large GIFs (up to 800 px) are part of Pro.' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Large GIFs are part of Pro' })).toBeVisible();
     expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: test.info().outputPath('compare-locked-free.png') });
   });

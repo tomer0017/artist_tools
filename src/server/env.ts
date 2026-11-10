@@ -22,6 +22,7 @@ const authSchema = z
     BETTER_AUTH_SECRET: required('BETTER_AUTH_SECRET').min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+    AUTH_SIGNUP_MODE: z.enum(['invite', 'open'], { message: 'AUTH_SIGNUP_MODE must be "invite" or "open"' }).optional(),
     AUTH_SIGNUP_ALLOWLIST: z.string().optional(),
   })
   .refine((env) => !env.GOOGLE_CLIENT_ID === !env.GOOGLE_CLIENT_SECRET, {
@@ -38,19 +39,27 @@ function read<T extends z.ZodTypeAny>(schema: T, area: string): z.infer<T> {
 
 export const dbConfig = () => read(dbSchema, 'database');
 /**
- * Who may create a new account. Empty or unset: nobody (registration closed —
- * existing accounts still sign in). A comma-separated list: only those
- * addresses, once Google has verified them. `*`: anyone (public registration).
+ * Who may create a new account with Google (signing in to an existing account
+ * is never affected). AUTH_SIGNUP_MODE:
+ * - `invite` (the default): only the Google-verified addresses listed in
+ *   AUTH_SIGNUP_ALLOWLIST (comma-separated); an empty list lets nobody in;
+ * - `open`: public registration — any Google account whose email Google has
+ *   verified gets a new free account.
+ * Older env files that put `*` in AUTH_SIGNUP_ALLOWLIST (and set no mode) mean
+ * `open`.
  */
-export type SignupPolicy = '*' | string[];
+export type SignupPolicy = { mode: 'open' } | { mode: 'invite'; invited: string[] };
 
-const parseSignupPolicy = (raw: string | undefined): SignupPolicy => {
-  const value = (raw ?? '').trim();
-  if (value === '*') return '*';
-  return value
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
+const parseSignupPolicy = (mode: 'invite' | 'open' | undefined, allowlist: string | undefined): SignupPolicy => {
+  const list = (allowlist ?? '').trim();
+  if (mode === 'open' || (mode === undefined && list === '*')) return { mode: 'open' };
+  return {
+    mode: 'invite',
+    invited: list
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter((email) => email.includes('@')),
+  };
 };
 
 export function authConfig() {
@@ -62,6 +71,6 @@ export function authConfig() {
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
         : null,
-    signups: parseSignupPolicy(env.AUTH_SIGNUP_ALLOWLIST),
+    signups: parseSignupPolicy(env.AUTH_SIGNUP_MODE, env.AUTH_SIGNUP_ALLOWLIST),
   };
 }

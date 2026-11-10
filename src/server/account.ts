@@ -1,6 +1,6 @@
 import 'server-only';
 import type { Db, ObjectId } from 'mongodb';
-import type { AccountSummary } from '@/lib/account';
+import { TOOL_IDS, type AccountSummary, type ToolId } from '@/lib/account';
 import { collections } from '@/server/db/collections';
 import { getEntitlements, type Entitlements } from '@/server/entitlements';
 
@@ -13,7 +13,7 @@ export async function getAccountSummary(db: Db, userId: ObjectId, now = new Date
   const [user, entitlements] = await Promise.all([
     collections(db).users.findOne(
       { _id: userId },
-      { projection: { name: 1, email: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1 } },
+      { projection: { name: 1, email: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, introsSeen: 1 } },
     ),
     getEntitlements(db, userId, now),
   ]);
@@ -33,6 +33,17 @@ export async function getAccountSummary(db: Db, userId: ObjectId, now = new Date
       access: entitlements.access,
       subscription: { status: entitlements.subscriptionStatus ?? 'none' },
       features: entitlements.features,
+      introsSeen: (user.introsSeen ?? []).filter((tool): tool is ToolId => (TOOL_IDS as readonly string[]).includes(tool)),
     },
   };
+}
+
+/** Remember that the person dismissed a tool's first-visit introduction (their own account only). */
+export async function markIntroSeen(db: Db, userId: ObjectId, tool: ToolId): Promise<void> {
+  await collections(db).users.updateOne({ _id: userId }, { $addToSet: { introsSeen: tool } });
+}
+
+/** Show every tool's introduction again (the person asked for it on their account page). */
+export async function resetIntros(db: Db, userId: ObjectId): Promise<void> {
+  await collections(db).users.updateOne({ _id: userId }, { $set: { introsSeen: [] } });
 }

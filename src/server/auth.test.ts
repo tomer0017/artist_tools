@@ -4,6 +4,7 @@ import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mo
 import { migrate } from '@/server/db/migrate';
 import { collections } from '@/server/db/collections';
 import { createAuth, signupAllowed, type Auth } from './auth';
+import type { SignupPolicy } from './env';
 
 // The real sign-in flow, end to end, against a real database. Only Google's
 // token endpoint is simulated: it returns an ID token for a fake Google user.
@@ -26,7 +27,7 @@ beforeAll(async () => {
     baseURL: BASE,
     secret: 'test-secret-that-is-at-least-32-characters-long',
     google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
-    signups: '*',
+    signups: { mode: 'open' },
   });
   inviteOnly = createAuth({
     db: mongo.db,
@@ -34,7 +35,7 @@ beforeAll(async () => {
     baseURL: BASE,
     secret: 'test-secret-that-is-at-least-32-characters-long',
     google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
-    signups: ['invited@example.com', 'second-invite@example.com'],
+    signups: { mode: 'invite', invited: ['invited@example.com', 'second-invite@example.com'] },
   });
 }, MONGO_STARTUP_TIMEOUT);
 
@@ -271,6 +272,34 @@ describe('no privilege escalation through the auth API', () => {
   });
 });
 
+describe('public registration (AUTH_SIGNUP_MODE=open)', () => {
+  // `auth` is configured with { mode: 'open' }.
+  it('creates a free, non-admin account for any new Google-verified user, and audits it', async () => {
+    const newcomer: GoogleUser = { sub: 'google-sub-newcomer', email: 'newcomer@example.com' };
+    const { callback, cookies } = await signInAs(newcomer);
+    expect(new URL(callback.headers.get('location')!, BASE).pathname).toBe('/app');
+    expect(sessionTokenCookie(cookies)).toBeTruthy();
+    const { users, auditEvents } = collections(mongo.db);
+    const user = await users.findOne({ email: newcomer.email });
+    expect(user).toMatchObject({ role: 'user', plan: 'free', status: 'active', marketingConsent: false });
+    expect(await auditEvents.countDocuments({ userId: user!._id, type: 'user.registered' })).toBe(1);
+    expect(await auditEvents.countDocuments({ userId: user!._id, type: 'user.login' })).toBe(1);
+
+    // Signing in again reaches the same account, and is audited as a login.
+    await signInAs(newcomer);
+    expect(await users.countDocuments({ email: newcomer.email })).toBe(1);
+    expect(await collections(mongo.db).accounts.countDocuments({ providerId: 'google', accountId: newcomer.sub })).toBe(1);
+    expect(await auditEvents.countDocuments({ userId: user!._id, type: 'user.login' })).toBe(2);
+    expect(await auditEvents.countDocuments({ userId: user!._id, type: 'user.registered' })).toBe(1);
+  });
+
+  it('still refuses an address Google has not verified', async () => {
+    const { callback } = await signInAs({ sub: 'google-sub-unverified-open', email: 'unverified-open@example.com', verified: false });
+    expect(new URL(callback.headers.get('location')!, BASE).searchParams.get('error')).toBe('not_invited');
+    expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-unverified-open' })).toBe(0);
+  });
+});
+
 describe('invite-only registration (staging)', () => {
   const refusedWith = (callback: Response) => {
     const location = new URL(callback.headers.get('location')!, BASE);
@@ -330,7 +359,7 @@ describe('invite-only registration (staging)', () => {
       secret: 'test-secret-that-is-at-least-32-characters-long',
       google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
       // A policy that throws when consulted, standing in for any bug in the check.
-      signups: new Proxy([] as string[], { get: () => { throw new Error('policy unavailable'); } }),
+      signups: new Proxy({ mode: 'invite', invited: [] } as SignupPolicy, { get: () => { throw new Error('policy unavailable'); } }),
     });
     const { result } = await captureLogs(() => signInAs({ sub: 'google-sub-during-outage', email: 'fresh@example.com' }, broken));
     expect(refusedWith(result.callback)).toEqual({ path: '/sign-in', error: 'validation_failed' });
@@ -346,11 +375,14 @@ describe('invite-only registration (staging)', () => {
   });
 
   it('applies the policy exactly as configured', () => {
-    expect(signupAllowed('*', { email: 'x@y.z', emailVerified: false })).toBe(true);
-    expect(signupAllowed([], { email: 'a@b.c', emailVerified: true })).toBe(false);
-    expect(signupAllowed(['a@b.c'], { email: ' A@B.C ', emailVerified: true })).toBe(true);
-    expect(signupAllowed(['a@b.c'], { email: 'a@b.c', emailVerified: false })).toBe(false);
-    expect(signupAllowed(['a@b.c'], { email: null, emailVerified: true })).toBe(false);
+    const invite = (...invited: string[]) => ({ mode: 'invite' as const, invited });
+    expect(signupAllowed({ mode: 'open' }, { email: 'x@y.z', emailVerified: true })).toBe(true);
+    // Even open registration needs an address Google has verified.
+    expect(signupAllowed({ mode: 'open' }, { email: 'x@y.z', emailVerified: false })).toBe(false);
+    expect(signupAllowed(invite(), { email: 'a@b.c', emailVerified: true })).toBe(false);
+    expect(signupAllowed(invite('a@b.c'), { email: ' A@B.C ', emailVerified: true })).toBe(true);
+    expect(signupAllowed(invite('a@b.c'), { email: 'a@b.c', emailVerified: false })).toBe(false);
+    expect(signupAllowed(invite('a@b.c'), { email: null, emailVerified: true })).toBe(false);
   });
 });
 

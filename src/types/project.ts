@@ -90,8 +90,8 @@ export type InteractionMode = 'idle' | 'crop' | 'calibrate' | 'measure' | 'selec
 export type TabId = 'measure' | 'value' | 'color' | 'grid' | 'compare';
 // What the navigation bars link to: the Home tool hub and the tools.
 export type NavViewId = 'home' | TabId;
-// Everything the app can show: those, plus the account page.
-export type ViewId = NavViewId | 'profile';
+// Everything the app can show: those, plus the account and plans pages.
+export type ViewId = NavViewId | 'profile' | 'plans';
 
 export interface GridSettings {
   canvasWidth: number;

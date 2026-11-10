@@ -23,7 +23,9 @@ const DB_NAME = 'studio_e2e';
 /** The signed cookie value Better Auth expects: `token.HMAC-SHA256(token)`, URL-encoded. */
 const signedCookie = (token: string) => encodeURIComponent(`${token}.${createHmac('sha256', SECRET).update(token).digest('base64')}`);
 
-async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin', plan: 'free' | 'pro' = 'free', sessionExpired = false) {
+const ALL_TOOLS = ['measure', 'value', 'color', 'grid', 'compare'];
+
+async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin', plan: 'free' | 'pro' = 'free', sessionExpired = false, introsSeen = ALL_TOOLS) {
   const userId = new ObjectId();
   const now = new Date();
   await db.collection('users').insertOne({
@@ -37,6 +39,8 @@ async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin', pl
     role,
     status: 'active',
     plan,
+    // Tools already introduced, so specs see the plain tool unless they test introductions.
+    introsSeen,
     lastLoginAt: now,
     marketingConsent: false,
   });
@@ -77,6 +81,10 @@ await seedSignedInUser(db, 'target', 'user');
 await seedSignedInUser(db, 'promote', 'user');
 await seedSignedInUser(db, 'leaver', 'user');
 await seedSignedInUser(db, 'expired', 'user', 'free', true);
+// First-time visitors who have not seen any tool introduction (one per browser project).
+await seedSignedInUser(db, 'newbie', 'user', 'free', false, []);
+await seedSignedInUser(db, 'newbie-chromium', 'user', 'free', false, []);
+await seedSignedInUser(db, 'newbie-iphone-webkit', 'user', 'free', false, []);
 await client.close();
 
 const server = spawn('node', ['.next/standalone/server.js'], {

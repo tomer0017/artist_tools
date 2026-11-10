@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { AccountSummary } from '@/lib/account';
+import type { AccountSummary, ToolId } from '@/lib/account';
 import type { FeatureId } from '@/lib/plans';
 import { signInPath } from '@/lib/redirects';
 import { pathForView } from './tools';
@@ -14,6 +14,10 @@ interface AccountState {
   account: StudioAccount;
   /** Re-read the account from the server (/api/me). */
   refresh: () => Promise<void>;
+  /** Remember (on the account) that a tool's first-visit introduction was dismissed. */
+  markIntroSeen: (tool: ToolId) => void;
+  /** Show every tool's introduction again. */
+  resetIntros: () => Promise<boolean>;
 }
 
 const AccountContext = createContext<AccountState | null>(null);
@@ -59,8 +63,60 @@ export function AccountProvider({ initial, children }: { initial: StudioAccount;
     };
   }, [refresh]);
 
-  const value = useMemo(() => ({ account, refresh }), [account, refresh]);
+  const markIntroSeen = useCallback((tool: ToolId) => {
+    // Shown as dismissed at once, and on this device even if saving fails.
+    rememberIntroLocally(initial.id, tool);
+    setAccount((a) => (a.introsSeen.includes(tool) ? a : { ...a, introsSeen: [...a.introsSeen, tool] }));
+    void fetch('/api/me/intros', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tool }),
+      credentials: 'same-origin',
+    }).catch(() => {});
+  }, [initial.id]);
+
+  const resetIntros = useCallback(async () => {
+    try {
+      const response = await fetch('/api/me/intros', { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) return false;
+      forgetIntrosLocally(initial.id);
+      setAccount((a) => ({ ...a, introsSeen: [] }));
+      return true;
+    } catch {
+      return false;
+    }
+  }, [initial.id]);
+
+  const value = useMemo(() => ({ account, refresh, markIntroSeen, resetIntros }), [account, refresh, markIntroSeen, resetIntros]);
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
+}
+
+// A per-device copy of dismissed introductions (keyed by account), so one is
+// never shown twice here even if telling the server failed.
+const introKey = (userId: string, tool: ToolId) => `studio-intro-seen:${userId}:${tool}`;
+
+export function introSeenLocally(userId: string, tool: ToolId): boolean {
+  try {
+    return localStorage.getItem(introKey(userId, tool)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberIntroLocally(userId: string, tool: ToolId) {
+  try {
+    localStorage.setItem(introKey(userId, tool), '1');
+  } catch {
+    // Private mode or storage full: the account still remembers it.
+  }
+}
+
+function forgetIntrosLocally(userId: string) {
+  try {
+    for (const key of Object.keys(localStorage)) if (key.startsWith(`studio-intro-seen:${userId}:`)) localStorage.removeItem(key);
+  } catch {
+    // Nothing stored here.
+  }
 }
 
 export const useAccount = () => useContext(AccountContext);
@@ -142,7 +198,7 @@ export function AccountButton() {
   );
 }
 
-/** "Signed in as … · Sign out", under the Home screen. */
+/** "Signed in as … · Plans · Sign out", under the Home screen. */
 export function AccountLine() {
   const state = useAccount();
   const { signingOut, signOut } = useSignOut();
@@ -151,6 +207,10 @@ export function AccountLine() {
   return (
     <p data-account-line className="mt-2 px-4 text-center text-xs text-muted-foreground md:px-6">
       Signed in as <span className="text-foreground/80">{state.account.email}</span>
+      {' · '}
+      <Link href={pathForView('plans')} className="font-medium text-primary underline-offset-2 hover:underline">
+        Plans
+      </Link>
       {' · '}
       <button
         type="button"

@@ -6,7 +6,7 @@ const BASE = { BETTER_AUTH_URL: 'https://staging.example.com', BETTER_AUTH_SECRE
 const saved = { ...process.env };
 
 function withEnv(env: Record<string, string | undefined>) {
-  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_SIGNUP_ALLOWLIST']) delete process.env[key];
+  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_SIGNUP_MODE', 'AUTH_SIGNUP_ALLOWLIST']) delete process.env[key];
   Object.assign(process.env, env);
 }
 
@@ -17,7 +17,7 @@ afterEach(() => {
 describe('authConfig', () => {
   it('runs without Google until its OAuth client exists', () => {
     withEnv({ ...BASE });
-    expect(authConfig()).toEqual({ baseURL: BASE.BETTER_AUTH_URL, secret: BASE.BETTER_AUTH_SECRET, google: null, signups: [] });
+    expect(authConfig()).toEqual({ baseURL: BASE.BETTER_AUTH_URL, secret: BASE.BETTER_AUTH_SECRET, google: null, signups: { mode: 'invite', invited: [] } });
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
     expect(authConfig().google).toBeNull();
   });
@@ -32,13 +32,23 @@ describe('authConfig', () => {
     expect(() => authConfig()).toThrow('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together');
   });
 
-  it('keeps registration closed unless addresses are invited or it is opened on purpose', () => {
+  it('keeps registration invite-only unless it is opened on purpose', () => {
     withEnv({ ...BASE });
-    expect(authConfig().signups).toEqual([]);
+    expect(authConfig().signups).toEqual({ mode: 'invite', invited: [] });
     withEnv({ ...BASE, AUTH_SIGNUP_ALLOWLIST: ' Ada@Example.com , ,grace@example.com ' });
-    expect(authConfig().signups).toEqual(['ada@example.com', 'grace@example.com']);
+    expect(authConfig().signups).toEqual({ mode: 'invite', invited: ['ada@example.com', 'grace@example.com'] });
+    withEnv({ ...BASE, AUTH_SIGNUP_MODE: 'invite', AUTH_SIGNUP_ALLOWLIST: 'ada@example.com' });
+    expect(authConfig().signups).toEqual({ mode: 'invite', invited: ['ada@example.com'] });
+    // Public registration is one explicit setting…
+    withEnv({ ...BASE, AUTH_SIGNUP_MODE: 'open', AUTH_SIGNUP_ALLOWLIST: 'ada@example.com' });
+    expect(authConfig().signups).toEqual({ mode: 'open' });
+    // …and older env files that used "*" still mean open, unless the mode says otherwise.
     withEnv({ ...BASE, AUTH_SIGNUP_ALLOWLIST: '*' });
-    expect(authConfig().signups).toBe('*');
+    expect(authConfig().signups).toEqual({ mode: 'open' });
+    withEnv({ ...BASE, AUTH_SIGNUP_MODE: 'invite', AUTH_SIGNUP_ALLOWLIST: '*' });
+    expect(authConfig().signups).toEqual({ mode: 'invite', invited: [] });
+    withEnv({ ...BASE, AUTH_SIGNUP_MODE: 'everyone' });
+    expect(() => authConfig()).toThrow('AUTH_SIGNUP_MODE must be "invite" or "open"');
   });
 
   it('names what is wrong without echoing secret values', () => {

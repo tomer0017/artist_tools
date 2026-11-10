@@ -59,6 +59,16 @@ Enter the complete list, comma-separated. It replaces only
 puts the old list back if it is not. Addresses left out can no longer sign
 up; existing accounts always keep working.
 
+### Opening public registration (only when approved)
+
+Staging stays invite-only. To let anyone with a Google-verified address create
+a free account, add `AUTH_SIGNUP_MODE="open"` to `/etc/studio-companion/<env>.env`
+(back up the file first) and `systemctl restart studio-companion-<env>`, then
+check `/api/health?ready=1`. New accounts are always role `user` on Free;
+admin access is never granted automatically. To close it again, set
+`AUTH_SIGNUP_MODE="invite"` and restart. The sign-in, landing and plans pages
+follow the setting on their own.
+
 ## Releasing
 
 ```sh

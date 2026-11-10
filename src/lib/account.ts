@@ -1,5 +1,9 @@
 import type { FeatureId, PlanId } from './plans';
 
+/** The five tools' ids (as in TabId), for checking what the browser sends. */
+export const TOOL_IDS = ['measure', 'value', 'color', 'grid', 'compare'] as const;
+export type ToolId = (typeof TOOL_IDS)[number];
+
 /**
  * What the signed-in person may see about their own account: identity from
  * Google, role, plan and what it includes. Built by the server from the
@@ -19,4 +23,6 @@ export interface AccountSummary {
   access: 'admin' | PlanId | 'none';
   subscription: { status: 'none' | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'expired' };
   features: FeatureId[];
+  /** Tools whose first-visit introduction this person has dismissed (on any device). */
+  introsSeen: ToolId[];
 }

@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { useEffect } from 'react';
-import { BadgeCheck, Check, Crown, Lock, LogOut, ShieldCheck, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BadgeCheck, Check, Crown, Lock, LogOut, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FEATURE_MATRIX, PLAN_NAMES } from '@/lib/plans';
 import { AccountAvatar, useAccount, useSignOut, type StudioAccount } from './account';
 import { BrandMark } from './BrandMark';
+import { pathForView } from './tools';
 
 // ─── Account page (/app/profile) ──────────────────────────────────────────────
 // Who is signed in, which plan they are on and what it includes. Everything
@@ -38,6 +39,7 @@ export default function ProfileScreen() {
   const { signingOut, signOut } = useSignOut();
   const isMobile = useIsMobile();
   const refresh = state?.refresh;
+  const [introsReset, setIntrosReset] = useState<null | 'done' | 'failed'>(null);
 
   // Always show the account as it is now (an admin may have just changed it).
   useEffect(() => {
@@ -140,6 +142,32 @@ export default function ProfileScreen() {
                 <Sparkles className="h-4 w-4" aria-hidden="true" /> Upgrade: coming soon
               </button>
             </div>
+          )}
+          <Link
+            href={pathForView('plans')}
+            className="mt-4 inline-flex items-center text-sm font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Compare plans
+          </Link>
+        </section>
+
+        {/* Tool introductions */}
+        <section aria-label="Tool introductions" className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
+          <p className="font-semibold text-foreground">Tool introductions</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Each tool explains itself the first time you open it. Want to see those introductions again?
+          </p>
+          <button
+            type="button"
+            onClick={async () => setIntrosReset((await state.resetIntros()) ? 'done' : 'failed')}
+            className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary/60 text-sm font-semibold text-foreground hover:bg-secondary sm:w-auto sm:px-6"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" /> Show introductions again
+          </button>
+          {introsReset && (
+            <p role="status" className={`mt-2 text-xs ${introsReset === 'done' ? 'text-primary' : 'text-destructive'}`}>
+              {introsReset === 'done' ? 'Done. Each tool will introduce itself the next time you open it.' : 'That did not work. Check your connection and try again.'}
+            </p>
           )}
         </section>
 

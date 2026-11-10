@@ -34,6 +34,8 @@ export interface UserDoc {
   /** Who last assigned the plan: 'admin:<id>' or 'cli'. */
   planUpdatedBy?: string | null;
   lastLoginAt?: Date | null;
+  /** Tools whose first-visit introduction the person dismissed (TabId values). */
+  introsSeen?: string[];
   /** Marketing email consent is opt-in and recorded separately from sign-up. */
   marketingConsent: boolean;
   marketingConsentAt?: Date | null;

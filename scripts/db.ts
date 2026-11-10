@@ -35,8 +35,8 @@ const when = (date: Date | null) => (date ? date.toISOString().replace('T', ' ')
 function invitation(email: string): string {
   try {
     const { signups } = authConfig();
-    if (signups === '*') return 'open sign-up';
-    return signups.includes(email.trim().toLowerCase()) ? 'on the invite list' : 'not on the invite list';
+    if (signups.mode === 'open') return 'open registration';
+    return signups.invited.includes(email.trim().toLowerCase()) ? 'on the invite list' : 'not on the invite list';
   } catch {
     return 'invite list unknown';
   }

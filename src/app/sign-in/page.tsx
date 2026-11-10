@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import SignInCard from '@/components/auth/SignInCard';
 import { safeCallbackPath } from '@/lib/redirects';
-import { googleSignInAvailable } from '@/server/auth';
+import { googleSignInAvailable, registrationMode } from '@/server/auth';
 import { getSession } from '@/server/session';
 
 export const metadata: Metadata = {
-  title: 'Sign in · Studio Companion',
+  title: 'Sign in or sign up · Studio Companion',
   robots: { index: false, follow: false },
 };
 
@@ -18,8 +18,8 @@ export const dynamic = 'force-dynamic';
 const MESSAGES: Record<string, string> = {
   access_denied: 'Sign-in was cancelled. You can try again whenever you are ready.',
   account_not_linked: 'This Google account cannot be used to sign in here. Please use the Google account you signed up with.',
-  not_invited: 'This Google account has not been invited to Studio Companion yet.',
-  unable_to_create_user: 'This Google account has not been invited to Studio Companion yet.',
+  not_invited: 'This Google account cannot create an account here yet. Studio Companion is invite-only while we test it, and Google must have verified the address.',
+  unable_to_create_user: 'This Google account cannot create an account here yet. Studio Companion is invite-only while we test it.',
   unable_to_create_session: 'This account cannot sign in right now. Please contact support if you think this is a mistake.',
 };
 const GENERIC = 'Sign-in did not complete. Please try again.';
@@ -32,6 +32,11 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   if (await getSession()) redirect(callbackPath);
   const error = first(params.error);
   return (
-    <SignInCard callbackPath={callbackPath} available={googleSignInAvailable()} error={error ? (MESSAGES[error] ?? GENERIC) : null} />
+    <SignInCard
+      callbackPath={callbackPath}
+      available={googleSignInAvailable()}
+      registration={registrationMode()}
+      error={error ? (MESSAGES[error] ?? GENERIC) : null}
+    />
   );
 }

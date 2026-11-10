@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { BrandMark } from './BrandMark';
 import { AccountButton, AccountLine } from './account';
-import { HOME_ORDER, TOOLS, pathForView } from './tools';
+import { HOME_ORDER, TOOLS, TOOL_ART, pathForView } from './tools';
 import type { TabId } from '@/types/project';
 
 // ─── Home / Tool Hub ──────────────────────────────────────────────────────────
@@ -12,16 +12,6 @@ import type { TabId } from '@/types/project';
 // one tap. Nothing here needs a tutorial.
 
 const ART = '/images/home/';
-
-// Artwork for each card. The images are wide; `position` keeps each one's
-// subject in view when a narrow card crops it.
-const CARD_ART: Record<TabId, { src: string; alt: string; width: number; height: number; position: string }> = {
-  measure: { src: 'home-measure.webp', alt: 'Portrait with proportion measurements', width: 586, height: 230, position: '100% 50%' },
-  value: { src: 'home-study.webp', alt: 'The same portrait as photo, simplified shapes, values and sketch', width: 586, height: 211, position: '35% 50%' },
-  color: { src: 'home-color.webp', alt: 'Paint palette, color wheel and mixed swatches', width: 586, height: 209, position: '62% 50%' },
-  grid: { src: 'home-grid.webp', alt: 'Mountain landscape with a drawing grid', width: 586, height: 196, position: '50% 50%' },
-  compare: { src: 'home-compare.webp', alt: 'Painted eye compared side by side with the reference photo', width: 586, height: 205, position: '50% 50%' },
-};
 
 const HERO_FADE = 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 30%, #000 62%, #000 88%, transparent 100%)';
 
@@ -100,7 +90,7 @@ export default function HomeScreen() {
 
 function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; eager: boolean }) {
   const tool = TOOLS[id];
-  const art = CARD_ART[id];
+  const art = TOOL_ART[id];
   const Icon = tool.icon;
   return (
     <Link
@@ -110,7 +100,7 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
     >
       <div className={`relative aspect-[4/3] w-[38%] max-w-[260px] shrink-0 self-center overflow-hidden rounded-xl bg-secondary ${lead ? 'lg:aspect-[21/9]' : 'lg:aspect-[16/9]'} lg:w-full lg:max-w-none lg:rounded-b-none lg:rounded-t-2xl`}>
         <img
-          src={`${ART}${art.src}`}
+          src={art.src}
           alt={art.alt}
           width={art.width}
           height={art.height}

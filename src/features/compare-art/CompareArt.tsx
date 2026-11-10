@@ -250,7 +250,9 @@ function Workspace() {
     <div className="relative flex flex-1 flex-col min-h-0">
       {header}
 
-      <div className="relative flex flex-1 flex-col min-h-0">
+      {/* The interaction surface: never selectable, so a held finger (Smart
+          Align points) cannot select the badges laid over it on iPhone. */}
+      <div className="relative flex flex-1 select-none flex-col min-h-0" style={{ WebkitTouchCallout: 'none' }}>
         <CompareCanvas
           selectedLayer={session.artworkLocked ? 'reference' : selectedLayer}
           anchor={anchor}

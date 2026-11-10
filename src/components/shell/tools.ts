@@ -20,6 +20,8 @@ export interface ToolInfo {
   /** A few concrete capabilities, shown as chips on wider Home cards. */
   chips: string[];
   icon: LucideIcon;
+  /** The first-visit introduction: how it works in three short steps, and the button that starts. */
+  intro: { steps: [string, string, string]; start: string };
 }
 
 export const TOOLS: Record<TabId, ToolInfo> = {
@@ -30,6 +32,14 @@ export const TOOLS: Record<TabId, ToolInfo> = {
     description: 'Get accurate proportions and real measurements for your artwork.',
     chips: ['Proportions', 'Real size (cm/in)', 'Plan drawing'],
     icon: Ruler,
+    intro: {
+      steps: [
+        'Add a photo of your reference.',
+        'Set the scale: tap two points whose real size you know.',
+        'Tap any two points to read their length in cm or inches.',
+      ],
+      start: 'Start measuring',
+    },
   },
   value: {
     id: 'value',
@@ -38,6 +48,14 @@ export const TOOLS: Record<TabId, ToolInfo> = {
     description: 'Break down your reference into colors, values and clear shapes.',
     chips: ['Color study', 'Light & shadow', 'Sketch'],
     icon: Sun,
+    intro: {
+      steps: [
+        'Add a photo of your reference.',
+        'Choose a study: Color groups, Values or a Sketch.',
+        'Adjust it until the shapes read clearly, then save it.',
+      ],
+      start: 'Start a study',
+    },
   },
   color: {
     id: 'color',
@@ -46,6 +64,14 @@ export const TOOLS: Record<TabId, ToolInfo> = {
     description: 'Explore color relationships and get practical paint mixing recipes.',
     chips: ['Color wheel', 'Harmonies', 'Mixing recipes'],
     icon: Palette,
+    intro: {
+      steps: [
+        'Pick a color on the wheel, or sample one from your photo.',
+        'See the harmonies that work with it.',
+        'Get mixing recipes, including skin tones.',
+      ],
+      start: 'Explore colors',
+    },
   },
   grid: {
     id: 'grid',
@@ -54,6 +80,14 @@ export const TOOLS: Record<TabId, ToolInfo> = {
     description: 'Add a grid to your reference to transfer it accurately to canvas.',
     chips: ['3×3 · 4×4 · 8×8', 'Custom grid', 'Print / Save'],
     icon: Grid3X3,
+    intro: {
+      steps: [
+        'Add the photo you want to transfer.',
+        'Choose a grid (4×4 is a good start) and your canvas size.',
+        'Save the gridded image and copy it square by square.',
+      ],
+      start: 'Make a grid',
+    },
   },
   compare: {
     id: 'compare',
@@ -62,8 +96,29 @@ export const TOOLS: Record<TabId, ToolInfo> = {
     description: 'Overlay your painting with the reference to spot differences and fix them.',
     chips: ['Align images', 'Fade & compare', 'Create GIF'],
     icon: SquareSplitHorizontal,
+    intro: {
+      steps: [
+        'Add a photo of your painting and of your reference.',
+        'Align them: Smart Align needs just four taps.',
+        'Fade, blink or show differences to spot what to fix, then save a GIF.',
+      ],
+      start: 'Start comparing',
+    },
   },
 };
+
+/** Each tool's picture (Home cards, the landing page, first-visit introductions). The images are
+ *  wide; `position` keeps each one's subject in view when a narrow frame crops it. */
+export const TOOL_ART: Record<TabId, { src: string; alt: string; width: number; height: number; position: string }> = {
+  measure: { src: '/images/home/home-measure.webp', alt: 'Portrait with proportion measurements', width: 586, height: 230, position: '100% 50%' },
+  value: { src: '/images/home/home-study.webp', alt: 'The same portrait as photo, simplified shapes, values and sketch', width: 586, height: 211, position: '35% 50%' },
+  color: { src: '/images/home/home-color.webp', alt: 'Paint palette, color wheel and mixed swatches', width: 586, height: 209, position: '62% 50%' },
+  grid: { src: '/images/home/home-grid.webp', alt: 'Mountain landscape with a drawing grid', width: 586, height: 196, position: '50% 50%' },
+  compare: { src: '/images/home/home-compare.webp', alt: 'Painted eye compared side by side with the reference photo', width: 586, height: 205, position: '50% 50%' },
+};
+
+/** Whether a view is one of the five tools (not Home, the account or the plans page). */
+export const isTool = (view: ViewId): view is TabId => view in TOOLS;
 
 /** Order of the Home cards: the natural order of a painting's life. */
 export const HOME_ORDER: TabId[] = ['measure', 'value', 'color', 'grid', 'compare'];
@@ -90,8 +145,8 @@ const SLUGS: Record<TabId, string> = {
 /** URL segments of the tools, e.g. for the router to know which tool pages exist. */
 export const TOOL_SLUGS: string[] = Object.values(SLUGS);
 
-/** Every view's URL segment: the tools plus the account page. */
-const VIEW_SLUGS: Record<Exclude<ViewId, 'home'>, string> = { ...SLUGS, profile: 'profile' };
+/** Every view's URL segment: the tools plus the account and plans pages. */
+const VIEW_SLUGS: Record<Exclude<ViewId, 'home'>, string> = { ...SLUGS, profile: 'profile', plans: 'plans' };
 
 /** The studio lives under /app; the site root is the public landing page. */
 const STUDIO_ROOT = '/app';

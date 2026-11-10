@@ -99,8 +99,11 @@ download.
 ## Pages
 
 ### Landing — route `/` (`src/app/page.tsx`)
-- **Purpose:** Public entry point; a placeholder reusing the studio hero until
-  the marketing page is designed. "Open the studio" goes to `/app`.
+- **Purpose:** Public entry point: the studio hero, the five tools with their
+  artwork, "Free to start. Pro is coming soon", and links to Plans and Sign in.
+  The main button follows the registration setting: "Start free with Google"
+  when registration is open, "Open the studio" while invite-only (with a note
+  saying so).
 - Old hash links (`/#/compare`) are forwarded to `/app/compare` by
   `LegacyHashRedirect` (unknown tools → `/app`), because a hash never reaches
   the server.
@@ -140,17 +143,38 @@ download.
     the studio with (`getAccountSummary`) and re-reads `/api/me` when the
     studio comes back into view or the account page opens; a 401 sends the
     person to sign in and back.
+  - **First-visit tool introductions** (`ToolIntro.tsx`, content in the
+    `TOOLS` registry): the first time an account opens a tool, a short card
+    gives its name, what it helps with, how it works in three steps and one
+    button to start. Dismissing it in any way counts; it is remembered on the
+    account (`users.introsSeen`, `POST /api/me/intros`) and on the device, so
+    returning artists are never interrupted again. "Show introductions again"
+    on the account page resets them (`DELETE /api/me/intros`). The guided
+    tours stay behind each tool's Help button and still never open on their
+    own.
 - **Key components used:** `HomeScreen`, `ProfileScreen`, `TopNav`/`BottomNav`, `MeasureTab`,
   `ValueTab`, `ColorTab`, `GridTab`, `CompareArt` (lazy), all wrapped in
   `ProjectProvider` + `OnboardingProvider`.
 - **State & data:** Reads `activeTab` from the project store. All tool state
   lives in the store or in each tool's local component state.
 
-### Sign in — route `/sign-in` (`src/app/sign-in/page.tsx`)
-- **Purpose:** The only way in: "Continue with Google". Signed-in visitors are
-  sent straight on; failed sign-ins come back here with a plain-language
-  message. `?callbackURL=` is accepted only for internal `/app` and `/admin`
-  paths (`src/lib/redirects.ts`).
+### Sign in / sign up — route `/sign-in` (`src/app/sign-in/page.tsx`)
+- **Purpose:** The only way in: "Continue with Google", which also creates the
+  free account on first use (no passwords). The copy follows the registration
+  setting ("Sign in or create your free account" when open; an invite-only
+  explanation otherwise) and lists what a free account includes. Signed-in
+  visitors are sent straight on; failed sign-ins come back here with a
+  plain-language message. `?callbackURL=` is accepted only for internal `/app`
+  and `/admin` paths (`src/lib/redirects.ts`).
+
+### Plans — routes `/pricing` (public) and `/app/plans` (studio view)
+- **Purpose:** Free (available now) and Pro (coming soon) side by side, from the
+  same matrix the server enforces, plus a comparison table and short answers
+  (no prices, nothing to buy). `PlanComparison` is shared; the studio view
+  shows the person's current plan and keeps the tools alive behind it, so a
+  locked Pro option can link to it without losing work. Linked from the
+  landing page, the sign-in page, Home ("Plans" under the tools), the account
+  page and every Pro notice.
 
 ### Admin — routes `/admin`, `/admin/users/[id]`, `/admin/activity` (`src/app/admin/`)
 - **Purpose:** Supporting accounts. `/admin`: search by email, headline counts
@@ -246,6 +270,16 @@ Staging on the VPS (details and commands in `deploy/README.md`):
 
   No monthly limits are set. Locked options stay visible with a lock; choosing
   one explains it is part of Pro and that paid plans are coming soon.
+- **Registration** (`AUTH_SIGNUP_MODE`, `src/server/env.ts`): `invite` (the
+  default; only Google-verified addresses on `AUTH_SIGNUP_ALLOWLIST`) or `open`
+  (any Google-verified address). Either way a new account is role `user` on
+  Free with marketing consent off; existing accounts always sign in to their
+  original account (Google `sub`); registration and every login are audited.
+  Staging is invite-only until opening it is approved.
+- **Pro notices** (`src/components/common/ProFeature.tsx`, texts in
+  `PRO_FEATURE_INFO`): choosing a locked option explains what it does, why it
+  is part of Pro, that Pro cannot be bought yet, and links to the plans. The
+  server still decides (`/api/usage`).
 - **Using a plan-gated feature:** before any GIF is encoded the studio calls
   `POST /api/usage` with the features it needs; the server checks them from
   the database (`authorizeFeatureUse`) and counts the use (these counts are
@@ -759,6 +793,15 @@ photo editor" process. The painter adds a photo of their current painting
 reference over the artwork, and inspects where proportions, values and colors
 diverge — then exports an animated GIF that reveals the mismatch.
 
+**Touch surface on iPhone.** Smart Align points are placed by press-and-hold
+(the magnifier follows the finger, the point lands on release). Safari would
+also start its own long-press there — blue text selection, the callout, the
+tap highlight — so the canvas region opts out of selection, the callout and
+the tap highlight, and touches that start on the canvas are cancelled as
+touches with non-passive listeners (`CompareCanvas.tsx`). Pointer Events, which
+place points, drag, pinch and pan, still arrive; the rest of the page stays
+selectable and scrolls normally. Not a global `user-select: none`.
+
 **Isolation.** Everything lives in `src/features/compare-art/` behind its own
 React context (`CompareProvider`/`useCompare`) and its own `localStorage` key
 (`compare-art-session`). It shares nothing mutable with `useProjectStore`, so
@@ -895,3 +938,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-10 | **Google sign-in, MongoDB and SaaS foundation (phases C–E), local only.** Better Auth (Google OIDC, PKCE, database sessions, origin checks forced on, no stored Google tokens, identity = Google `sub`); proxy + server-verified sessions on every studio page/API; sign-in page; account line + sign-out under Home; MongoDB data model, idempotent migrations and Free/Pro plans; server-only entitlements; inactive payment-event processor (idempotent, audited); admin users page + CLI role grants; first-party analytics; /api/me, /api/health; security headers. Tests: 120 unit/integration (real MongoDB 8 replica set, full Google OAuth flow with a simulated Google), 36 e2e incl. 17 auth/security, 36/36 visual parity. | src/server/**, src/proxy.ts, src/app/{sign-in,admin,api,error}, src/app/app/*, src/components/{auth,shell/account,shell/Studio*,shell/HomeScreen}, src/lib/{auth-client,redirects}, scripts/{db,e2e-server}.ts, .env.example, e2e/*, playwright.config.ts, next.config.ts, README.md, PROJECT.md |
 | 2026-11-10 | **Staging on the VPS.** MongoDB 8.0 (localhost, auth, replica set, nightly local dumps); CloudPanel Node.js site `staging.185-176-255-3.sslip.io` with Let's Encrypt; systemd unit + `deploy/release.sh` (build exact commit, migrate, atomic switch, health-gated auto switch-back; drill verified). Google sign-in optional until its OAuth client exists. Security headers aligned with CloudPanel's nginx + HSTS; health check validates config. | deploy/*, next.config.ts, src/app/api/health, src/server/{env,auth}.ts, src/app/sign-in, src/components/auth, PROJECT.md |
 | 2026-11-10 | **Roles, Free/Pro plans, admin dashboard and account page (staging).** Account model: role (`user`/`admin`) separate from an admin-assigned plan (`users.plan`, Free for every new account; Better Auth field with `input: false`) and from subscription status (billing not live). Entitlements: admins get every feature on any plan; effective plan = better of assigned plan and an active subscription; Pro never grants admin. Free/Pro matrix in `src/lib/plans.ts` (Free keeps all five tools and every save; Pro adds Large GIFs and Compare+Difference GIFs), synced to `plans` by the migration (which also moves existing accounts to Free). `POST /api/usage` authorizes and counts plan-gated feature use on the server before any GIF is encoded. Admin dashboard: search by email, phone cards / desktop table, account detail (Google link without the full id, sessions, access, usage, audit trail), plan Free↔Pro and make/remove admin behind confirmations, with server actions that re-check the admin from the database and audit every change; no self-demotion, never the last admin. Account page `/app/profile` (plan, role, subscription, member since, what is included, Upgrade: coming soon, sign out), reached from a new avatar on Home and the top bar. CLI: `list-users` (masked), guarded `grant-admin`, `revoke-admin`, `set-plan`. An expired session now returns to the page it was on after sign-in (the proxy passes the requested path to the studio layout). Tests: 146 unit/integration, 59 e2e (Desktop Chrome + iPhone WebKit; 23 new account/admin/plan specs), 36/36 visual parity with the new avatar hidden. | src/lib/{plans,account,features-client}.ts, src/server/{account,request,admin,entitlements,session,auth}.ts, src/server/db/{collections,migrate}.ts, src/app/admin/**, src/app/api/{me,usage}, src/app/app/{layout.tsx,profile/}, src/proxy.ts, src/lib/redirects.ts, src/components/shell/{account,ProfileScreen,AppNav,HomeScreen,Studio,tools}, src/components/common/ProFeature.tsx, src/features/compare-art/{CompareExportSheet.tsx,useCompareGif.ts}, src/onboarding/OnboardingHost.tsx, src/types/project.ts, scripts/{db,e2e-server}.ts, e2e/{accounts.spec.ts (new),visual-parity.spec.ts}, playwright.config.ts, deploy/README.md, PROJECT.md |
+| 2026-11-10 | **Visitor journey: registration, plans, tool introductions, Pro notices; Compare iPhone long-press fix.** Registration is an explicit setting (`AUTH_SIGNUP_MODE` invite|open; invite stays the default and staging stays invite-only); both modes need a Google-verified address, new accounts are always user/Free with marketing off, and registration and logins are audited. Sign-in page explains that Google creates the free account automatically (or that it is invite-only for now). New landing page (five tools with artwork, Plans, Sign in). Plans comparison (`PlanComparison`) on public `/pricing` and studio `/app/plans`: Free available, Pro coming soon, no prices, no payment. First-visit introduction per tool (what it helps with, how it works in three steps, one Start button), remembered per account (`users.introsSeen`, `/api/me/intros`) and resettable from the account page; guided tours unchanged. Pro notices explain what the feature does, why it is Pro and that Pro cannot be bought yet, and link to the plans. Compare: the canvas surface opts out of iOS text selection, callout and tap highlight, and cancels touches that start on it (Pointer Events still place points, drag, pinch and pan); no global change. Same fix prepared, not deployed, for the GitHub Pages app on branch `fix/compare-ios-long-press`. Tests: 150 unit/integration, 71 e2e (Desktop Chrome + iPhone WebKit), 36/36 visual parity. | src/server/{env,auth,account}.ts, src/app/{page.tsx,pricing/,sign-in/page.tsx,api/me/intros/,app/plans/}, src/components/{auth/SignInCard.tsx,plans/PlanComparison.tsx,common/ProFeature.tsx}, src/components/shell/{ToolIntro,PlansScreen,ProfileScreen,account,Studio,tools,HomeScreen}, src/lib/{plans,account}.ts, src/features/compare-art/{CompareCanvas,CompareArt,CompareExportSheet}.tsx, src/onboarding/OnboardingHost.tsx, src/types/project.ts, scripts/{db,e2e-server}.ts, e2e/{journey.spec.ts (new),accounts.spec.ts}, playwright.config.ts, .env.example, deploy/README.md, PROJECT.md |
