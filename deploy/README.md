@@ -125,5 +125,11 @@ so older releases run against the newer schema.
   nginx SIGUSR1 (reopen logs) after every rotation run. CloudPanel's own files
   are untouched; remove the drop-in and `systemctl daemon-reload` to undo.
   Backup of the previous configuration: `/root/backups/logrotate-<timestamp>/`.
+- **Nightly MongoDB dump** (`/etc/cron.d/studio-mongo-backup` →
+  `/usr/local/sbin/studio-mongo-backup`, 02:40 server time, 14 days in
+  `/var/backups/mongodb`). cron ignores files in `/etc/cron.d` that are group-
+  or world-writable: the file must stay `root:root 0644`. Until 2026-11-10 it
+  was `0664` and the job never ran (cron logged `INSECURE MODE`); check with
+  `journalctl -u cron | grep studio-mongo` and `ls -lt /var/backups/mongodb`.
 - **Off-site backups:** see `deploy/offsite-backups-plan.md` (plan, not yet
   implemented).
