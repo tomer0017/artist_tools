@@ -22,7 +22,7 @@ afterAll(async () => {
 describe('migration', () => {
   it('creates every index and seeds Free and Pro from the plan definitions', async () => {
     const report = await migrate(mongo.db);
-    expect(report).toEqual({ indexes: INDEXES.length, plansInserted: 2, plansUpdated: 0, usersBackfilled: 0 });
+    expect(report).toEqual({ indexes: INDEXES.length, plansInserted: 2, plansUpdated: 0, usersBackfilled: 0, preferencesBackfilled: 0 });
 
     for (const index of INDEXES) {
       const names = (await mongo.db.collection(index.collection).listIndexes().toArray()).map((i) => i.name);
@@ -63,6 +63,28 @@ describe('migration', () => {
     expect((await users.findOne({ _id: legacy }))?.plan).toBe('free');
     expect((await users.findOne({ _id: pro }))?.plan).toBe('pro');
     expect((await migrate(mongo.db)).usersBackfilled).toBe(0);
+  });
+
+  it('gives accounts from before preferences existed English and US dollars, and keeps chosen ones', async () => {
+    const { users } = collections(mongo.db);
+    const older = new ObjectId();
+    const chosen = new ObjectId();
+    const base = { name: 'P', emailVerified: true, createdAt: new Date(), updatedAt: new Date(), role: 'user' as const, status: 'active' as const, marketingConsent: false, plan: 'free' as const };
+    await users.insertMany([
+      { _id: older, email: 'older@example.com', ...base },
+      { _id: chosen, email: 'chosen@example.com', locale: 'he', currency: 'ILS', ...base },
+    ]);
+    expect((await migrate(mongo.db)).preferencesBackfilled).toBeGreaterThanOrEqual(1);
+    expect(await users.findOne({ _id: older })).toMatchObject({ locale: 'en', currency: 'USD' });
+    expect(await users.findOne({ _id: chosen })).toMatchObject({ locale: 'he', currency: 'ILS' });
+    expect((await migrate(mongo.db)).preferencesBackfilled).toBe(0);
+  });
+
+  it('removes throttle windows, outbox mail and verifications by their expiry', async () => {
+    for (const [collection, name] of [['auth_throttles', 'throttle_expiry_ttl'], ['mail_outbox', 'outbox_expiry_ttl'], ['verifications', 'verification_expiry_ttl']]) {
+      const ttl = (await mongo.db.collection(collection).listIndexes().toArray()).find((i) => i.name === name);
+      expect(ttl?.expireAfterSeconds).toBe(0);
+    }
   });
 
   it('expires sessions by their expiresAt', async () => {

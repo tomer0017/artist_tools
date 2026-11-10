@@ -1,11 +1,12 @@
 import 'server-only';
 import { ObjectId, type Db } from 'mongodb';
 import { FEATURES, PLAN_IDS, type FeatureId, type PlanId } from '@/lib/plans';
+import type { Currency, Locale } from '@/lib/locale';
 
 // ─── Data model ────────────────────────────────────────────────────────────────
-// `users`, `sessions`, `accounts` and `verifications` are owned by Better Auth
-// (see src/server/auth.ts); everything else belongs to the app. All user
-// references are ObjectIds, the same type Better Auth stores.
+// `users`, `sessions`, `accounts`, `verifications` and `rateLimits` are owned
+// by Better Auth (see src/server/auth.ts); everything else belongs to the app.
+// All user references are ObjectIds, the same type Better Auth stores.
 
 export { FEATURES, PLAN_IDS, type FeatureId, type PlanId };
 
@@ -36,18 +37,26 @@ export interface UserDoc {
   lastLoginAt?: Date | null;
   /** Tools whose first-visit introduction the person dismissed (TabId values). */
   introsSeen?: string[];
-  /** Marketing email consent is opt-in and recorded separately from sign-up. */
+  /** Marketing email consent is opt-in and recorded separately from sign-up; history in `consent_events`. */
   marketingConsent: boolean;
   marketingConsentAt?: Date | null;
   marketingConsentSource?: string | null;
+  /** Preferred interface language and display/billing currency (src/lib/locale.ts). */
+  locale?: Locale;
+  currency?: Currency;
 }
 
-/** A sign-in identity: Google's stable subject id (`accountId`), never the email. */
+/**
+ * A sign-in method. Google: `accountId` is Google's stable subject id, never
+ * the email. Password (`providerId` 'credential'): `accountId` is the user id
+ * and `password` the scrypt hash, which never leaves the server.
+ */
 export interface AccountDoc {
   _id: ObjectId;
   userId: ObjectId;
   providerId: string;
   accountId: string;
+  password?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -109,6 +118,20 @@ export type AuditEventType =
   | 'user.registered'
   | 'user.login'
   | 'user.logout'
+  | 'user.email_verified'
+  | 'user.password_set'
+  | 'user.password_changed'
+  | 'user.password_reset'
+  | 'user.profile_updated'
+  | 'user.consent_changed'
+  | 'user.session_revoked'
+  | 'user.sessions_revoked'
+  | 'account.linked'
+  | 'account.unlinked'
+  | 'account.data_exported'
+  | 'account.deleted'
+  | 'auth.login_failed'
+  | 'auth.throttled'
   | 'admin.role_granted'
   | 'admin.role_revoked'
   | 'admin.plan_changed'
@@ -167,17 +190,71 @@ export interface AnalyticsEventDoc {
   props: Record<string, string | number | boolean>;
 }
 
+/** Purposes a person can consent to; each change is one `consent_events` entry. */
+export type ConsentPurpose = 'marketing_email';
+
+export interface ConsentEventDoc {
+  _id?: ObjectId;
+  userId: ObjectId;
+  purpose: ConsentPurpose;
+  granted: boolean;
+  /** Where the choice was made, e.g. 'profile'. */
+  source: string;
+  at: Date;
+}
+
+/** Counter for one address and purpose; `_id` is `<purpose>:<sha256(address)>`, never the address. */
+export interface AuthThrottleDoc {
+  _id: string;
+  count: number;
+  firstAt: Date;
+  /** End of the window; a TTL index removes the document afterwards. */
+  expiresAt: Date;
+}
+
+export type MailTemplate =
+  | 'verify_email'
+  | 'reset_password'
+  | 'existing_account'
+  | 'password_changed'
+  | 'password_added'
+  | 'google_connected'
+  | 'account_deleted';
+
+/**
+ * A message held by the outbox transport (development and staging only)
+ * instead of being sent: admins read it at /admin/mail. Removed after 24 h.
+ */
+export interface MailOutboxDoc {
+  _id?: ObjectId;
+  template: MailTemplate;
+  to: string;
+  userId: ObjectId | null;
+  subject: string;
+  text: string;
+  html: string;
+  /** The links in the message, for the viewer's buttons. */
+  links: { label: string; url: string }[];
+  createdAt: Date;
+  expiresAt: Date;
+}
+
 export function collections(db: Db) {
   return {
     users: db.collection<UserDoc>('users'),
     accounts: db.collection<AccountDoc>('accounts'),
     sessions: db.collection<SessionDoc>('sessions'),
+    verifications: db.collection<{ _id: ObjectId; identifier: string; value: string; expiresAt: Date }>('verifications'),
     plans: db.collection<PlanDoc>('plans'),
     subscriptions: db.collection<SubscriptionDoc>('subscriptions'),
     usage: db.collection<UsageDoc>('usage'),
     auditEvents: db.collection<AuditEventDoc>('audit_events'),
     paymentEvents: db.collection<PaymentEventDoc>('payment_events'),
     analyticsEvents: db.collection<AnalyticsEventDoc>('analytics_events'),
+    consentEvents: db.collection<ConsentEventDoc>('consent_events'),
+    authThrottles: db.collection<AuthThrottleDoc>('auth_throttles'),
+    mailOutbox: db.collection<MailOutboxDoc>('mail_outbox'),
+    rateLimits: db.collection<{ _id: ObjectId; key: string; count: number; lastRequest: number }>('rateLimits'),
   };
 }
 

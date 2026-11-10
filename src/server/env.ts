@@ -14,6 +14,9 @@ const dbSchema = z.object({
   MONGODB_DB: required('MONGODB_DB'),
 });
 
+/** Environments where the mail outbox (messages readable by admins) is allowed. */
+const OUTBOX_ENVIRONMENTS = ['development', 'test', 'staging'];
+
 // Google credentials are optional (a server can run before its OAuth client
 // exists: sign-in then says it is not set up yet), but never half-configured.
 const authSchema = z
@@ -24,9 +27,24 @@ const authSchema = z
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     AUTH_SIGNUP_MODE: z.enum(['invite', 'open'], { message: 'AUTH_SIGNUP_MODE must be "invite" or "open"' }).optional(),
     AUTH_SIGNUP_ALLOWLIST: z.string().optional(),
+    APP_ENV: z
+      .enum(['development', 'test', 'staging', 'production'], { message: 'APP_ENV must be development, test, staging or production' })
+      .optional(),
+    AUTH_EMAIL_PASSWORD: z.enum(['on', 'off'], { message: 'AUTH_EMAIL_PASSWORD must be "on" or "off"' }).optional(),
+    MAIL_TRANSPORT: z.enum(['disabled', 'outbox'], { message: 'MAIL_TRANSPORT must be "disabled" or "outbox"' }).optional(),
+    MAIL_FROM: z.string().max(200).optional(),
   })
   .refine((env) => !env.GOOGLE_CLIENT_ID === !env.GOOGLE_CLIENT_SECRET, {
     message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together',
+  })
+  // The outbox keeps live verification and reset links for admins to read:
+  // only where every account is a test account, and never by omission.
+  .refine((env) => env.MAIL_TRANSPORT !== 'outbox' || OUTBOX_ENVIRONMENTS.includes(env.APP_ENV ?? ''), {
+    message: 'MAIL_TRANSPORT=outbox needs APP_ENV=development, test or staging (it is never allowed in production)',
+  })
+  // Passwords need email: there is no verification or reset without it.
+  .refine((env) => env.AUTH_EMAIL_PASSWORD !== 'on' || (env.MAIL_TRANSPORT ?? 'disabled') !== 'disabled', {
+    message: 'AUTH_EMAIL_PASSWORD=on needs a mail transport (MAIL_TRANSPORT)',
   });
 
 function read<T extends z.ZodTypeAny>(schema: T, area: string): z.infer<T> {
@@ -62,6 +80,8 @@ const parseSignupPolicy = (mode: 'invite' | 'open' | undefined, allowlist: strin
   };
 };
 
+export type MailTransport = 'disabled' | 'outbox';
+
 export function authConfig() {
   const env = read(authSchema, 'authentication');
   return {
@@ -72,5 +92,13 @@ export function authConfig() {
         ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
         : null,
     signups: parseSignupPolicy(env.AUTH_SIGNUP_MODE, env.AUTH_SIGNUP_ALLOWLIST),
+    /** Which deployment this is; unset means an unnamed one (treated like production for anything risky). */
+    appEnv: env.APP_ENV ?? null,
+    /** Email and password sign-in (off unless AUTH_EMAIL_PASSWORD=on; always needs mail). */
+    emailPassword: env.AUTH_EMAIL_PASSWORD === 'on',
+    mail: {
+      transport: (env.MAIL_TRANSPORT ?? 'disabled') as MailTransport,
+      from: env.MAIL_FROM?.trim() || 'Studio Companion <no-reply@studio-companion.invalid>',
+    },
   };
 }

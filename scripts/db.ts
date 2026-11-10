@@ -53,7 +53,7 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
   switch (command) {
     case 'migrate': {
       const r = await migrate(db);
-      console.log(`Migration done: ${r.indexes} indexes ensured, ${r.plansInserted} plans inserted, ${r.plansUpdated} plans updated, ${r.usersBackfilled} accounts set to Free.`);
+      console.log(`Migration done: ${r.indexes} indexes ensured, ${r.plansInserted} plans inserted, ${r.plansUpdated} plans updated, ${r.usersBackfilled} accounts set to Free, ${r.preferencesBackfilled} given default language and currency.`);
       return;
     }
     case 'list-users': {

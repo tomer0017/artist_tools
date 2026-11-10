@@ -6,7 +6,9 @@ const BASE = { BETTER_AUTH_URL: 'https://staging.example.com', BETTER_AUTH_SECRE
 const saved = { ...process.env };
 
 function withEnv(env: Record<string, string | undefined>) {
-  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_SIGNUP_MODE', 'AUTH_SIGNUP_ALLOWLIST']) delete process.env[key];
+  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_SIGNUP_MODE', 'AUTH_SIGNUP_ALLOWLIST', 'APP_ENV', 'AUTH_EMAIL_PASSWORD', 'MAIL_TRANSPORT', 'MAIL_FROM']) {
+    delete process.env[key];
+  }
   Object.assign(process.env, env);
 }
 
@@ -17,7 +19,15 @@ afterEach(() => {
 describe('authConfig', () => {
   it('runs without Google until its OAuth client exists', () => {
     withEnv({ ...BASE });
-    expect(authConfig()).toEqual({ baseURL: BASE.BETTER_AUTH_URL, secret: BASE.BETTER_AUTH_SECRET, google: null, signups: { mode: 'invite', invited: [] } });
+    expect(authConfig()).toEqual({
+      baseURL: BASE.BETTER_AUTH_URL,
+      secret: BASE.BETTER_AUTH_SECRET,
+      google: null,
+      signups: { mode: 'invite', invited: [] },
+      appEnv: null,
+      emailPassword: false,
+      mail: { transport: 'disabled', from: 'Studio Companion <no-reply@studio-companion.invalid>' },
+    });
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
     expect(authConfig().google).toBeNull();
   });
@@ -49,6 +59,30 @@ describe('authConfig', () => {
     expect(authConfig().signups).toEqual({ mode: 'invite', invited: [] });
     withEnv({ ...BASE, AUTH_SIGNUP_MODE: 'everyone' });
     expect(() => authConfig()).toThrow('AUTH_SIGNUP_MODE must be "invite" or "open"');
+  });
+
+  it('keeps email + password off unless enabled, and never without a way to send email', () => {
+    withEnv({ ...BASE });
+    expect(authConfig().emailPassword).toBe(false);
+    withEnv({ ...BASE, AUTH_EMAIL_PASSWORD: 'on' });
+    expect(() => authConfig()).toThrow('AUTH_EMAIL_PASSWORD=on needs a mail transport (MAIL_TRANSPORT)');
+    withEnv({ ...BASE, AUTH_EMAIL_PASSWORD: 'on', MAIL_TRANSPORT: 'outbox', APP_ENV: 'staging' });
+    expect(authConfig()).toMatchObject({ emailPassword: true, appEnv: 'staging', mail: { transport: 'outbox' } });
+    withEnv({ ...BASE, AUTH_EMAIL_PASSWORD: 'yes' });
+    expect(() => authConfig()).toThrow('AUTH_EMAIL_PASSWORD must be "on" or "off"');
+  });
+
+  it('never allows the mail outbox in production, or where the environment is not named', () => {
+    for (const appEnv of ['development', 'test', 'staging']) {
+      withEnv({ ...BASE, MAIL_TRANSPORT: 'outbox', APP_ENV: appEnv });
+      expect(authConfig().mail.transport).toBe('outbox');
+    }
+    for (const appEnv of ['production', undefined]) {
+      withEnv({ ...BASE, MAIL_TRANSPORT: 'outbox', APP_ENV: appEnv });
+      expect(() => authConfig()).toThrow('MAIL_TRANSPORT=outbox needs APP_ENV=development, test or staging');
+    }
+    withEnv({ ...BASE, MAIL_TRANSPORT: 'outbox', APP_ENV: 'staging', MAIL_FROM: ' Studio <hello@example.com> ' });
+    expect(authConfig().mail.from).toBe('Studio <hello@example.com>');
   });
 
   it('names what is wrong without echoing secret values', () => {

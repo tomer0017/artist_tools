@@ -4,6 +4,7 @@ import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mo
 import { migrate } from '@/server/db/migrate';
 import { collections } from '@/server/db/collections';
 import { createAuth, signupAllowed, type Auth } from './auth';
+import { createMailer } from './mail/mailer';
 import type { SignupPolicy } from './env';
 
 // The real sign-in flow, end to end, against a real database. Only Google's
@@ -28,6 +29,7 @@ beforeAll(async () => {
     secret: 'test-secret-that-is-at-least-32-characters-long',
     google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
     signups: { mode: 'open' },
+    mailer: createMailer(mongo.db, 'outbox'),
   });
   inviteOnly = createAuth({
     db: mongo.db,
@@ -36,6 +38,7 @@ beforeAll(async () => {
     secret: 'test-secret-that-is-at-least-32-characters-long',
     google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
     signups: { mode: 'invite', invited: ['invited@example.com', 'second-invite@example.com'] },
+    mailer: createMailer(mongo.db, 'outbox'),
   });
 }, MONGO_STARTUP_TIMEOUT);
 
@@ -360,6 +363,7 @@ describe('invite-only registration (staging)', () => {
       google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
       // A policy that throws when consulted, standing in for any bug in the check.
       signups: new Proxy({ mode: 'invite', invited: [] } as SignupPolicy, { get: () => { throw new Error('policy unavailable'); } }),
+      mailer: createMailer(mongo.db, 'outbox'),
     });
     const { result } = await captureLogs(() => signInAs({ sub: 'google-sub-during-outage', email: 'fresh@example.com' }, broken));
     expect(refusedWith(result.callback)).toEqual({ path: '/sign-in', error: 'validation_failed' });

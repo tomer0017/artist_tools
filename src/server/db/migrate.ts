@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Db, IndexSpecification, CreateIndexesOptions } from 'mongodb';
+import { DEFAULT_CURRENCY, DEFAULT_LOCALE } from '@/lib/locale';
 import { PLAN_FEATURES, PLAN_IDS, PLAN_NAMES } from '@/lib/plans';
 import { collections, type PlanDoc } from './collections';
 
@@ -41,6 +42,14 @@ export const INDEXES: IndexPlan[] = [
     options: { name: 'analytics_dedupe_unique', unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } },
   },
   { collection: 'analytics_events', key: { name: 1, at: -1 }, options: { name: 'analytics_by_name' } },
+  // Per-address throttle windows and outbox messages remove themselves.
+  { collection: 'auth_throttles', key: { expiresAt: 1 }, options: { name: 'throttle_expiry_ttl', expireAfterSeconds: 0 } },
+  { collection: 'mail_outbox', key: { expiresAt: 1 }, options: { name: 'outbox_expiry_ttl', expireAfterSeconds: 0 } },
+  { collection: 'mail_outbox', key: { createdAt: -1 }, options: { name: 'outbox_by_created' } },
+  { collection: 'consent_events', key: { userId: 1, at: -1 }, options: { name: 'consent_by_user' } },
+  // Better Auth's per-IP counters: looked up by key, pruned by age (scripts/db.ts maintenance).
+  { collection: 'rateLimits', key: { key: 1 }, options: { name: 'rate_limit_by_key' } },
+  { collection: 'rateLimits', key: { lastRequest: 1 }, options: { name: 'rate_limit_by_age' } },
 ];
 
 /** Plans as the code defines them (src/lib/plans.ts). */
@@ -55,6 +64,7 @@ export interface MigrationReport {
   plansInserted: number;
   plansUpdated: number;
   usersBackfilled: number;
+  preferencesBackfilled: number;
 }
 
 export async function migrate(db: Db): Promise<MigrationReport> {
@@ -87,5 +97,15 @@ export async function migrate(db: Db): Promise<MigrationReport> {
   // Accounts created before plans existed are on Free.
   const { modifiedCount: usersBackfilled } = await users.updateMany({ plan: { $exists: false } }, { $set: { plan: 'free' } });
 
-  return { indexes: INDEXES.length, plansInserted, plansUpdated, usersBackfilled };
+  // Accounts created before preferences existed: English and US dollars.
+  const locale = await users.updateMany({ locale: { $exists: false } }, { $set: { locale: DEFAULT_LOCALE } });
+  const currency = await users.updateMany({ currency: { $exists: false } }, { $set: { currency: DEFAULT_CURRENCY } });
+
+  return {
+    indexes: INDEXES.length,
+    plansInserted,
+    plansUpdated,
+    usersBackfilled,
+    preferencesBackfilled: Math.max(locale.modifiedCount, currency.modifiedCount),
+  };
 }
