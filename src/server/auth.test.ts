@@ -34,7 +34,7 @@ beforeAll(async () => {
     baseURL: BASE,
     secret: 'test-secret-that-is-at-least-32-characters-long',
     google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
-    signups: ['invited@example.com'],
+    signups: ['invited@example.com', 'second-invite@example.com'],
   });
 }, MONGO_STARTUP_TIMEOUT);
 
@@ -259,6 +259,21 @@ describe('invite-only registration (staging)', () => {
     return { path: location.pathname, error: location.searchParams.get('error') };
   };
 
+  /** Everything Better Auth and the app print while `work` runs. */
+  async function captureLogs<T>(work: () => Promise<T>): Promise<{ result: T; logs: string }> {
+    const lines: string[] = [];
+    const spies = (['log', 'warn', 'error'] as const).map((level) =>
+      vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+        lines.push(args.map((a) => (a instanceof Error ? `${a.name}: ${a.message}` : String(a))).join(' '));
+      }),
+    );
+    try {
+      return { result: await work(), logs: lines.join('\n') };
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  }
+
   it('lets an invited, Google-verified address create an account', async () => {
     const { callback, cookies } = await signInAs({ sub: 'google-sub-invited', email: 'Invited@Example.com' }, inviteOnly);
     expect(new URL(callback.headers.get('location')!, BASE).pathname).toBe('/app');
@@ -266,20 +281,43 @@ describe('invite-only registration (staging)', () => {
     expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-invited' })).toBe(1);
   });
 
-  it('refuses everyone else, without creating anything', async () => {
-    const { callback, cookies } = await signInAs({ sub: 'google-sub-stranger', email: 'stranger@example.com' }, inviteOnly);
+  it('refuses everyone else with a clear code, without creating anything', async () => {
+    const { result, logs } = await captureLogs(() => signInAs({ sub: 'google-sub-stranger', email: 'stranger@example.com' }, inviteOnly));
+    const { callback, cookies } = result;
     const refused = refusedWith(callback);
     expect(refused.path).toBe('/sign-in');
-    expect(refused.error).toBe('unable_to_create_user');
+    expect(refused.error).toBe('not_invited');
     expect(sessionTokenCookie(cookies)).toBe('');
+    // The refusal goes through Better Auth's validation gate, not the database hook.
+    expect(logs).toContain('auth.signup_refused');
+    expect(logs).not.toContain('TypeError');
+    expect(logs).not.toContain('Unable to create OAuth user');
+    expect(logs).not.toContain('auth.signup_gate_bypassed');
     expect(await collections(mongo.db).users.countDocuments({ email: 'stranger@example.com' })).toBe(0);
     expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-stranger' })).toBe(0);
   });
 
   it('refuses an invited address that Google has not verified', async () => {
-    const { callback } = await signInAs({ sub: 'google-sub-unverified', email: 'invited@example.com', verified: false }, inviteOnly);
-    expect(refusedWith(callback).path).toBe('/sign-in');
+    // On the list and never registered, so only Google's verification is missing.
+    const { callback } = await signInAs({ sub: 'google-sub-unverified', email: 'second-invite@example.com', verified: false }, inviteOnly);
+    expect(refusedWith(callback)).toEqual({ path: '/sign-in', error: 'not_invited' });
     expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-unverified' })).toBe(0);
+  });
+
+  it('fails closed: if the invite check itself breaks, nobody new gets in', async () => {
+    const broken = createAuth({
+      db: mongo.db,
+      client: mongo.client,
+      baseURL: BASE,
+      secret: 'test-secret-that-is-at-least-32-characters-long',
+      google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
+      // A policy that throws when consulted, standing in for any bug in the check.
+      signups: new Proxy([] as string[], { get: () => { throw new Error('policy unavailable'); } }),
+    });
+    const { result } = await captureLogs(() => signInAs({ sub: 'google-sub-during-outage', email: 'fresh@example.com' }, broken));
+    expect(refusedWith(result.callback)).toEqual({ path: '/sign-in', error: 'validation_failed' });
+    expect(sessionTokenCookie(result.cookies)).toBe('');
+    expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-during-outage' })).toBe(0);
   });
 
   it('never locks out accounts that already exist', async () => {

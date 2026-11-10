@@ -74,3 +74,15 @@ so older releases run against the newer schema.
 - Health: `curl -s http://127.0.0.1:<port>/api/health?ready=1`.
 - Admin access: `cd /home/<user>/app/current && sudo -u <user> bash -c 'set -a; . /etc/studio-companion/<env>.env; set +a; npm run db -- find-user <email>'`,
   then `… npm run db -- grant-admin <userId>`.
+
+## Server notes
+
+- **nginx log rotation:** CloudPanel's per-site rotation rules reload nginx
+  with a command that does not reliably complete, so nginx kept writing into
+  the rotated files. Fixed by the systemd drop-in
+  `/etc/systemd/system/logrotate.service.d/reopen-nginx-logs.conf`, which sends
+  nginx SIGUSR1 (reopen logs) after every rotation run. CloudPanel's own files
+  are untouched; remove the drop-in and `systemctl daemon-reload` to undo.
+  Backup of the previous configuration: `/root/backups/logrotate-<timestamp>/`.
+- **Off-site backups:** see `deploy/offsite-backups-plan.md` (plan, not yet
+  implemented).

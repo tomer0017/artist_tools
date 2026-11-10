@@ -83,6 +83,17 @@ export function createAuth(deps: AuthDeps) {
       cookieCache: { enabled: true, maxAge: 5 * 60 },
     },
     user: {
+      // Registration is invite-only until it is opened on purpose. Better Auth
+      // runs this gate before it creates any user (Google sign-ups included)
+      // and refuses with the returned code; if the gate itself throws, the
+      // sign-up is refused too (fails closed). Existing accounts signing in
+      // pass through untouched.
+      validateUserInfo: async ({ user, source }) => {
+        if (source.action !== 'create-user') return;
+        if (signupAllowed(deps.signups, user)) return;
+        log.warn('auth.signup_refused', { reason: user.emailVerified ? 'not_invited' : 'email_not_verified' });
+        return { error: 'not_invited', errorDescription: 'This account has not been invited yet.' };
+      },
       additionalFields: {
         role: { type: 'string', required: false, defaultValue: 'user', input: false },
         status: { type: 'string', required: false, defaultValue: 'active', input: false },
@@ -118,10 +129,11 @@ export function createAuth(deps: AuthDeps) {
     databaseHooks: {
       user: {
         create: {
-          // Registration is invite-only until it is opened on purpose.
+          // Second line of defence: only reached if some creation path ever
+          // skipped user.validateUserInfo above.
           before: async (user) => {
             if (!signupAllowed(deps.signups, user)) {
-              log.warn('auth.signup_refused', { reason: user.emailVerified ? 'not_invited' : 'email_not_verified' });
+              log.error('auth.signup_gate_bypassed', { reason: user.emailVerified ? 'not_invited' : 'email_not_verified' });
               return false;
             }
           },
