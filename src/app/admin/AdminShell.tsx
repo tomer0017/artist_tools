@@ -1,16 +1,21 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { BrandMark } from '@/components/shell/BrandMark';
+import { authConfig } from '@/server/env';
 
-// The frame of every admin page: brand (back to the studio), the two admin
+// The frame of every admin page: brand (back to the studio), the admin
 // sections, and room for the page. Pages call requireAdmin() themselves.
 
 const TABS = [
   { id: 'users', href: '/admin', label: 'Users' },
   { id: 'activity', href: '/admin/activity', label: 'Activity' },
+  // Only where test emails are kept instead of sent (staging, development).
+  { id: 'mail', href: '/admin/mail', label: 'Test mail' },
 ] as const;
 
 export function AdminShell({ active, children }: { active: (typeof TABS)[number]['id'] | null; children: React.ReactNode }) {
+  const outbox = authConfig().mail.transport === 'outbox';
+  const tabs = TABS.filter((tab) => tab.id !== 'mail' || outbox);
   return (
     <main
       className="min-h-[100dvh] bg-background px-4 pb-12 md:px-8"
@@ -25,7 +30,7 @@ export function AdminShell({ active, children }: { active: (typeof TABS)[number]
         </header>
 
         <nav aria-label="Admin sections" className="mt-5 flex items-center gap-1 rounded-xl border border-border bg-card p-1 text-sm">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <Link
               key={tab.id}
               href={tab.href}

@@ -28,6 +28,23 @@ describe('SignInCard', () => {
     expect(screen.queryByText(/invite-only/)).toBeNull();
   });
 
+  it('offers email and password only where the server has it, with ways to create an account and reset a password', () => {
+    const { unmount } = render(<SignInCard callbackPath="/app/compare" available error={null} registration="invite" />);
+    expect(screen.queryByRole('form', { name: 'Sign in with email' })).toBeNull();
+    expect(screen.getByRole('list', { name: 'What you get' })).toHaveTextContent('No password: Google signs you in');
+    unmount();
+
+    render(<SignInCard callbackPath="/app/compare" available error={null} registration="invite" emailPassword />);
+    const form = screen.getByRole('form', { name: 'Sign in with email' });
+    expect(form).toContainElement(screen.getByLabelText('Email address'));
+    expect(screen.getByLabelText('Password', { selector: 'input' })).toHaveAttribute('autocomplete', 'current-password');
+    expect(screen.getByRole('button', { name: 'Show password' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute('href', '/forgot-password');
+    expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/sign-up?callbackURL=%2Fapp%2Fcompare');
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    expect(screen.getByRole('list', { name: 'What you get' })).toHaveTextContent('Sign in with Google, or with your email and a password');
+  });
+
   it('while invite-only, says so and still explains the free account', () => {
     render(<SignInCard callbackPath="/app" available error={null} registration="invite" />);
     expect(screen.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeInTheDocument();

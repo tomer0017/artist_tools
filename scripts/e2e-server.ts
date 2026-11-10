@@ -25,9 +25,19 @@ const signedCookie = (token: string) => encodeURIComponent(`${token}.${createHma
 
 const ALL_TOOLS = ['measure', 'value', 'color', 'grid', 'compare'];
 
-async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin', plan: 'free' | 'pro' = 'free', sessionExpired = false, introsSeen = ALL_TOOLS) {
+async function seedSignedInUser(
+  db: Db,
+  name: string,
+  role: 'user' | 'admin',
+  plan: 'free' | 'pro' = 'free',
+  sessionExpired = false,
+  introsSeen = ALL_TOOLS,
+  /** How long ago the session started (sensitive changes need one younger than 10 minutes). */
+  signedInMinutesAgo = 0,
+) {
   const userId = new ObjectId();
   const now = new Date();
+  const signedInAt = new Date(now.getTime() - signedInMinutesAgo * 60_000);
   await db.collection('users').insertOne({
     _id: userId,
     name: `E2E ${name}`,
@@ -52,8 +62,8 @@ async function seedSignedInUser(db: Db, name: string, role: 'user' | 'admin', pl
     userId,
     token,
     expiresAt: new Date(Date.now() + (sessionExpired ? -60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000)),
-    createdAt: now,
-    updatedAt: now,
+    createdAt: signedInAt,
+    updatedAt: signedInAt,
     ipAddress: '',
     userAgent: 'e2e',
   });
@@ -85,6 +95,9 @@ await seedSignedInUser(db, 'expired', 'user', 'free', true);
 await seedSignedInUser(db, 'newbie', 'user', 'free', false, []);
 await seedSignedInUser(db, 'newbie-chromium', 'user', 'free', false, []);
 await seedSignedInUser(db, 'newbie-iphone-webkit', 'user', 'free', false, []);
+// Account-page specs: one that edits its profile, one signed in an hour ago (sensitive changes ask to confirm).
+await seedSignedInUser(db, 'editor', 'user');
+await seedSignedInUser(db, 'settled', 'user', 'free', false, ALL_TOOLS, 60);
 await client.close();
 
 const server = spawn('node', ['.next/standalone/server.js'], {
@@ -99,6 +112,12 @@ const server = spawn('node', ['.next/standalone/server.js'], {
     BETTER_AUTH_SECRET: SECRET,
     GOOGLE_CLIENT_ID: 'e2e-client-id.apps.googleusercontent.com',
     GOOGLE_CLIENT_SECRET: 'e2e-client-secret',
+    // Email + password with the outbox (read by the admin specs), invite-only
+    // for the addresses the sign-up specs use.
+    APP_ENV: 'test',
+    AUTH_EMAIL_PASSWORD: 'on',
+    MAIL_TRANSPORT: 'outbox',
+    AUTH_SIGNUP_ALLOWLIST: 'newcomer-chromium@e2e.test,phone-chromium@e2e.test,phone-iphone-webkit@e2e.test',
   },
 });
 
