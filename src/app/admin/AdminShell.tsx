@@ -16,11 +16,13 @@ const TABS = [
   { id: 'coupons', href: '/admin/coupons', label: 'Coupons' },
   { id: 'billing', href: '/admin/billing', label: 'Billing' },
   { id: 'activity', href: '/admin/activity', label: 'Activity' },
+  { id: 'security', href: '/admin/security', label: 'Security' },
   // Only where test emails are kept instead of sent (staging, development).
   { id: 'mail', href: '/admin/mail', label: 'Test mail' },
 ] as const;
 
-export function AdminShell({ active, children }: { active: (typeof TABS)[number]['id'] | null; children: React.ReactNode }) {
+/** `bare`: without the section tabs (the two-factor check, before admin access). */
+export function AdminShell({ active, bare = false, children }: { active: (typeof TABS)[number]['id'] | null; bare?: boolean; children: React.ReactNode }) {
   const outbox = authConfig().mail.transport === 'outbox';
   const tabs = TABS.filter((tab) => tab.id !== 'mail' || outbox);
   return (
@@ -42,23 +44,25 @@ export function AdminShell({ active, children }: { active: (typeof TABS)[number]
             <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Admin</span>
           </header>
 
-          <nav aria-label="Admin sections" className="mt-5 flex items-center gap-1 overflow-x-auto whitespace-nowrap rounded-xl border border-border bg-card p-1 text-sm">
-            {tabs.map((tab) => (
-              <Link
-                key={tab.id}
-                href={tab.href}
-                aria-current={active === tab.id ? 'page' : undefined}
-                className={`rounded-lg px-3.5 py-2 font-medium transition-colors ${
-                  active === tab.id ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                }`}
-              >
-                {tab.label}
+          {!bare && (
+            <nav aria-label="Admin sections" className="mt-5 flex items-center gap-1 overflow-x-auto whitespace-nowrap rounded-xl border border-border bg-card p-1 text-sm">
+              {tabs.map((tab) => (
+                <Link
+                  key={tab.id}
+                  href={tab.href}
+                  aria-current={active === tab.id ? 'page' : undefined}
+                  className={`rounded-lg px-3.5 py-2 font-medium transition-colors ${
+                    active === tab.id ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                </Link>
+              ))}
+              <Link href="/app" className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Studio
               </Link>
-            ))}
-            <Link href="/app" className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Studio
-            </Link>
-          </nav>
+            </nav>
+          )}
 
           {children}
         </div>

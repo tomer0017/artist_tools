@@ -234,6 +234,8 @@ export async function removeUserData(db: Db, userId: ObjectId, email: string): P
     c.analyticsEvents.deleteMany({ userId }),
     c.mailOutbox.deleteMany({ $or: [{ userId }, { to: email }] }),
     c.accessGrants.deleteMany({ userId }),
+    c.adminMfa.deleteMany({ _id: userId }),
+    c.adminMfaSessions.deleteMany({ userId }),
   ]);
   await c.users.deleteOne({ _id: userId });
 }

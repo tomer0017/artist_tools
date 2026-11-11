@@ -33,6 +33,7 @@ const authSchema = z
     AUTH_EMAIL_PASSWORD: z.enum(['on', 'off'], { message: 'AUTH_EMAIL_PASSWORD must be "on" or "off"' }).optional(),
     MAIL_TRANSPORT: z.enum(['disabled', 'outbox'], { message: 'MAIL_TRANSPORT must be "disabled" or "outbox"' }).optional(),
     MAIL_FROM: z.string().max(200).optional(),
+    ADMIN_MFA_REQUIRED: z.enum(['on', 'off'], { message: 'ADMIN_MFA_REQUIRED must be "on" or "off"' }).optional(),
   })
   .refine((env) => !env.GOOGLE_CLIENT_ID === !env.GOOGLE_CLIENT_SECRET, {
     message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together',
@@ -96,6 +97,12 @@ export function authConfig() {
     appEnv: env.APP_ENV ?? null,
     /** Email and password sign-in (off unless AUTH_EMAIL_PASSWORD=on; always needs mail). */
     emailPassword: env.AUTH_EMAIL_PASSWORD === 'on',
+    /**
+     * Every administrator must enrol two-factor verification before using the
+     * admin dashboard (off unless ADMIN_MFA_REQUIRED=on; docs/security/admin-2fa.md).
+     * Admins who enrolled are always asked for a code, whatever this says.
+     */
+    adminMfaRequired: env.ADMIN_MFA_REQUIRED === 'on',
     mail: {
       transport: (env.MAIL_TRANSPORT ?? 'disabled') as MailTransport,
       from: env.MAIL_FROM?.trim() || 'Studio Companion <no-reply@studio-companion.invalid>',

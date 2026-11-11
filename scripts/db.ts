@@ -21,11 +21,12 @@ import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { authConfig } from '@/server/env';
 import { runMaintenance } from '@/server/maintenance';
+import { resetMfa } from '@/server/admin-mfa';
 
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | maintenance';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -119,6 +120,14 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       const result = await setUserPlan(db, { userId, plan: arg2, actor: 'cli' });
       if (result.status === 'not_found') throw new Error('No user with that id.');
       console.log(result.status === 'unchanged' ? `Already on ${arg2}; nothing changed.` : `Plan changed: ${result.from} → ${result.to} (recorded in the audit log).`);
+      return;
+    }
+    case 'reset-admin-mfa': {
+      // For an administrator who lost both the phone and the recovery codes:
+      // removes their two-factor setup (audited); they can enrol again.
+      const userId = userIdFrom(arg);
+      const removed = await resetMfa(db, userId, 'cli');
+      console.log(removed ? 'Two-factor verification removed for that account (recorded in the audit log).' : 'That account had no two-factor verification.');
       return;
     }
     case 'maintenance': {

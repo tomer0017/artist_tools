@@ -96,7 +96,7 @@ test.describe('the studio in Hebrew', () => {
 test.describe('admin', () => {
   test.use({ storageState: 'e2e/.auth/admin.json' });
 
-  for (const path of ['/admin', '/admin/analytics', '/admin/plans', '/admin/pricing', '/admin/coupons', '/admin/billing', '/admin/activity']) {
+  for (const path of ['/admin', '/admin/analytics', '/admin/plans', '/admin/pricing', '/admin/coupons', '/admin/billing', '/admin/activity', '/admin/security']) {
     test(`${path} has no automatically detectable WCAG A/AA problems`, async ({ page }) => {
       expect(await scan(page, path, heading)).toEqual([]);
     });

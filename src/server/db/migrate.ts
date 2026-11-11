@@ -76,6 +76,8 @@ export const INDEXES: IndexPlan[] = [
   { collection: 'subscriptions', key: { updatedAt: -1 }, options: { name: 'subscriptions_by_updated' } },
   { collection: 'checkout_sessions', key: { expiresAt: 1 }, options: { name: 'checkout_expiry_ttl', expireAfterSeconds: 7 * 24 * 60 * 60 } },
   { collection: 'reconciliation_runs', key: { startedAt: -1 }, options: { name: 'reconciliation_by_time' } },
+  { collection: 'admin_mfa_sessions', key: { expiresAt: 1 }, options: { name: 'admin_mfa_session_ttl', expireAfterSeconds: 0 } },
+  { collection: 'admin_mfa_sessions', key: { userId: 1 }, options: { name: 'admin_mfa_sessions_by_user' } },
 ];
 
 export interface MigrationReport {

@@ -26,10 +26,20 @@ describe('authConfig', () => {
       signups: { mode: 'invite', invited: [] },
       appEnv: null,
       emailPassword: false,
+      adminMfaRequired: false,
       mail: { transport: 'disabled', from: 'Studio Companion <no-reply@studio-companion.invalid>' },
     });
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
     expect(authConfig().google).toBeNull();
+  });
+
+  it('requires two-factor verification for admins only when ADMIN_MFA_REQUIRED=on', () => {
+    withEnv({ ...BASE, ADMIN_MFA_REQUIRED: 'on' });
+    expect(authConfig().adminMfaRequired).toBe(true);
+    withEnv({ ...BASE, ADMIN_MFA_REQUIRED: 'off' });
+    expect(authConfig().adminMfaRequired).toBe(false);
+    withEnv({ ...BASE, ADMIN_MFA_REQUIRED: 'yes' });
+    expect(() => authConfig()).toThrow('ADMIN_MFA_REQUIRED must be "on" or "off"');
   });
 
   it('uses Google once both values are set', () => {

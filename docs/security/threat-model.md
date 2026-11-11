@@ -35,7 +35,7 @@ moderation).
 | Threat (STRIDE) | Where | What is in place | Gaps |
 |---|---|---|---|
 | Spoofing: taking over an account | Sign-in | Scrypt password hashes and a 12-character policy against common passwords; per-IP rate limits and per-address throttles; email must be confirmed; single-use, hashed reset tokens that sign out every device; no automatic account merging (ADR-0003); sessions checked in the database on every request | No 2FA. No breach-password check. |
-| Spoofing: becoming an admin | Admin | Admin role is given only by user id, by an existing admin or the server CLI, never by email; `requireAdmin()` re-reads the role from the database; a sign-in within 10 minutes is needed for role and status changes; the last admin cannot be removed; everything is audited | No 2FA for admins (**priority**) |
+| Spoofing: becoming an admin | Admin | Admin role is given only by user id, by an existing admin or the server CLI, never by email; `requireAdmin()` re-reads the role from the database; a sign-in within 10 minutes is needed for role and status changes; the last admin cannot be removed; everything is audited | Admin 2FA available (TOTP, recovery codes, step-up on admin access whatever the sign-in method; `docs/security/admin-2fa.md`); not yet required until the owner approves |
 | Tampering: plan or payment claims | Entitlements, billing | Plans come only from the server (assigned plan, grants, subscriptions written by verified events); the return from checkout grants nothing; webhook signatures are checked; events are idempotent and cannot overwrite newer state (`docs/billing/02-architecture.md`) | Not exercised against a real provider yet |
 | Tampering: cross-site requests | All changes | Server actions check Origin; JSON APIs refuse cross-site requests; SameSite=Lax cookies | — |
 | Information disclosure: XSS | All pages | React escaping; a CSP with a fresh nonce per request and `'strict-dynamic'`; no `dangerouslySetInnerHTML` with user data | CSP violation reports are not collected |
@@ -50,7 +50,7 @@ moderation).
 ## Highest-priority gaps before launch
 
 1. Off-site encrypted backups, and a restore drill.
-2. 2FA for admin accounts, at least.
+2. The owner enrols in admin 2FA; then approve making it required.
 3. Uptime monitoring and error reporting.
 4. The dependency upgrades: zod 4, vitest 4, and patch updates of build
    tools, each at least two weeks old.

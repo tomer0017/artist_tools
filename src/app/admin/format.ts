@@ -67,6 +67,18 @@ export function describeEvent(event: AdminAuditEvent): string {
       return 'Given access ended early';
     case 'admin.audit_exported':
       return 'Exported the activity log';
+    case 'admin.mfa_enrolled':
+      return 'Turned on two-factor verification';
+    case 'admin.mfa_verified':
+      return m.method === 'recovery' ? 'Passed two-factor verification with a recovery code' : 'Passed two-factor verification';
+    case 'admin.mfa_failed':
+      return 'Entered a wrong two-factor code';
+    case 'admin.mfa_codes_regenerated':
+      return 'Made new two-factor recovery codes';
+    case 'admin.mfa_disabled':
+      return 'Turned off two-factor verification';
+    case 'admin.mfa_reset':
+      return 'Two-factor verification removed from the server command line';
     case 'account.status_changed':
       return `Account ${String(m.status ?? 'status changed')}`;
     case 'subscription.changed':
@@ -102,7 +114,20 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
   {
     id: 'security',
     label: 'Passwords, methods and devices',
-    types: ['user.password_changed', 'user.password_reset', 'account.linked', 'account.unlinked', 'user.session_revoked', 'user.sessions_revoked'],
+    types: [
+      'user.password_changed',
+      'user.password_reset',
+      'account.linked',
+      'account.unlinked',
+      'user.session_revoked',
+      'user.sessions_revoked',
+      'admin.mfa_enrolled',
+      'admin.mfa_verified',
+      'admin.mfa_failed',
+      'admin.mfa_codes_regenerated',
+      'admin.mfa_disabled',
+      'admin.mfa_reset',
+    ],
   },
   { id: 'profile', label: 'Profile, consent and data', types: ['user.profile_updated', 'user.consent_changed', 'account.data_exported'] },
   {

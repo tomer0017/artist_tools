@@ -56,6 +56,12 @@ async function seedSignedInUser(
   });
   await db.collection('audit_events').insertOne({ type: 'user.registered', userId, actor: `user:${userId}`, at: now, metadata: { provider: 'google' } });
   await db.collection('accounts').insertOne({ _id: new ObjectId(), userId, providerId: 'google', accountId: `e2e-${name}`, createdAt: now, updatedAt: now });
+  await seedSession(db, userId, name, sessionExpired, signedInAt);
+  return userId;
+}
+
+/** A signed-in session for an existing account, saved as the storage state `e2e/.auth/<name>.json`. */
+async function seedSession(db: Db, userId: ObjectId, name: string, sessionExpired = false, signedInAt = new Date()) {
   const token = randomBytes(24).toString('base64url');
   await db.collection('sessions').insertOne({
     _id: new ObjectId(),
@@ -103,6 +109,11 @@ await seedSignedInUser(db, 'admin-settled', 'admin', 'free', false, ALL_TOOLS, 6
 await seedSignedInUser(db, 'grantee', 'user');
 await seedSignedInUser(db, 'suspendee', 'user');
 await seedSignedInUser(db, 'candidate', 'user');
+// An admin who sets up two-factor verification, with three more sessions of the same account.
+{
+  const mfaAdmin = await seedSignedInUser(db, 'admin-mfa', 'admin');
+  for (const name of ['admin-mfa-2', 'admin-mfa-3', 'admin-mfa-4']) await seedSession(db, mfaAdmin, name);
+}
 // Accounts set to Hebrew that have not seen the tool introductions yet (one per browser project, and one
 // whose language the i18n spec switches).
 for (const name of ['ivrit-chromium', 'ivrit-iphone-webkit', 'ivrit-switch']) {

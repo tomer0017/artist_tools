@@ -17,7 +17,8 @@ sign-off. Each gate is marked:
 |---|---|---|
 | Google sign-in, email and password, verification, reset, account linking only explicit | Done (staging) | e2e `password`, `auth`, `accounts` specs; staging since 9f16951 |
 | Account page: profile, preferences, devices, data download, deletion | Done (staging) | e2e `accounts`, `password` |
-| Email change, profile photo upload, 2FA | Open | 2FA for admins is a security priority |
+| Admin two-factor verification (TOTP and recovery codes, for Google sign-in too) | Done (local) | `docs/security/admin-2fa.md`; unit and e2e tests. **Making it required needs the owner's approval** (`ADMIN_MFA_REQUIRED=on`), after the owner has enrolled and tried a recovery code |
+| Email change, profile photo upload, 2FA for regular accounts | Open | |
 | Public registration open | **Owner** | Invite-only until approved |
 | Real email delivery (domain, provider, SPF/DKIM/DMARC) | **Owner** | Staging keeps mail in the outbox |
 | Production domain | **Owner** | Staging uses `*.sslip.io` |

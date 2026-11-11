@@ -230,6 +230,34 @@ export interface CheckoutSessionDoc {
 }
 
 /** One comparison of our subscriptions with the provider's (src/server/billing/reconcile.ts). */
+/** An administrator's second factor (src/server/admin-mfa.ts): one per account, `_id` is the user id. */
+export interface AdminMfaDoc {
+  _id: ObjectId;
+  /** The TOTP secret, sealed (src/server/security/secret-box.ts); never leaves the server after enrolment. */
+  secret: string;
+  /** When a first code confirmed the authenticator app; null while enrolment is pending. */
+  confirmedAt: Date | null;
+  /** SHA-256 of each one-time recovery code, and when it was used. */
+  recoveryCodes: { hash: string; usedAt: Date | null }[];
+  /** The last time step a code was accepted for: each code works once. */
+  lastStep: number | null;
+  /** Failed attempts since `failureWindowStart`, for the lockout. */
+  failures: number;
+  failureWindowStart: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** A session in which an administrator passed the second factor; removed when it expires (TTL). */
+export interface AdminMfaSessionDoc {
+  /** The Better Auth session id. */
+  _id: string;
+  userId: ObjectId;
+  method: 'totp' | 'recovery';
+  verifiedAt: Date;
+  expiresAt: Date;
+}
+
 export interface ReconciliationRunDoc {
   _id?: ObjectId;
   provider: string;
@@ -279,6 +307,12 @@ export type AuditEventType =
   | 'admin.grant_created'
   | 'admin.grant_revoked'
   | 'admin.audit_exported'
+  | 'admin.mfa_enrolled'
+  | 'admin.mfa_verified'
+  | 'admin.mfa_failed'
+  | 'admin.mfa_codes_regenerated'
+  | 'admin.mfa_disabled'
+  | 'admin.mfa_reset'
   | 'admin.config_saved'
   | 'admin.config_discarded'
   | 'admin.config_published'
@@ -419,6 +453,8 @@ export function collections(db: Db) {
     payments: db.collection<PaymentDoc>('payments'),
     checkoutSessions: db.collection<CheckoutSessionDoc>('checkout_sessions'),
     reconciliationRuns: db.collection<ReconciliationRunDoc>('reconciliation_runs'),
+    adminMfa: db.collection<AdminMfaDoc>('admin_mfa'),
+    adminMfaSessions: db.collection<AdminMfaSessionDoc>('admin_mfa_sessions'),
     couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
   };
 }
