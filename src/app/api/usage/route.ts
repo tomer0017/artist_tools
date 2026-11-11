@@ -5,7 +5,7 @@ import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { authorizeFeatureUse } from '@/server/entitlements';
 import { log } from '@/server/log';
-import { fromOwnOrigin } from '@/server/request';
+import { BodyTooLarge, fromOwnOrigin, readJsonBody } from '@/server/request';
 import { getSession } from '@/server/session';
 
 // The studio asks here right before it uses a counted or plan-limited feature
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const session = await getSession();
     const userId = session ? toObjectId(session.user.id) : null;
     if (!userId) return json({ error: 'unauthorized' }, 401);
-    const body = Body.safeParse(await request.json().catch(() => null));
+    const body = Body.safeParse(await readJsonBody(request, 4 * 1024));
     if (!body.success) return json({ error: 'invalid_request' }, 400);
 
     const result = await authorizeFeatureUse(getDb(), userId, body.data.features);
@@ -35,6 +35,7 @@ export async function POST(request: Request) {
     }
     return json({ ok: true });
   } catch (error) {
+    if (error instanceof BodyTooLarge) return json({ error: 'too_large' }, 413);
     log.error('api.usage_failed', { error });
     return json({ error: 'unavailable' }, 503);
   }

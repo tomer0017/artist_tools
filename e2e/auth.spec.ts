@@ -150,8 +150,10 @@ test.describe('admin', () => {
 
 test.describe('health', () => {
   test('reports the process and the database as up', async ({ request }) => {
-    expect(await (await request.get('/api/health')).json()).toEqual({ status: 'ok' });
-    expect(await (await request.get('/api/health?ready=1')).json()).toEqual({ status: 'ok', config: 'ok', database: 'ok' });
+    // Both name the build answering: the commit this server was built from.
+    const live = await (await request.get('/api/health')).json();
+    expect(live).toMatchObject({ status: 'ok', version: { commit: expect.stringMatching(/^[0-9a-f]{7}$/) } });
+    expect(await (await request.get('/api/health?ready=1')).json()).toEqual({ status: 'ok', config: 'ok', database: 'ok', version: live.version });
   });
 
   test('sends basic security headers', async ({ request }) => {

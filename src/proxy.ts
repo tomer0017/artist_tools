@@ -3,10 +3,51 @@ import { getSessionCookie } from 'better-auth/cookies';
 import { LOCALE_COOKIE, LOCALE_HEADER, PREFIXABLE_PATHS } from '@/i18n/config';
 import { RETURN_TO_HEADER } from '@/lib/redirects';
 
-// Fast path only: visitors without a session cookie go to sign-in before any
-// studio code downloads, and come back to the page they asked for. A cookie
-// can be forged, so every page and API route still verifies the session on the
-// server (src/server/session.ts). Also serves the /he public pages.
+// Runs before every page (not API routes or static files):
+// - fast path for the studio: visitors without a session cookie go to sign-in
+//   before any studio code downloads, and come back to the page they asked
+//   for. A cookie can be forged, so every page and API route still verifies
+//   the session on the server (src/server/session.ts);
+// - the /he public pages;
+// - a Content-Security-Policy with a fresh nonce per page: only this app's
+//   own scripts run (Next.js puts the nonce on its scripts), nothing can frame
+//   the site or post forms elsewhere, plugins are off.
+
+const DEV = process.env.NODE_ENV !== 'production';
+
+function contentSecurityPolicy(nonce: string): string {
+  return [
+    "default-src 'self'",
+    // 'strict-dynamic': scripts the app's nonce'd scripts load are trusted too (code-split chunks).
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${DEV ? " 'unsafe-eval'" : ''}`,
+    // Inline style attributes and the chart component's <style> element.
+    "style-src 'self' 'unsafe-inline'",
+    // Images people work on are blob:/data: URLs in the browser; profile photos come from Google.
+    "img-src 'self' data: blob: https://*.googleusercontent.com",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "media-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "frame-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join('; ');
+}
+
+/** Pass the request on with these headers, under a per-request CSP. */
+function next(headers: Headers) {
+  const nonce = btoa(crypto.randomUUID());
+  const policy = contentSecurityPolicy(nonce);
+  // Next.js reads the nonce from the request's policy and applies it to its scripts.
+  headers.set('content-security-policy', policy);
+  headers.set('x-nonce', nonce);
+  const response = NextResponse.next({ request: { headers } });
+  response.headers.set('Content-Security-Policy', policy);
+  return response;
+}
 
 /**
  * Hebrew public pages live under /he (for search engines and shared links):
@@ -16,14 +57,13 @@ import { RETURN_TO_HEADER } from '@/lib/redirects';
  * address. (No URL rewrite: behind nginx a rewrite became an https proxy
  * request to the app's own plain-http port.)
  */
-function localePrefix(request: NextRequest) {
+function localePrefix(request: NextRequest, headers: Headers) {
   const { pathname } = request.nextUrl;
   const rest = pathname === '/he' ? '/' : pathname.slice(3);
   let response: NextResponse;
   if ((PREFIXABLE_PATHS as readonly string[]).includes(rest)) {
-    const headers = withHeader(request, LOCALE_HEADER, 'he');
-    headers.delete(RETURN_TO_HEADER);
-    response = NextResponse.next({ request: { headers } });
+    headers.set(LOCALE_HEADER, 'he');
+    response = next(headers);
   } else {
     const url = request.nextUrl.clone();
     url.pathname = rest;
@@ -35,29 +75,25 @@ function localePrefix(request: NextRequest) {
   return response;
 }
 
-function withHeader(request: NextRequest, name: string, value: string) {
-  const headers = new Headers(request.headers);
-  headers.set(name, value);
-  return headers;
-}
-
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === '/he' || pathname.startsWith('/he/')) return localePrefix(request);
 
   // Only this proxy says which language a page is in, or where a studio page
   // should come back to: whatever a client sent in these headers is dropped.
   const headers = new Headers(request.headers);
   headers.delete(LOCALE_HEADER);
   headers.delete(RETURN_TO_HEADER);
+  headers.delete('x-nonce');
+
+  if (pathname === '/he' || pathname.startsWith('/he/')) return localePrefix(request, headers);
 
   const studio = pathname === '/app' || pathname.startsWith('/app/') || pathname === '/admin' || pathname.startsWith('/admin/');
-  if (!studio) return NextResponse.next({ request: { headers } });
+  if (!studio) return next(headers);
 
   const wanted = request.nextUrl.pathname + request.nextUrl.search;
   if (getSessionCookie(request, { cookiePrefix: 'sc' })) {
     headers.set(RETURN_TO_HEADER, wanted);
-    return NextResponse.next({ request: { headers } });
+    return next(headers);
   }
   const url = request.nextUrl.clone();
   url.pathname = '/sign-in';

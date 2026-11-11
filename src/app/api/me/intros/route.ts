@@ -5,7 +5,7 @@ import { markIntroSeen, resetIntros } from '@/server/account';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { log } from '@/server/log';
-import { fromOwnOrigin } from '@/server/request';
+import { BodyTooLarge, fromOwnOrigin, readJsonBody } from '@/server/request';
 import { getSession } from '@/server/session';
 
 // Which tools' first-visit introductions the signed-in person has dismissed,
@@ -28,11 +28,12 @@ export async function POST(request: Request) {
   try {
     const who = await caller(request);
     if ('error' in who) return who.error;
-    const body = Body.safeParse(await request.json().catch(() => null));
+    const body = Body.safeParse(await readJsonBody(request, 1024));
     if (!body.success) return json({ error: 'invalid_request' }, 400);
     await markIntroSeen(getDb(), who.userId, body.data.tool);
     return json({ ok: true });
   } catch (error) {
+    if (error instanceof BodyTooLarge) return json({ error: 'too_large' }, 413);
     log.error('api.intros_failed', { error });
     return json({ error: 'unavailable' }, 503);
   }

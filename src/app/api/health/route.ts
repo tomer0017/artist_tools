@@ -8,12 +8,17 @@ import { log } from '@/server/log';
 //   GET /api/health?ready=1  → 200 only when the configuration is complete and
 //                              the database answers, else 503 (a release with
 //                              a broken env file is rolled back, not served)
+// Both name the build (commit and build time) that is answering, so the
+// running version can be confirmed over HTTPS alone. The code is public, so
+// the commit reveals nothing that is not already known.
 
 export const dynamic = 'force-dynamic';
 
+const version = { commit: process.env.BUILD_COMMIT ?? 'unknown', builtAt: process.env.BUILD_TIME ?? null };
+
 export async function GET(request: Request) {
   const headers = { 'Cache-Control': 'no-store' };
-  if (!new URL(request.url).searchParams.has('ready')) return NextResponse.json({ status: 'ok' }, { headers });
+  if (!new URL(request.url).searchParams.has('ready')) return NextResponse.json({ status: 'ok', version }, { headers });
   let config = false;
   try {
     dbConfig();
@@ -32,7 +37,7 @@ export async function GET(request: Request) {
   }
   const ready = config && database;
   return NextResponse.json(
-    { status: ready ? 'ok' : 'degraded', config: config ? 'ok' : 'invalid', database: database ? 'ok' : 'unreachable' },
+    { status: ready ? 'ok' : 'degraded', config: config ? 'ok' : 'invalid', database: database ? 'ok' : 'unreachable', version },
     { status: ready ? 200 : 503, headers },
   );
 }

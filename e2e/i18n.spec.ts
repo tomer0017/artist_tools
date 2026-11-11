@@ -36,8 +36,9 @@ test.describe('Hebrew public pages', () => {
     await expectDirection(page, 'he', 'rtl');
     await expect(page.getByRole('heading', { name: 'חמישה כלים, סטודיו אחד' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'מדידה ותכנון' })).toBeVisible();
-    await expect(page.locator('link[rel="alternate"][hreflang="he"]')).toHaveAttribute('href', /\/he$/);
-    await expect(page.locator('link[rel="alternate"][hreflang="en"]')).toHaveAttribute('href', /\/$/);
+    // Absolute addresses (metadataBase), as search engines prefer.
+    await expect(page.locator('link[rel="alternate"][hreflang="he"]')).toHaveAttribute('href', /^https?:\/\/[^/]+\/he$/);
+    await expect(page.locator('link[rel="alternate"][hreflang="en"]')).toHaveAttribute('href', /^https?:\/\/[^/]+\/?$/);
     // Links stay in Hebrew.
     await page.getByRole('navigation', { name: 'האתר' }).getByRole('link', { name: 'מסלולים' }).click();
     await expect(page).toHaveURL(/\/he\/pricing$/);

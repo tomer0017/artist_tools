@@ -2,12 +2,15 @@ import type { Metadata, Viewport } from 'next';
 import { I18nProvider } from '@/i18n/client';
 import { dirOf } from '@/i18n/config';
 import { getRequestLocale, getT, messagesFor } from '@/i18n/server';
+import { authConfig } from '@/server/env';
 import '@/index.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT('meta');
   const description = t('siteDescription');
   return {
+    // Absolute URLs for alternates (hreflang) and social cards.
+    metadataBase: new URL(authConfig().baseURL),
     title: 'Studio Companion',
     description,
     authors: [{ name: 'Studio Companion' }],
