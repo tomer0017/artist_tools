@@ -1,15 +1,17 @@
 import { useEffect } from 'react';
+import { useTranslations } from 'use-intl';
 import { Ruler, X, RectangleHorizontal, Frame, BookOpen, DoorOpen } from 'lucide-react';
 import MeasureWorkflowArt from './MeasureWorkflowArt';
 
 // A handful of everyday, known-size objects a painter can measure against.
-// Shown as quiet chips — examples, not instructions.
-const KNOWN_OBJECTS: { icon: React.ReactNode; label: string }[] = [
-  { icon: <RectangleHorizontal className="w-3.5 h-3.5" />, label: 'Canvas' },
-  { icon: <Frame className="w-3.5 h-3.5" />, label: 'Frame' },
-  { icon: <Ruler className="w-3.5 h-3.5" />, label: 'Ruler' },
-  { icon: <BookOpen className="w-3.5 h-3.5" />, label: 'Book' },
-  { icon: <DoorOpen className="w-3.5 h-3.5" />, label: 'Door' },
+// Shown as quiet chips — examples, not instructions. `label` is the message
+// key under measureTool.intro.objects (translated at render).
+const KNOWN_OBJECTS: { icon: React.ReactNode; label: 'canvas' | 'frame' | 'ruler' | 'book' | 'door' }[] = [
+  { icon: <RectangleHorizontal className="w-3.5 h-3.5" />, label: 'canvas' },
+  { icon: <Frame className="w-3.5 h-3.5" />, label: 'frame' },
+  { icon: <Ruler className="w-3.5 h-3.5" />, label: 'ruler' },
+  { icon: <BookOpen className="w-3.5 h-3.5" />, label: 'book' },
+  { icon: <DoorOpen className="w-3.5 h-3.5" />, label: 'door' },
 ];
 
 /**
@@ -33,6 +35,8 @@ export default function MeasureIntroModal({
   /** Dismiss without drawing (both paths mark the intro as seen). */
   onClose: () => void;
 }) {
+  const t = useTranslations('measureTool');
+
   // Close on Escape for keyboard/desktop users.
   useEffect(() => {
     if (!open) return;
@@ -44,14 +48,14 @@ export default function MeasureIntroModal({
   if (!open) return null;
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Set your measurement scale"
+    <div role="dialog" aria-modal="true" aria-label={t('intro.dialogLabel')}
       className="fixed inset-0 z-[70] flex items-center justify-center px-5 py-6">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
       <div className="relative w-full max-w-md max-h-full overflow-y-auto rounded-3xl border border-border bg-card shadow-2xl animate-slide-up">
         {/* Quiet dismiss — the whole card is once-ever and replayable from Help. */}
-        <button onClick={onClose} aria-label="Close"
-          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground active:bg-secondary">
+        <button onClick={onClose} aria-label={t('shared.close')}
+          className="absolute end-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground active:bg-secondary">
           <X className="w-4 h-4" />
         </button>
 
@@ -62,7 +66,7 @@ export default function MeasureIntroModal({
 
           {/* One short headline — the picture already showed the "how". */}
           <h2 className="text-center text-xl font-bold text-foreground">
-            First, measure something you know the size&nbsp;of
+            {t('intro.heading')}
           </h2>
 
           {/* Known-object examples — the visual answer to "measure what?" */}
@@ -70,7 +74,7 @@ export default function MeasureIntroModal({
             {KNOWN_OBJECTS.map(o => (
               <span key={o.label}
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                <span className="text-primary">{o.icon}</span>{o.label}
+                <span className="text-primary">{o.icon}</span>{t(`intro.objects.${o.label}`)}
               </span>
             ))}
           </div>
@@ -79,7 +83,7 @@ export default function MeasureIntroModal({
           <button onClick={onStart}
             className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 active:opacity-90">
             <Ruler className="w-5 h-5" />
-            Draw my reference line
+            {t('intro.start')}
           </button>
         </div>
       </div>

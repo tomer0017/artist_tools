@@ -1,4 +1,5 @@
 import { Hand } from 'lucide-react';
+import { useTranslations } from 'use-intl';
 
 /**
  * A (nearly) wordless coach mark that teaches the *gesture* for the very first
@@ -12,10 +13,12 @@ import { Hand } from 'lucide-react';
  * selection and hides the coach. Only the area *around* the target is
  * click-through. Its pulse is disabled for users who prefer reduced motion.
  */
-export default function TapCoach({ label = 'Tap to start', onActivate }: {
+export default function TapCoach({ label, onActivate }: {
+  /** Defaults to "Tap to start". */
   label?: string;
   onActivate: () => void;
 }) {
+  const t = useTranslations('measureTool');
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
       <button
@@ -36,7 +39,7 @@ export default function TapCoach({ label = 'Tap to start', onActivate }: {
           </span>
         </span>
         <span className="rounded-full bg-card/85 px-3 py-1 text-xs font-semibold text-foreground shadow backdrop-blur-sm">
-          {label}
+          {label ?? t('coach.tapToStart')}
         </span>
       </button>
     </div>

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { realWorldLength } from '@/types/project';
 import {
@@ -9,6 +10,7 @@ import { useSaveMedia } from '@/components/common/SaveMedia';
 import { canvasToBlob } from '@/lib/saveMedia';
 
 export default function MeasurePanel() {
+  const t = useTranslations('measureTool');
   const {
     measurements, updateMeasurement, deleteMeasurement, selectedLineId, setSelectedLineId,
     layers, activeLayerId, setActiveLayerId, toggleLayerVisibility, addLayer, deleteLayer,
@@ -78,14 +80,14 @@ export default function MeasurePanel() {
         ctx.fillText(line.label || getRealSize(line), mx, my - 8);
       });
       canvasToBlob(canvas, 'image/png')
-        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: 'Save image' }))
+        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle') }))
         .catch((error) => console.error('[MeasurePanel] Failed to export annotated PNG:', error));
       } catch (error) {
         console.error('[MeasurePanel] Failed to export annotated PNG:', error);
       }
     };
     img.src = image;
-  }, [image, measurements, getRealSize, save]);
+  }, [image, measurements, getRealSize, save, t]);
 
   const handleExportJSON = useCallback(() => {
     try {
@@ -113,13 +115,13 @@ export default function MeasurePanel() {
   };
 
   return (
-    <div className="w-full lg:w-56 panel-surface border-t lg:border-t-0 lg:border-l border-border overflow-y-auto p-3 space-y-3 text-xs shrink-0 max-h-60 lg:max-h-none">
+    <div className="w-full lg:w-56 panel-surface border-t lg:border-t-0 lg:border-s border-border overflow-y-auto p-3 space-y-3 text-xs shrink-0 max-h-60 lg:max-h-none">
       {/* Layers */}
       <section>
         <button onClick={() => setLayersOpen(!layersOpen)}
           className="flex items-center gap-1 text-muted-foreground font-medium uppercase tracking-wider mb-1.5 w-full">
-          {layersOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          Layers
+          {layersOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3 rtl:-scale-x-100" />}
+          {t('panel.layers')}
         </button>
         {layersOpen && (
           <div className="space-y-0.5">
@@ -138,7 +140,7 @@ export default function MeasurePanel() {
                 {layers.length > 1 && (
                   <button onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
                     className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                    title="Delete layer">
+                    title={t('shared.deleteLayer')}>
                     <Trash2 className="w-3 h-3" />
                   </button>
                 )}
@@ -151,13 +153,13 @@ export default function MeasurePanel() {
                   if (e.key === 'Enter') commitNewLayer();
                   if (e.key === 'Escape') { setNewLayerName(''); setAddingLayer(false); }
                 }}
-                placeholder="Layer name"
+                placeholder={t('shared.layerName')}
                 className="w-full bg-secondary px-2 py-1.5 text-foreground rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                 autoFocus />
             ) : (
               <button onClick={() => { setNewLayerName(''); setAddingLayer(true); }}
                 className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
-                <Plus className="w-3 h-3" /> Add layer
+                <Plus className="w-3 h-3" /> {t('shared.addLayer')}
               </button>
             )}
           </div>
@@ -168,13 +170,13 @@ export default function MeasurePanel() {
       <section>
         <button onClick={() => setLinesOpen(!linesOpen)}
           className="flex items-center gap-1 text-muted-foreground font-medium uppercase tracking-wider mb-1.5 w-full">
-          {linesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          Lines ({measurements.length})
+          {linesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3 rtl:-scale-x-100" />}
+          {t('panel.lines', { count: measurements.length })}
         </button>
         {linesOpen && (
           <div className="space-y-0.5 max-h-40 overflow-y-auto">
             {measurements.length === 0 && (
-              <p className="text-muted-foreground italic px-2">No measurements yet</p>
+              <p className="text-muted-foreground italic px-2">{t('panel.noMeasurements')}</p>
             )}
             {measurements.map(line => (
               <div key={line.id}
@@ -187,7 +189,7 @@ export default function MeasurePanel() {
                     className="flex-1 bg-secondary px-1 py-0.5 text-foreground rounded text-xs focus:outline-none"
                     autoFocus />
                 ) : (
-                  <span className="flex-1 truncate text-muted-foreground">
+                  <span dir={line.label ? undefined : 'ltr'} className="flex-1 truncate text-muted-foreground rtl:text-right">
                     {line.label || getRealSize(line)}
                   </span>
                 )}
@@ -209,21 +211,21 @@ export default function MeasurePanel() {
       <section className="space-y-1.5 pt-2 border-t border-border">
         <button onClick={handleExportPNG}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
-          <Download className="w-3.5 h-3.5" /> Save Image
+          <Download className="w-3.5 h-3.5" /> {t('panel.saveImage')}
         </button>
         <button onClick={handleExportJSON}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
-          <FileJson className="w-3.5 h-3.5" /> Export JSON
+          <FileJson className="w-3.5 h-3.5" /> {t('panel.exportJson')}
         </button>
         <button onClick={handleClear}
           className={`flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors ${confirmClear ? 'text-destructive bg-destructive/10' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}
           onBlur={() => setConfirmClear(false)}>
-          <Trash2 className="w-3.5 h-3.5" /> {confirmClear ? 'Confirm clear?' : 'Clear all lines'}
+          <Trash2 className="w-3.5 h-3.5" /> {confirmClear ? t('panel.confirmClear') : t('shared.clearAllLines')}
         </button>
         <button onClick={handleNew}
           className={`flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors ${confirmNew ? 'text-destructive bg-destructive/10' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}
           onBlur={() => setConfirmNew(false)}>
-          <FilePlus className="w-3.5 h-3.5" /> {confirmNew ? 'Confirm new?' : 'New project'}
+          <FilePlus className="w-3.5 h-3.5" /> {confirmNew ? t('panel.confirmNew') : t('shared.newProject')}
         </button>
       </section>
     </div>

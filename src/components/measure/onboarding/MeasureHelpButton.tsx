@@ -1,4 +1,5 @@
 import { HelpCircle } from 'lucide-react';
+import { useTranslations } from 'use-intl';
 import { requestMeasureIntroReplay } from './useMeasureIntro';
 
 /**
@@ -8,12 +9,13 @@ import { requestMeasureIntroReplay } from './useMeasureIntro';
  * match the generic HelpButton so the header reads consistently.
  */
 export default function MeasureHelpButton({ className = '' }: { className?: string }) {
+  const t = useTranslations('measureTool');
   return (
     <button
       onClick={requestMeasureIntroReplay}
       className={`flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground ${className}`}
-      aria-label="Show tutorial"
-      title="Show tutorial"
+      aria-label={t('help.showTutorial')}
+      title={t('help.showTutorial')}
     >
       <HelpCircle className="h-4 w-4" />
     </button>

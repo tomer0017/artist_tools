@@ -1,3 +1,4 @@
+import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import {
   MousePointer, Crosshair, Ruler, Undo2, Redo2,
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function MeasureToolbar({ onResetView, mobile = false }: Props) {
+  const t = useTranslations('measureTool');
   const {
     image, setImage, mode, setMode, lineColor, setLineColor,
     showMeasurements, toggleMeasurements,
@@ -26,7 +28,7 @@ export default function MeasureToolbar({ onResetView, mobile = false }: Props) {
   return (
     <div data-onboarding="measure-tools" className={mobile
       ? 'flex flex-wrap items-center gap-1.5 p-3 toolbar-surface border-b border-border shrink-0'
-      : 'flex flex-row lg:flex-col items-center gap-1 p-1.5 toolbar-surface border-r border-border lg:w-11 shrink-0 overflow-x-auto lg:overflow-x-visible'}>
+      : 'flex flex-row lg:flex-col items-center gap-1 p-1.5 toolbar-surface border-e border-border lg:w-11 shrink-0 overflow-x-auto lg:overflow-x-visible'}>
       <ImageUploader
         onImageLoad={setImage}
         compact
@@ -40,50 +42,50 @@ export default function MeasureToolbar({ onResetView, mobile = false }: Props) {
           <div className={separatorClass} />
 
           <button onClick={() => setMode('select')}
-            className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${mode === 'select' ? 'active' : ''}`} title="Select">
+            className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${mode === 'select' ? 'active' : ''}`} title={t('shared.select')}>
             <MousePointer className="w-4 h-4" />
           </button>
 
           <button onClick={() => setMode('calibrate')}
-            className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${mode === 'calibrate' ? 'active' : ''}`} title="Calibrate">
+            className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${mode === 'calibrate' ? 'active' : ''}`} title={t('toolbar.calibrate')}>
             <Crosshair className="w-4 h-4" />
           </button>
 
           <button onClick={() => setMode('measure')}
             className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${mode === 'measure' ? 'active' : ''} ${!calibration ? 'opacity-40 pointer-events-none' : ''}`}
-            title="Measure">
+            title={t('toolbar.measure')}>
             <Ruler className="w-4 h-4" />
           </button>
 
           <button onClick={() => setMode('pan')}
             className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${mode === 'pan' ? 'active' : ''}`}
-            title="Pan / Hand tool (Space)">
+            title={t('toolbar.pan')}>
             <Hand className="w-4 h-4" />
           </button>
 
           <button onClick={() => setMode('eyedropper')}
             className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${mode === 'eyedropper' ? 'active' : ''}`}
-            title="Color Sampler">
+            title={t('toolbar.colorSampler')}>
             <Pipette className="w-4 h-4" />
           </button>
 
           <div className={separatorClass} />
 
-          <button onClick={undo} className={`btn-tool ${mobile ? 'h-10 w-10' : ''}`} title="Undo">
-            <Undo2 className="w-4 h-4" />
+          <button onClick={undo} className={`btn-tool ${mobile ? 'h-10 w-10' : ''}`} title={t('shared.undo')}>
+            <Undo2 className="w-4 h-4 rtl:-scale-x-100" />
           </button>
-          <button onClick={redo} className={`btn-tool ${mobile ? 'h-10 w-10' : ''}`} title="Redo">
-            <Redo2 className="w-4 h-4" />
+          <button onClick={redo} className={`btn-tool ${mobile ? 'h-10 w-10' : ''}`} title={t('shared.redo')}>
+            <Redo2 className="w-4 h-4 rtl:-scale-x-100" />
           </button>
 
           <div className={separatorClass} />
 
           <button onClick={toggleMeasurements}
             className={`btn-tool ${mobile ? 'h-10 w-10' : ''} ${showMeasurements ? '' : 'opacity-40'}`}
-            title={showMeasurements ? 'Hide measurements' : 'Show measurements'}>
+            title={showMeasurements ? t('shared.hideMeasurements') : t('shared.showMeasurements')}>
             {showMeasurements ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
-          <button onClick={onResetView} className={`btn-tool ${mobile ? 'h-10 w-10' : ''}`} title="Reset view">
+          <button onClick={onResetView} className={`btn-tool ${mobile ? 'h-10 w-10' : ''}`} title={t('toolbar.resetView')}>
             <Maximize className="w-4 h-4" />
           </button>
 

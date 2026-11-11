@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsTouchOrMobile } from '@/hooks/use-touch-or-mobile';
 import { type Point, type MeasurementLine, type SampledColor, genId, angleBetween, midpoint, realWorldLength } from '@/types/project';
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function MeasureCanvas({ containerRef }: Props) {
+  const t = useTranslations('measureTool');
   const {
     image, calibration, setCalibration, measurements, addMeasurement,
     updateMeasurement, selectedLineId, setSelectedLineId,
@@ -462,7 +464,7 @@ export default function MeasureCanvas({ containerRef }: Props) {
         elements.push(
           <text key="cal-label" x={mid.x} y={mid.y - 8 / zoom} textAnchor="middle"
             fill="#ffffff" fontSize={11 / zoom} opacity={0.6}>
-            REF: {calibration.realWorldSize} {calibration.unit}
+            {t('canvas.refLabel', { size: calibration.realWorldSize, unit: calibration.unit })}
           </text>
         );
       }
@@ -503,7 +505,10 @@ export default function MeasureCanvas({ containerRef }: Props) {
       onTouchEnd={handleTouchEnd}
       style={{ touchAction: 'none' }}
     >
+      {/* The image and its SVG overlay stay left to right in every language
+          (positions, labels and gesture math are in image coordinates). */}
       <div
+        dir="ltr"
         style={{
           transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
           transformOrigin: '0 0',
@@ -515,9 +520,9 @@ export default function MeasureCanvas({ containerRef }: Props) {
         <img
           ref={imgRef}
           src={image}
-          alt="Reference"
+          alt={t('shared.referenceAlt')}
           onLoad={onImgLoad}
-          onError={() => setImageLoadError('Failed to load image. Please try again.')}
+          onError={() => setImageLoadError(t('shared.loadFailedRetry'))}
           className="block max-w-none"
           draggable={false}
           style={{ imageRendering: 'auto' }}
@@ -572,7 +577,7 @@ export default function MeasureCanvas({ containerRef }: Props) {
       {/* First-run gesture coach — teaches the click for the very first
           calibration point, then clears once one is placed. */}
       {mode === 'calibrate' && !coachDismissed && calPoints.length === 0 && !calDraftReady && !calInputVisible && (
-        <TapCoach label="Click to start" onActivate={() => setCoachDismissed(true)} />
+        <TapCoach label={t('canvas.coach')} onActivate={() => setCoachDismissed(true)} />
       )}
 
       {/* Calibration draft confirmation — confirm line placement before entering size */}
@@ -580,16 +585,16 @@ export default function MeasureCanvas({ containerRef }: Props) {
         <div className={`absolute z-10 ${isMobile ? 'bottom-0 inset-x-0' : 'bottom-3 left-1/2 -translate-x-1/2'}`}
           onClick={(e) => e.stopPropagation()}>
           <div className={`flex items-center gap-3 ${isMobile ? 'bg-card border-t border-border px-4 py-3' : 'bg-card border border-border rounded-lg px-4 py-3 shadow-xl'}`}>
-            <span className="text-xs text-muted-foreground">Reference line placed.</span>
+            <span className="text-xs text-muted-foreground">{t('canvas.linePlaced')}</span>
             <button onClick={confirmCalDraft}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded font-medium hover:opacity-90 active:scale-95 transition-transform">
               <Check className="w-4 h-4" />
-              Confirm
+              {t('canvas.confirm')}
             </button>
             <button onClick={cancelCalibration}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-secondary text-muted-foreground rounded hover:text-foreground active:scale-95 transition-transform">
               <X className="w-4 h-4" />
-              Redraw
+              {t('canvas.redraw')}
             </button>
           </div>
         </div>
@@ -600,14 +605,15 @@ export default function MeasureCanvas({ containerRef }: Props) {
         isMobile ? (
           <div className="absolute bottom-0 inset-x-0 z-10 bg-card border-t border-border px-3 py-3 animate-slide-up"
             onClick={(e) => e.stopPropagation()}>
-            <p className="text-xs text-muted-foreground mb-2">Enter real-world size:</p>
+            <p className="text-xs text-muted-foreground mb-2">{t('canvas.enterSizeShort')}</p>
             <div className="flex items-center gap-2">
               <input
                 type="number"
                 inputMode="decimal"
+                dir="ltr"
                 value={calSize}
                 onChange={(e) => setCalSize(e.target.value)}
-                placeholder="e.g. 50"
+                placeholder={t('shared.sizePlaceholder')}
                 className="flex-1 min-w-0 px-3 py-2 text-sm bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 onKeyDown={(e) => e.key === 'Enter' && confirmCalibration()}
               />
@@ -631,13 +637,14 @@ export default function MeasureCanvas({ containerRef }: Props) {
         ) : (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-card border border-border rounded-lg p-4 shadow-xl animate-slide-up"
             onClick={(e) => e.stopPropagation()}>
-            <p className="text-xs text-muted-foreground mb-2">Enter the real-world size of this reference line:</p>
+            <p className="text-xs text-muted-foreground mb-2">{t('canvas.enterSize')}</p>
             <div className="flex items-center gap-2">
               <input
                 type="number"
+                dir="ltr"
                 value={calSize}
                 onChange={(e) => setCalSize(e.target.value)}
-                placeholder="e.g. 50"
+                placeholder={t('shared.sizePlaceholder')}
                 className="w-24 px-2 py-1.5 text-sm bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && confirmCalibration()}
@@ -651,11 +658,11 @@ export default function MeasureCanvas({ containerRef }: Props) {
               </select>
               <button onClick={confirmCalibration}
                 className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded font-medium hover:opacity-90">
-                Set
+                {t('shared.set')}
               </button>
               <button onClick={cancelCalibration}
                 className="px-3 py-1.5 text-sm bg-secondary text-muted-foreground rounded hover:text-foreground">
-                Cancel
+                {t('shared.cancel')}
               </button>
             </div>
           </div>
@@ -664,7 +671,7 @@ export default function MeasureCanvas({ containerRef }: Props) {
 
       {/* Eyedropper hover preview */}
       {mode === 'eyedropper' && hoveredColor && hoveredPos && (
-        <div className="absolute pointer-events-none z-20" style={{ left: hoveredPos.x + 16, top: hoveredPos.y - 40 }}>
+        <div dir="ltr" className="absolute pointer-events-none z-20" style={{ left: hoveredPos.x + 16, top: hoveredPos.y - 40 }}>
           <div className="flex items-center gap-1.5 bg-card border border-border rounded px-2 py-1 shadow-lg">
             <div className="w-5 h-5 rounded-sm border border-border/50" style={{ backgroundColor: hoveredColor }} />
             <span className="text-xs font-mono text-foreground">{hoveredColor}</span>
@@ -676,8 +683,8 @@ export default function MeasureCanvas({ containerRef }: Props) {
       {isMobile && isActiveDrawing && !calInputVisible && !calDraftReady && (
         <div className="absolute bottom-3 inset-x-3 z-10 flex items-center justify-between bg-card/95 border border-border rounded-lg px-3 py-2 shadow-lg backdrop-blur-sm">
           <span className="text-xs text-muted-foreground">
-            {mode === 'calibrate' && (calPoints.length === 0 ? 'Tap 2 points for reference' : calPoints.length === 1 ? 'Tap second point' : '')}
-            {mode === 'measure' && (pendingPoint ? 'Tap to complete' : 'Tap to start')}
+            {mode === 'calibrate' && (calPoints.length === 0 ? t('canvas.touch.calibrateStart') : calPoints.length === 1 ? t('canvas.touch.calibrateSecond') : '')}
+            {mode === 'measure' && (pendingPoint ? t('canvas.touch.measureComplete') : t('canvas.touch.measureStart'))}
           </span>
           <button
             onClick={() => {
@@ -688,20 +695,20 @@ export default function MeasureCanvas({ containerRef }: Props) {
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-secondary text-muted-foreground rounded hover:text-foreground"
           >
             <X className="w-3.5 h-3.5" />
-            Cancel
+            {t('shared.cancel')}
           </button>
         </div>
       )}
 
       {/* Mode indicator (desktop / non-drawing states) */}
       {!(isMobile && isActiveDrawing) && !calInputVisible && !calDraftReady && (
-        <div className="absolute bottom-3 left-3 text-xs text-muted-foreground bg-card/80 px-2 py-1 rounded">
-          {mode === 'calibrate' && (calPoints.length === 0 ? 'Draw a line over something whose real size you know' : calPoints.length === 1 ? 'Click the second point' : '')}
-          {mode === 'measure' && (pendingPoint ? 'Click to complete measurement' : 'Click to start measuring')}
-          {mode === 'eyedropper' && 'Click to sample a color'}
-          {mode === 'select' && 'Click a line to select, drag endpoints to adjust'}
-          {mode === 'pan' && 'Drag to pan the view'}
-          {mode === 'idle' && 'Upload an image to begin'}
+        <div className="absolute bottom-3 start-3 text-xs text-muted-foreground bg-card/80 px-2 py-1 rounded">
+          {mode === 'calibrate' && (calPoints.length === 0 ? t('canvas.hint.calibrateStart') : calPoints.length === 1 ? t('canvas.hint.calibrateSecond') : '')}
+          {mode === 'measure' && (pendingPoint ? t('canvas.hint.measureComplete') : t('canvas.hint.measureStart'))}
+          {mode === 'eyedropper' && t('canvas.hint.eyedropper')}
+          {mode === 'select' && t('canvas.hint.select')}
+          {mode === 'pan' && t('canvas.hint.pan')}
+          {mode === 'idle' && t('canvas.hint.idle')}
         </div>
       )}
 
@@ -709,18 +716,18 @@ export default function MeasureCanvas({ containerRef }: Props) {
       {isImageLoading && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-          <p className="mt-3 text-sm font-medium text-foreground">Loading image...</p>
+          <p className="mt-3 text-sm font-medium text-foreground">{t('shared.loadingImageOverlay')}</p>
         </div>
       )}
 
       {/* Error overlay */}
       {imageLoadError && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-sm">
-          <p className="text-sm text-destructive font-medium mb-2">Failed to load image</p>
+          <p className="text-sm text-destructive font-medium mb-2">{t('shared.loadFailed')}</p>
           <p className="text-xs text-muted-foreground mb-4 text-center px-6">{imageLoadError}</p>
           <button onClick={() => { clearImageLoadError(); setImage(null); }}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium">
-            Try again
+            {t('shared.tryAgain')}
           </button>
         </div>
       )}

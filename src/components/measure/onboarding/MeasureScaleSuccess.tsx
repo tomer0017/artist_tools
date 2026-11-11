@@ -1,4 +1,5 @@
 import { useEffect, useId } from 'react';
+import { useTranslations } from 'use-intl';
 import { Check } from 'lucide-react';
 
 /**
@@ -20,6 +21,7 @@ export default function MeasureScaleSuccess({
   onDone: () => void;
   autoDismissMs?: number;
 }) {
+  const t = useTranslations('measureTool');
   const uid = useId().replace(/[:]/g, '');
 
   useEffect(() => {
@@ -48,8 +50,9 @@ export default function MeasureScaleSuccess({
         `}</style>
 
         <div className="flex flex-col items-center gap-3 p-6 text-center">
-          {/* Reference line resolving into a confirmed real size */}
-          <svg viewBox="0 0 160 44" className="w-40" aria-hidden="true">
+          {/* Reference line resolving into a confirmed real size (a picture:
+              left to right in every language, so "80 cm" reads as written). */}
+          <svg viewBox="0 0 160 44" className="w-40" aria-hidden="true" direction="ltr">
             <line className={`${uid}-line`} pathLength={100} x1="12" y1="22" x2="92" y2="22"
               stroke="hsl(var(--primary))" strokeWidth="4" strokeLinecap="round" />
             <circle cx="12" cy="22" r="4" fill="hsl(var(--primary))" />
@@ -57,7 +60,7 @@ export default function MeasureScaleSuccess({
             <g className={`${uid}-tag`}>
               <rect x="104" y="10" width="48" height="24" rx="12" fill="hsl(var(--primary))" />
               <text x="128" y="26" textAnchor="middle" fontSize="13" fontWeight="700"
-                fill="hsl(var(--primary-foreground))">{sizeLabel || 'real'}</text>
+                fill="hsl(var(--primary-foreground))">{sizeLabel || t('success.real')}</text>
             </g>
           </svg>
 
@@ -67,10 +70,10 @@ export default function MeasureScaleSuccess({
 
           <div className="space-y-1">
             <div className="text-base font-bold text-foreground">
-              {sizeLabel ? `Scale set — ${sizeLabel}` : 'Scale set'}
+              {sizeLabel ? t('success.titleWithSize', { size: sizeLabel }) : t('success.title')}
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Every line you draw now measures the real thing.
+              {t('success.lead')}
             </p>
           </div>
         </div>

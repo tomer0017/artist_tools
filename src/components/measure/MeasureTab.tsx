@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsTouchOrMobile } from '@/hooks/use-touch-or-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
@@ -12,6 +13,7 @@ import ToolHeader, { StepIndicator } from '@/components/shell/ToolHeader';
 import ToolEmptyState from '@/components/shell/ToolEmptyState';
 
 export default function MeasureTab() {
+  const t = useTranslations('measureTool');
   const { image, setImage, setZoom, setPanOffset, sampledColors, removeSampledColor, clearSampledColors, setActiveTab, mode, setMode, calibration, isImageLoading, imageLoadError, clearImageLoadError, beginImageUpload, setImageLoadError } = useProject();
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsTouchOrMobile();
@@ -54,20 +56,20 @@ export default function MeasureTab() {
 
   const paletteStrip = sampledColors.length > 0 && (
     <div className="flex items-center gap-2 px-3 py-2 border-t border-border toolbar-surface overflow-x-auto shrink-0">
-      <span className="text-xs text-muted-foreground whitespace-nowrap">Palette:</span>
+      <span className="text-xs text-muted-foreground whitespace-nowrap">{t('tab.palette')}</span>
       <div className="flex items-center gap-1.5 flex-1 overflow-x-auto">
         {sampledColors.map(c => (
           <div key={c.id} className="group relative flex flex-col items-center shrink-0">
             <div className="w-8 h-8 rounded border border-border/50 cursor-pointer transition-transform hover:scale-110"
               style={{ backgroundColor: c.hex }}
-              title={`${c.hex} — click to use in Color tab`}
+              title={t('tab.useInColor', { hex: c.hex })}
               onClick={() => handleUseInColorTab(c.hex)}
             />
-            <span className="text-[9px] font-mono text-muted-foreground mt-0.5">{c.hex}</span>
+            <span dir="ltr" className="text-[9px] font-mono text-muted-foreground mt-0.5">{c.hex}</span>
             <button
               onClick={(e) => { e.stopPropagation(); removeSampledColor(c.id); }}
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Remove"
+              className="absolute -top-1 -end-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              title={t('tab.removeColor')}
             >
               <X className="w-2.5 h-2.5" />
             </button>
@@ -76,7 +78,7 @@ export default function MeasureTab() {
       </div>
       <button onClick={clearSampledColors}
         className="text-xs text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap px-2 py-1 rounded hover:bg-secondary">
-        Clear all
+        {t('tab.clearAll')}
       </button>
     </div>
   );
@@ -84,34 +86,34 @@ export default function MeasureTab() {
   if (!image) {
     return (
       <div className="flex flex-1 flex-col min-h-0">
-        <ToolHeader tool="measure" task="Real-world sizes for every proportion" showHelp={false} />
+        <ToolHeader tool="measure" task={t('tab.task')} showHelp={false} />
         {imageLoadError ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center canvas-area">
             <p className="text-sm text-destructive font-medium">{imageLoadError}</p>
             <button onClick={() => { clearImageLoadError(); setImage(null); }}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium">
-              Try again
+              {t('shared.tryAgain')}
             </button>
           </div>
         ) : isImageLoading ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-12 canvas-area">
             <div className="w-10 h-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-            <p className="text-sm font-medium text-foreground">Loading image…</p>
-            <p className="text-xs text-muted-foreground">Preparing canvas</p>
+            <p className="text-sm font-medium text-foreground">{t('shared.loadingImage')}</p>
+            <p className="text-xs text-muted-foreground">{t('shared.preparingCanvas')}</p>
           </div>
         ) : (
           <ToolEmptyState
             tool="measure"
-            heading="Plan your proportions"
+            heading={t('tab.empty.heading')}
             steps={[
-              'Upload your reference photo.',
-              'Mark one distance you know — e.g. chin → top of hair = 150 cm.',
-              'Tap any two points to get their real size on your artwork.',
+              t('tab.empty.upload'),
+              t('tab.empty.mark'),
+              t('tab.empty.tap'),
             ]}
           >
             <ImageUploader
               primary
-              label="Upload reference photo"
+              label={t('tab.empty.uploadButton')}
               onImageLoad={setImage}
               disabled={isImageLoading}
               onUploadStart={beginImageUpload}
@@ -133,17 +135,17 @@ export default function MeasureTab() {
       <ToolHeader
         tool="measure"
         task={calibration
-          ? `Scale: ${calibration.realWorldSize} ${calibration.unit} on your artwork. Click two points to measure any distance.`
-          : 'Click two points whose real size you know, then enter that size.'}
+          ? t('tab.taskScaled', { size: calibration.realWorldSize, unit: calibration.unit })
+          : t('tab.taskUnscaled')}
       />
       <StepIndicator
-        steps={[calibration ? `Scale ${calibration.realWorldSize} ${calibration.unit}` : 'Set scale', 'Measure']}
+        steps={[calibration ? t('shared.steps.scale', { size: calibration.realWorldSize, unit: calibration.unit }) : t('shared.steps.setScale'), t('shared.steps.measure')]}
         current={calibration ? 1 : 0}
         canSelect={() => !!calibration}
         onSelect={(i) => setMode(i === 0 ? 'calibrate' : 'measure')}
         trailing={calibration && (
-          <button onClick={() => setMode('calibrate')} aria-label="Change scale" className="min-h-[32px] rounded-md px-2 text-xs font-semibold text-primary hover:bg-secondary">
-            Change
+          <button onClick={() => setMode('calibrate')} aria-label={t('shared.changeScale')} className="min-h-[32px] rounded-md px-2 text-xs font-semibold text-primary hover:bg-secondary">
+            {t('shared.change')}
           </button>
         )}
       />
@@ -170,7 +172,7 @@ export default function MeasureTab() {
               className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-2 text-xs font-medium text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
             >
               <SlidersHorizontal className="w-4 h-4" />
-              {showMobileControls ? 'Hide tools' : 'Tools'}
+              {showMobileControls ? t('tab.hideTools') : t('tab.tools')}
             </button>
 
             <button
@@ -178,7 +180,7 @@ export default function MeasureTab() {
               className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-2 text-xs font-medium text-foreground shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
             >
               <Maximize className="w-4 h-4" />
-              Fit
+              {t('tab.fit')}
             </button>
           </div>
 
@@ -186,13 +188,13 @@ export default function MeasureTab() {
             <div className="absolute inset-x-0 bottom-0 z-30 max-h-[62vh] overflow-hidden rounded-t-2xl border-t border-border bg-card/98 shadow-2xl backdrop-blur-sm">
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Measure tools</p>
-                  <p className="text-[11px] text-muted-foreground">Keep the canvas clear, open tools only when needed.</p>
+                  <p className="text-sm font-semibold text-foreground">{t('tab.toolsTitle')}</p>
+                  <p className="text-[11px] text-muted-foreground">{t('tab.toolsLead')}</p>
                 </div>
                 <button
                   onClick={() => setShowMobileControls(false)}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-muted-foreground active:scale-95 transition-transform"
-                  title="Close tools"
+                  title={t('tab.closeTools')}
                 >
                   <X className="w-4 h-4" />
                 </button>

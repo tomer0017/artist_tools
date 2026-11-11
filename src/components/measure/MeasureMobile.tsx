@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'use-intl';
 import {
   Undo2, Redo2, MoreVertical, Hand, MousePointer, Plus, Layers as LayersIcon,
   Ruler, X, Check, Eye, EyeOff, Trash2, Download, FileJson, FilePlus,
@@ -28,6 +29,7 @@ function distToSegment(p: Point, a: Point, b: Point) {
 }
 
 export default function MeasureMobile() {
+  const t = useTranslations('measureTool');
   const {
     image, calibration, setCalibration,
     measurements, addMeasurement, updateMeasurement, deleteMeasurement,
@@ -635,7 +637,7 @@ export default function MeasureMobile() {
 
       const finish = (blob: Blob | null) => {
         if (!blob) return;
-        save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: 'Save image' });
+        save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle') });
       };
       if (c.toBlob) c.toBlob(finish, 'image/png');
       else {
@@ -654,7 +656,7 @@ export default function MeasureMobile() {
       console.error('[MeasureMobile] Failed to load image for PNG export:', e);
     };
     img.src = image;
-  }, [image, measurements, layers, getRealSize, save]);
+  }, [image, measurements, layers, getRealSize, save, t]);
 
   const exportJSON = useCallback(() => {
     setSheet(null);
@@ -676,14 +678,14 @@ export default function MeasureMobile() {
               <p className="text-sm text-destructive font-medium">{imageLoadError}</p>
               <button onClick={() => { clearImageLoadError(); setImage(null); }}
                 className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium">
-                Try again
+                {t('shared.tryAgain')}
               </button>
             </div>
           ) : isImageLoading ? (
             <div className="flex flex-col items-center gap-3 p-10">
               <div className="w-10 h-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-              <p className="text-sm font-medium text-foreground">Loading image…</p>
-              <p className="text-xs text-muted-foreground">Preparing canvas</p>
+              <p className="text-sm font-medium text-foreground">{t('shared.loadingImage')}</p>
+              <p className="text-xs text-muted-foreground">{t('shared.preparingCanvas')}</p>
             </div>
           ) : (
             <ImageUploader
@@ -720,23 +722,23 @@ export default function MeasureMobile() {
         actions={referenceMode ? (
           canCancelReference && (
             <button onClick={cancelCal}
-              className="flex h-10 items-center gap-1.5 rounded-lg px-3 text-sm text-muted-foreground active:bg-secondary" aria-label="Cancel scale setup">
-              <X className="h-4 w-4" /> Cancel
+              className="flex h-10 items-center gap-1.5 rounded-lg px-3 text-sm text-muted-foreground active:bg-secondary" aria-label={t('mobile.cancelScaleSetup')}>
+              <X className="h-4 w-4" /> {t('shared.cancel')}
             </button>
           )
         ) : (
           <>
-            <HeaderIconButton label="Undo" onClick={undo}><Undo2 className="h-5 w-5" /></HeaderIconButton>
-            <HeaderIconButton label="Save image" onClick={exportPNG}><Download className="h-5 w-5" /></HeaderIconButton>
-            <HeaderIconButton label="More" onClick={() => setSheet('more')}><MoreVertical className="h-5 w-5" /></HeaderIconButton>
+            <HeaderIconButton label={t('shared.undo')} onClick={undo}><Undo2 className="h-5 w-5 rtl:-scale-x-100" /></HeaderIconButton>
+            <HeaderIconButton label={t('mobile.saveImage')} onClick={exportPNG}><Download className="h-5 w-5" /></HeaderIconButton>
+            <HeaderIconButton label={t('mobile.more')} onClick={() => setSheet('more')}><MoreVertical className="h-5 w-5" /></HeaderIconButton>
           </>
         )}
       />
       {!enteringLength && (
         <StepIndicator
           steps={[
-            calibration && !referenceMode ? `Scale ${calibration.realWorldSize} ${calibration.unit}` : 'Set scale',
-            'Measure',
+            calibration && !referenceMode ? t('shared.steps.scale', { size: calibration.realWorldSize, unit: calibration.unit }) : t('shared.steps.setScale'),
+            t('shared.steps.measure'),
           ]}
           current={calibration && !referenceMode ? 1 : 0}
           canSelect={(i) => (i === 0 ? !!calibration && !referenceMode : !!calibration)}
@@ -745,8 +747,8 @@ export default function MeasureMobile() {
             else cancelCal();
           }}
           trailing={calibration && !referenceMode && (
-            <button onClick={() => setSheet('reference')} aria-label="Change scale" className="min-h-[32px] rounded-md px-2 text-xs font-semibold text-primary active:bg-secondary">
-              Change
+            <button onClick={() => setSheet('reference')} aria-label={t('shared.changeScale')} className="min-h-[32px] rounded-md px-2 text-xs font-semibold text-primary active:bg-secondary">
+              {t('shared.change')}
             </button>
           )}
         />
@@ -761,8 +763,10 @@ export default function MeasureMobile() {
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        <div style={{ transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`, transformOrigin: '0 0', position: 'absolute', top: 0, left: 0 }}>
-          <img ref={imgRef} src={image} alt="Reference" onLoad={onImgLoad} onError={() => setImageLoadError('Failed to load image. Please try again.')} draggable={false} className="block max-w-none" />
+        {/* The image and its SVG overlay stay left to right in every language
+            (positions, labels and gesture math are in image coordinates). */}
+        <div dir="ltr" style={{ transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`, transformOrigin: '0 0', position: 'absolute', top: 0, left: 0 }}>
+          <img ref={imgRef} src={image} alt={t('shared.referenceAlt')} onLoad={onImgLoad} onError={() => setImageLoadError(t('shared.loadFailedRetry'))} draggable={false} className="block max-w-none" />
           <svg width={imgSize.w} height={imgSize.h} viewBox={`0 0 ${imgSize.w} ${imgSize.h}`} className="absolute top-0 left-0 pointer-events-none">
             {/* Calibration line */}
             {calibration && (
@@ -860,8 +864,8 @@ export default function MeasureMobile() {
             clear badge says taps move the image instead of placing points. */}
         {tool === 'pan' && (
           <button data-canvas-ui onClick={togglePan}
-            className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg">
-            <Hand className="h-3.5 w-3.5" /> Moving the image · tap to finish
+            className="absolute start-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg">
+            <Hand className="h-3.5 w-3.5" /> {t('mobile.movingImage')}
           </button>
         )}
 
@@ -876,9 +880,9 @@ export default function MeasureMobile() {
             has to open a bottom sheet. Hidden while typing the reference length
             so that step stays fully focused. */}
         {!enteringLength && (
-        <div data-canvas-ui className="absolute top-2 right-2 z-20 flex flex-col gap-2">
+        <div data-canvas-ui className="absolute top-2 end-2 z-20 flex flex-col gap-2">
           {/* Fullscreen / fit-to-view */}
-          <ColBtn onClick={fitImage} label="Fit to screen">
+          <ColBtn onClick={fitImage} label={t('mobile.fitToScreen')}>
             <Maximize className="w-4 h-4" />
           </ColBtn>
 
@@ -891,32 +895,32 @@ export default function MeasureMobile() {
                   Closed = focusing on the artwork (labels hidden, lines faded).
                   Editing is unaffected in both states. */}
               <ColBtn onClick={toggleMeasurements} active={showMeasurements}
-                label={showMeasurements ? 'Focus on artwork (hide measurements)' : 'Show measurements'}>
+                label={showMeasurements ? t('mobile.focusOnArtwork') : t('shared.showMeasurements')}>
                 {showMeasurements ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               </ColBtn>
 
               {/* Default line color for the next line drawn (Task 2) */}
-              <button onClick={() => setColorPickerOpen(v => !v)} aria-label="Default line color"
+              <button onClick={() => setColorPickerOpen(v => !v)} aria-label={t('mobile.defaultLineColor')}
                 className="h-10 w-10 rounded-full bg-card/90 border border-border flex items-center justify-center shadow active:scale-95">
                 <span className="w-5 h-5 rounded-md border-2 border-white shadow-inner" style={{ backgroundColor: lineColor }} />
               </button>
 
               {/* Delete the selected line (Task 3) — only while editing one */}
               {tool === 'edit' && selectedLine && (
-                <ColBtn onClick={deleteSelected} label="Delete selected line" danger>
+                <ColBtn onClick={deleteSelected} label={t('mobile.deleteSelectedLine')} danger>
                   <Trash2 className="w-4 h-4" />
                 </ColBtn>
               )}
 
               {/* Pan / zoom navigation (Task 4) */}
-              <ColBtn onClick={togglePan} active={tool === 'pan'} label="Pan and zoom">
+              <ColBtn onClick={togglePan} active={tool === 'pan'} label={t('mobile.panAndZoom')}>
                 <Hand className="w-4 h-4" />
               </ColBtn>
 
               {/* Measurement scale — no scale yet → launch the guided setup;
                   otherwise open the scale panel to review/replace it. */}
               <ColBtn onClick={() => (calibration ? setSheet('reference') : startScaleSetup())} highlight={!calibration}
-                label={calibration ? 'Edit measurement scale' : 'Set measurement scale'}>
+                label={calibration ? t('mobile.editScale') : t('mobile.setScale')}>
                 <Ruler className="w-4 h-4" />
               </ColBtn>
             </>
@@ -929,12 +933,12 @@ export default function MeasureMobile() {
         {colorPickerOpen && !enteringLength && !referenceMode && (
           <div data-canvas-ui>
             <div className="absolute inset-0 z-20" onClick={() => setColorPickerOpen(false)} />
-            <div className="absolute top-2 right-14 z-30 w-[184px] p-2.5 rounded-2xl bg-card border border-border shadow-2xl">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 pb-2">Default line color</div>
+            <div className="absolute top-2 end-14 z-30 w-[184px] p-2.5 rounded-2xl bg-card border border-border shadow-2xl">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 pb-2">{t('mobile.defaultLineColor')}</div>
               <div className="grid grid-cols-4 gap-2">
                 {LINE_COLORS.map(c => (
                   <button key={c} onClick={() => { setLineColor(c); setColorPickerOpen(false); }}
-                    aria-label={`Use line color ${c}`}
+                    aria-label={t('mobile.useLineColor', { color: c })}
                     className={`h-9 w-9 rounded-lg border-2 transition-all ${lineColor === c ? 'border-foreground scale-105' : 'border-border/40'}`}
                     style={{ backgroundColor: c }} />
                 ))}
@@ -945,7 +949,7 @@ export default function MeasureMobile() {
 
         {/* Magnifier */}
         {drag?.kind === 'endpoint' && (
-          <div className="pointer-events-none absolute z-20"
+          <div dir="ltr" className="pointer-events-none absolute z-20"
             style={{ left: Math.max(8, Math.min((containerRef.current?.clientWidth ?? 300) - 128, drag.screen.x - 60)),
                      top: Math.max(8, drag.screen.y - 160) }}>
             <canvas ref={magCanvasRef} className="rounded-full shadow-2xl" style={{ width: 120, height: 120 }} />
@@ -970,13 +974,13 @@ export default function MeasureMobile() {
             <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-4 space-y-3 animate-slide-up">
               <div className="text-center space-y-1">
                 <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <Ruler className="w-4 h-4 text-primary" /> Real-world length
+                  <Ruler className="w-4 h-4 text-primary" /> {t('mobile.lengthTitle')}
                 </div>
-                <p className="text-xs text-muted-foreground">How long is the line you just drew? For example, if it spans your canvas width, enter <span className="text-foreground font-medium">80&nbsp;cm</span>.</p>
+                <p className="text-xs text-muted-foreground">{t.rich('mobile.lengthLead', { value: (chunks) => <span className="text-foreground font-medium">{chunks}</span> })}</p>
               </div>
               <div className="flex items-center gap-2">
-                <input ref={calInputRef} type="number" inputMode="decimal" value={calSize} onChange={e => setCalSize(e.target.value)}
-                  placeholder="e.g. 50"
+                <input ref={calInputRef} type="number" inputMode="decimal" dir="ltr" value={calSize} onChange={e => setCalSize(e.target.value)}
+                  placeholder={t('shared.sizePlaceholder')}
                   /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
                   style={{ fontSize: '16px' }}
                   className="flex-1 min-w-0 h-11 px-3 bg-secondary border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
@@ -988,8 +992,8 @@ export default function MeasureMobile() {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={cancelCal} className="flex-1 h-11 bg-secondary text-muted-foreground rounded-md font-medium">Cancel</button>
-                <button onClick={confirmCal} className="flex-1 h-11 bg-primary text-primary-foreground rounded-md font-medium">Set</button>
+                <button onClick={cancelCal} className="flex-1 h-11 bg-secondary text-muted-foreground rounded-md font-medium">{t('shared.cancel')}</button>
+                <button onClick={confirmCal} className="flex-1 h-11 bg-primary text-primary-foreground rounded-md font-medium">{t('shared.set')}</button>
               </div>
             </div>
           </div>
@@ -999,7 +1003,7 @@ export default function MeasureMobile() {
         {tool === 'add' && pendingPoint && (
           <button data-canvas-ui onClick={() => setPendingPoint(null)}
             className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 h-10 px-4 text-xs bg-card border border-border rounded-full text-muted-foreground shadow">
-            Cancel point
+            {t('mobile.cancelPoint')}
           </button>
         )}
 
@@ -1007,18 +1011,18 @@ export default function MeasureMobile() {
         {isImageLoading && (
           <div data-canvas-ui className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-            <p className="mt-3 text-sm font-medium text-foreground">Loading image...</p>
+            <p className="mt-3 text-sm font-medium text-foreground">{t('shared.loadingImageOverlay')}</p>
           </div>
         )}
 
         {/* Error overlay */}
         {imageLoadError && (
           <div data-canvas-ui className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-sm">
-            <p className="text-sm text-destructive font-medium mb-2">Failed to load image</p>
+            <p className="text-sm text-destructive font-medium mb-2">{t('shared.loadFailed')}</p>
             <p className="text-xs text-muted-foreground mb-4 text-center px-6">{imageLoadError}</p>
             <button onClick={() => { clearImageLoadError(); setImage(null); }}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium">
-              Try again
+              {t('shared.tryAgain')}
             </button>
           </div>
         )}
@@ -1030,21 +1034,21 @@ export default function MeasureMobile() {
         <div className="shrink-0 border-t border-border bg-card px-4 py-3">
           {calDraftReady ? (
             <div className="flex items-center gap-2">
-              <p className="flex-1 text-sm text-foreground">Great! Now enter how long this line is on your artwork.</p>
+              <p className="flex-1 text-sm text-foreground">{t('mobile.draftReady')}</p>
               <button onClick={confirmCalDraft} className="flex h-11 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground">
-                <Check className="h-4 w-4" /> Continue
+                <Check className="h-4 w-4" /> {t('mobile.continue')}
               </button>
-              <button onClick={cancelCal} aria-label="Redraw the line" className="flex h-11 w-11 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+              <button onClick={cancelCal} aria-label={t('mobile.redrawLine')} className="flex h-11 w-11 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>
           ) : (
             <>
-              <p className="text-sm font-semibold text-foreground">Set your painting scale</p>
+              <p className="text-sm font-semibold text-foreground">{t('mobile.scaleTitle')}</p>
               <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                 {calPoints.length === 0
-                  ? <>Tap two points on a distance you know — e.g. <span className="text-foreground">chin → top of hair</span>. Then enter how large it should be on your artwork, like <span className="text-foreground">150&nbsp;cm</span>.</>
-                  : 'Now tap the second point.'}
+                  ? t.rich('mobile.scaleLead', { hl: (chunks) => <span className="text-foreground">{chunks}</span> })
+                  : t('mobile.scaleSecond')}
               </p>
             </>
           )}
@@ -1060,20 +1064,20 @@ export default function MeasureMobile() {
         ) : (
           <p className="px-4 pt-2.5 text-xs text-muted-foreground">
             {tool === 'add'
-              ? (pendingPoint ? 'Now tap the end point.' : 'Tap the start point of any distance on the reference.')
+              ? (pendingPoint ? t('mobile.addEnd') : t('mobile.addStart'))
               : measurements.length > 0
-                ? `Tap a line to see its size · ${measurements.length} saved`
-                : 'Tap “Measure”, then tap two points to get their real size.'}
+                ? t('mobile.tapLine', { count: measurements.length })
+                : t('mobile.tapMeasure')}
           </p>
         )}
         <div className="flex items-center gap-2 px-2 pb-2 pt-2">
-          <ModeToggle onClick={() => setSheet('layers')} icon={<LayersIcon className="w-4 h-4" />} label={`Saved (${measurements.length})`} />
-          <ModeToggle active={tool === 'edit'} onClick={() => setTool('edit')} icon={<MousePointer className="w-4 h-4" />} label="Select" />
+          <ModeToggle onClick={() => setSheet('layers')} icon={<LayersIcon className="w-4 h-4" />} label={t('mobile.saved', { count: measurements.length })} />
+          <ModeToggle active={tool === 'edit'} onClick={() => setTool('edit')} icon={<MousePointer className="w-4 h-4" />} label={t('shared.select')} />
           <button
             onClick={() => { if (!calibration) { startScaleSetup(); return; } setTool('add'); setPendingPoint(null); }}
             aria-pressed={tool === 'add'}
             className={`flex h-11 flex-[1.3] items-center justify-center gap-1.5 rounded-lg bg-primary text-sm font-semibold text-primary-foreground transition-shadow ${tool === 'add' ? 'ring-2 ring-primary ring-offset-2 ring-offset-card' : ''}`}>
-            <Plus className="h-4 w-4" /> Measure
+            <Plus className="h-4 w-4" /> {t('mobile.measure')}
           </button>
         </div>
       </div>
@@ -1082,9 +1086,9 @@ export default function MeasureMobile() {
       {/* Bottom sheets */}
       {sheet && (
         <Sheet onClose={() => setSheet(null)} title={
-          sheet === 'layers' ? 'Saved measurements · layers'
-          : sheet === 'reference' ? 'Measurement scale'
-          : 'More'
+          sheet === 'layers' ? t('mobile.sheets.layers')
+          : sheet === 'reference' ? t('mobile.sheets.reference')
+          : t('mobile.more')
         }>
           {sheet === 'layers' && (
             <div className="space-y-1">
@@ -1096,7 +1100,7 @@ export default function MeasureMobile() {
                     onClick={() => setActiveLayerId(layer.id)}
                     className={`flex items-center gap-3 px-3 py-3 rounded-md min-h-[52px] ${active ? 'bg-secondary' : 'active:bg-secondary/60'}`}>
                     <button onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}
-                      className="h-10 w-10 flex items-center justify-center text-muted-foreground" aria-label="Toggle visibility">
+                      className="h-10 w-10 flex items-center justify-center text-muted-foreground" aria-label={t('mobile.toggleVisibility')}>
                       {layer.visible ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
                     </button>
                     <span className="w-4 h-4 rounded-full" style={{ backgroundColor: layer.color }} />
@@ -1104,7 +1108,7 @@ export default function MeasureMobile() {
                     <span className="text-xs text-muted-foreground">{count}</span>
                     {layers.length > 1 && (
                       <button onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
-                        className="h-10 w-10 flex items-center justify-center text-muted-foreground" aria-label="Delete layer">
+                        className="h-10 w-10 flex items-center justify-center text-muted-foreground" aria-label={t('shared.deleteLayer')}>
                         <Trash2 className="w-5 h-5" />
                       </button>
                     )}
@@ -1115,19 +1119,19 @@ export default function MeasureMobile() {
                 <div className="flex items-center gap-2 px-3 py-2">
                   <input value={newLayerName} onChange={e => setNewLayerName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitNewLayer(); } }}
-                    placeholder="Layer name"
+                    placeholder={t('shared.layerName')}
                     autoFocus
                     /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
                     style={{ fontSize: '16px' }}
                     className="flex-1 min-w-0 h-11 px-3 bg-secondary border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
-                  <button onClick={commitNewLayer} className="h-11 px-4 bg-primary text-primary-foreground rounded-md font-medium">Add</button>
+                  <button onClick={commitNewLayer} className="h-11 px-4 bg-primary text-primary-foreground rounded-md font-medium">{t('mobile.add')}</button>
                   <button onClick={() => { setNewLayerName(''); setAddingLayer(false); }}
                     className="h-11 w-11 flex items-center justify-center bg-secondary text-muted-foreground rounded-md"><X className="w-4 h-4" /></button>
                 </div>
               ) : (
                 <button onClick={() => { setNewLayerName(''); setAddingLayer(true); }}
                   className="flex items-center gap-3 px-3 py-3 rounded-md min-h-[52px] w-full text-sm text-foreground active:bg-secondary/60">
-                  <Plus className="w-5 h-5" /> Add layer
+                  <Plus className="w-5 h-5" /> {t('shared.addLayer')}
                 </button>
               )}
             </div>
@@ -1135,34 +1139,34 @@ export default function MeasureMobile() {
 
           {sheet === 'reference' && (
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">Your measurement scale converts distances on the artwork into real-world sizes.</p>
+              <p className="text-xs text-muted-foreground">{t('mobile.reference.lead')}</p>
               {calibration ? (
                 <div className="rounded-md border border-border p-3 bg-secondary/30">
-                  <div className="text-xs text-muted-foreground">Current scale</div>
-                  <div className="text-lg font-semibold text-foreground">{calibration.realWorldSize} {calibration.unit}</div>
-                  <div className="text-xs text-muted-foreground">across the reference line you drew</div>
+                  <div className="text-xs text-muted-foreground">{t('mobile.reference.current')}</div>
+                  <div dir="ltr" className="text-lg font-semibold text-foreground rtl:text-right">{calibration.realWorldSize} {calibration.unit}</div>
+                  <div className="text-xs text-muted-foreground">{t('mobile.reference.across')}</div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No scale set yet. Measurements show real-world sizes only once a scale is defined.</p>
+                <p className="text-sm text-muted-foreground">{t('mobile.reference.none')}</p>
               )}
               <button onClick={startScaleSetup}
                 className="w-full h-12 rounded-md bg-primary text-primary-foreground font-medium">
-                {calibration ? 'Set a new scale' : 'Set measurement scale'}
+                {calibration ? t('mobile.reference.setNew') : t('mobile.setScale')}
               </button>
             </div>
           )}
 
           {sheet === 'more' && (
             <div className="space-y-1">
-              <SheetItem onClick={() => { setSheet(null); exportPNG(); }} icon={<Download className="w-5 h-5" />} label="Save image with measurements" />
-              <SheetItem onClick={redo} icon={<Redo2 className="w-5 h-5" />} label="Redo" />
-              <SheetItem onClick={() => { toggleMeasurements(); }} icon={showMeasurements ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />} label={showMeasurements ? 'Hide measurements' : 'Show measurements'} />
-              <SheetItem onClick={() => { if (confirm('Clear all lines?')) clearAllLines(); }} icon={<Trash2 className="w-5 h-5" />} label="Clear all lines" danger />
-              <SheetItem onClick={() => { if (confirm('Start a new project?')) newProject(); }} icon={<FilePlus className="w-5 h-5" />} label="New project" danger />
+              <SheetItem onClick={() => { setSheet(null); exportPNG(); }} icon={<Download className="w-5 h-5" />} label={t('mobile.moreSheet.saveWithMeasurements')} />
+              <SheetItem onClick={redo} icon={<Redo2 className="w-5 h-5 rtl:-scale-x-100" />} label={t('shared.redo')} />
+              <SheetItem onClick={() => { toggleMeasurements(); }} icon={showMeasurements ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />} label={showMeasurements ? t('shared.hideMeasurements') : t('shared.showMeasurements')} />
+              <SheetItem onClick={() => { if (confirm(t('mobile.moreSheet.confirmClear'))) clearAllLines(); }} icon={<Trash2 className="w-5 h-5" />} label={t('shared.clearAllLines')} danger />
+              <SheetItem onClick={() => { if (confirm(t('mobile.moreSheet.confirmNew'))) newProject(); }} icon={<FilePlus className="w-5 h-5" />} label={t('shared.newProject')} danger />
               <div className="pt-2 pb-1 px-3">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Advanced</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">{t('mobile.moreSheet.advanced')}</div>
               </div>
-              <SheetItem onClick={exportJSON} icon={<FileJson className="w-5 h-5" />} label="Export project data (JSON)" />
+              <SheetItem onClick={exportJSON} icon={<FileJson className="w-5 h-5" />} label={t('mobile.moreSheet.exportJson')} />
             </div>
           )}
         </Sheet>
@@ -1220,13 +1224,14 @@ function SheetItem({ onClick, icon, label, danger }: { onClick: () => void; icon
 }
 
 function Sheet({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  const t = useTranslations('measureTool');
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="absolute inset-x-0 bottom-0 bg-card rounded-t-2xl border-t border-border shadow-2xl max-h-[80vh] flex flex-col animate-slide-up">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          <button onClick={onClose} className="h-10 w-10 flex items-center justify-center text-muted-foreground" aria-label="Close">
+          <button onClick={onClose} className="h-10 w-10 flex items-center justify-center text-muted-foreground" aria-label={t('shared.close')}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1241,6 +1246,7 @@ function Sheet({ title, children, onClose }: { title: string; children: React.Re
 // bottom panel so it never covers the reference.
 function ResultCard({ line, getRealSize, onChange }:
   { line: MeasurementLine; getRealSize: (l: MeasurementLine) => string; onChange: (u: Partial<MeasurementLine>) => void }) {
+  const t = useTranslations('measureTool');
   const [label, setLabel] = useState(line.label);
   const size = getRealSize(line);
   // `key={line.id}` on the mount site keeps this in sync when selection changes.
@@ -1248,13 +1254,13 @@ function ResultCard({ line, getRealSize, onChange }:
     <div className="flex items-center gap-3 px-4 pt-2.5">
       <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: line.color }} />
       <div className="min-w-0 flex-1">
-        <div className="text-2xl font-bold leading-none text-foreground" aria-live="polite">{size}</div>
-        <div className="mt-1 text-[11px] leading-tight text-muted-foreground">Draw this distance as {size} on your artwork.</div>
+        <div dir="ltr" className="text-2xl font-bold leading-none text-foreground rtl:text-right" aria-live="polite">{size}</div>
+        <div className="mt-1 text-[11px] leading-tight text-muted-foreground">{t('mobile.result.instruction', { size })}</div>
       </div>
       <input value={label}
         onChange={e => { setLabel(e.target.value); onChange({ label: e.target.value }); }}
-        placeholder="Add label"
-        aria-label="Measurement label"
+        placeholder={t('mobile.result.labelPlaceholder')}
+        aria-label={t('mobile.result.labelAria')}
         /* font-size: 16px prevents iOS Safari from auto-zooming on focus */
         style={{ fontSize: '16px' }}
         className="h-10 w-28 min-w-0 rounded-lg border border-border bg-secondary px-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />

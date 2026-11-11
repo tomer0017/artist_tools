@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { useTranslations } from 'use-intl';
 
 /**
  * The hero illustration for the Measure onboarding. It tells the entire
@@ -20,14 +21,17 @@ export default function MeasureWorkflowArt({
   animate?: boolean;
   className?: string;
 }) {
+  const t = useTranslations('measureTool');
   // Scope the keyframes to this instance so multiple copies never collide.
   const uid = useId().replace(/[:]/g, '');
   const cls = (name: string) => `${name}-${uid}`;
 
+  // A picture: it stays left to right in every language (the captions are
+  // anchored to its left and right edges).
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-border bg-black/25 ${className}`}>
+    <div dir="ltr" className={`relative overflow-hidden rounded-2xl border border-border bg-black/25 ${className}`}>
       <svg viewBox="0 0 360 264" className="block w-full" role="img"
-        aria-label="Tap two points across something whose real size you know — such as the canvas width — to draw a reference line, enter its real length, and every measurement on the artwork becomes real-world accurate.">
+        aria-label={t('art.label')}>
         {animate && (
           <style>{`
             @keyframes ${cls('dotA')} { 0%,4%{r:0;opacity:0} 10%,92%{r:7;opacity:1} 100%{r:7;opacity:0} }
@@ -121,8 +125,8 @@ export default function MeasureWorkflowArt({
 
         {/* Numbered flow captions — support the picture, never carry it */}
         <g fontSize="12.5" fontWeight="600" fill="hsl(var(--foreground))">
-          <text x="16" y="40">Tap one end…</text>
-          <text x="344" y="40" textAnchor="end">…then the other</text>
+          <text x="16" y="40">{t('art.tapOneEnd')}</text>
+          <text x="344" y="40" textAnchor="end">{t('art.thenOther')}</text>
         </g>
         <g fill="none" stroke="hsl(var(--primary))" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
           <path d="M40 50 C 38 84, 66 108, 112 128" />
@@ -131,7 +135,7 @@ export default function MeasureWorkflowArt({
           <polyline points="256,117 261,130 270,121" />
         </g>
         <text x="180" y="236" textAnchor="middle" fontSize="12.5" fontWeight="600" fill="hsl(var(--muted-foreground))">
-          Enter its real size once — every line then measures true.
+          {t('art.enterOnce')}
         </text>
       </svg>
     </div>
