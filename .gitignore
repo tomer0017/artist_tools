@@ -42,3 +42,6 @@ next-env.d.ts
 # Environment files hold secrets; only the example is committed
 .env*
 !.env.example
+
+# Isolated working copies created by Claude Code agents
+.claude/worktrees/

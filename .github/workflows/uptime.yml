@@ -1,0 +1,38 @@
+# Uptime check: every 30 minutes, ask the deployed app whether it is healthy
+# (GET /api/health?ready=1 also checks the database). A failed run makes
+# GitHub email the account that last changed this schedule; nothing else is
+# sent anywhere. No secrets, no cost.
+#
+# GitHub runs schedules only from the repository's default branch, so this
+# starts working once the owner merges it there (docs/ops/monitoring.md); it
+# can be run by hand from any branch. The URL can be overridden with the
+# repository variable UPTIME_URL.
+
+name: Uptime
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Health of the deployed app
+        env:
+          URL: ${{ vars.UPTIME_URL || 'https://staging.185-176-255-3.sslip.io' }}
+        run: |
+          for attempt in 1 2 3; do
+            body="$(curl -fsS -m 20 "$URL/api/health?ready=1" || true)"
+            if printf '%s' "$body" | grep -q '"status":"ok"'; then
+              echo "Healthy: $body"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::$URL is not healthy (last answer: ${body:-none})"
+          exit 1
