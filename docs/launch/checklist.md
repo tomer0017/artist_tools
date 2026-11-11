@@ -29,7 +29,7 @@ sign-off. Each gate is marked:
 |---|---|---|
 | Public pages, sign-in, emails in English and Hebrew | Done (staging) | e2e `i18n` |
 | Studio frame and account page in Hebrew | Done (local, 56d5f3c) | e2e `i18n` (Hebrew studio, iPhone WebKit) |
-| The five tools translated (3b-2) | Open | Tools stay English and left to right inside |
+| The five tools translated (3b-2) | Done (local) | e2e `i18n` (five tools in Hebrew, phone); English parity unchanged |
 | Native-speaker review of the Hebrew | **Owner** | |
 
 ## Billing

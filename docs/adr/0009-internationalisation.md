@@ -1,6 +1,6 @@
 # 0009 — Internationalisation and RTL strategy
 
-**Status:** Accepted (2026-11-11) — Phase 3a and 3b-1 (studio frame) built; 3b-2 (the five tools) next
+**Status:** Accepted (2026-11-11) — Phases 3a, 3b-1 and 3b-2 built: the public pages, the studio and the five tools in English and Hebrew
 
 ## Context
 English and Hebrew first (Hebrew is RTL), Spanish and French later. The studio
@@ -29,12 +29,17 @@ public pages need SEO.
   page they signed up from; account email follows `users.locale`.
 - Phase 3a keeps the studio and admin English and left-to-right inside
   (`lang="en" dir="ltr"`) until their text is translated in 3b.
-- Phase 3b-1 translates the studio's frame (Home, navigation, tool
+- Phase 3b-1 translated the studio's frame (Home, navigation, tool
   introductions, the plans and account pages, and the account page's server
-  messages); each tool's own workspace, its guided tours and the shared save
-  sheet stay English and left-to-right inside (`ToolFrame`) until 3b-2
-  translates them tool by tool. The admin dashboard stays English (its own
-  English messages), as an internal tool.
+  messages). Phase 3b-2 (2026-11-11) translated the five tools, their shared
+  parts (header, upload, save sheet, Pro notice, guided tours, illustrations)
+  and removed the English-only `ToolFrame`. Messages per tool live in
+  `src/i18n/messages/tools/` (namespaces `measureTool`, `studyTool`,
+  `colorTool`, `gridTool`, `compareTool`, `toolsCommon`). Inside the tools,
+  canvases, image layers, sliders, colour codes and number readouts stay
+  left to right; text drawn on canvases or into exported files is not
+  translated. The admin dashboard stays English (its own English messages),
+  as an internal tool.
 - Direction: `lang` and `dir` on `<html>`; layouts use logical CSS properties
   (`ms-`, `me-`, `start-`, `end-`, `rtl:` variants). Canvas surfaces, their
   overlays and gesture math stay `dir="ltr"`; only surrounding text and

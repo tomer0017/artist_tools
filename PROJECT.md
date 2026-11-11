@@ -1029,12 +1029,21 @@ auto-align).
   language on the account page reloads the studio in that language. Tool
   text comes from `tools.<id>` messages (`TOOLS` in `src/components/shell/tools.ts`
   keeps the English for untranslated places).
-- **Not yet translated (Phase 3b-2):** each tool's own workspace (controls,
-  headers, empty states, Pro notices), its guided tours and the shared save
-  sheet. They stay English and left to right inside (`ToolFrame`,
-  `lang="en" dir="ltr"`, no box of its own) on Hebrew pages, so no tool
-  layout or gesture changes. The admin dashboard stays English (it gives its
-  own English messages to shared parts such as "Confirm it is you").
+- **Translated (Phase 3b-2):** the five tools and what they share: tool
+  header, image upload, save sheet, Pro notice, guided tours (their words in
+  `toolsCommon.tours.<id>`), illustrations. Messages per tool in
+  `src/i18n/messages/tools/`. Right to left in Hebrew, while canvases, image
+  layers, sliders, colour codes and number readouts stay left to right. The
+  small Hebrew hints that English pages already showed (Compare's upload
+  step, the save sheet) now appear on English pages only.
+- **Not translated, on purpose:** text drawn on canvases or into exported
+  images and study sheets; pigment names, colour codes, units, file names;
+  user data (layer and line names; the default layer "General Lines" is
+  stored in projects); the admin dashboard. Hebrew labels typed by a person
+  and drawn on the Measure overlay or export keep the drawing code's
+  left-to-right order (unchanged). **Needs a native speaker's review**
+  before launch (the wording questions are listed in each tool's message
+  file history).
 
 ## Accessibility
 
@@ -1108,3 +1117,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-11 | **First-party error monitoring and an uptime check.** Browser errors (`ErrorReporter` in the root layout: message, stack, path, release; 5 per page, extensions skipped) go to `POST /api/client-errors` (this site only, 10 KB, 30 per IP per 10 minutes through the hashed throttle); server errors through `src/instrumentation.ts` (`onRequestError`, route pattern only). Grouped by fingerprint in `error_reports` (count, first/last seen, up to 10 paths/releases/browsers), with emails, query strings and token-like strings removed and no account, IP or full user agent stored; a group not seen for 30 days expires. Admin page `/admin/errors`. `.github/workflows/uptime.yml` checks `/api/health?ready=1` every 30 minutes once it is on the default branch (owner's decision; docs/ops/monitoring.md). Tests: unit (redaction, paths, grouping, caps, TTL) and e2e (a real browser error reaches the admin without its email or token; 403/413/400). | src/server/error-reports.ts, src/app/api/client-errors/route.ts, src/instrumentation.ts, src/components/common/ErrorReporter.tsx, src/app/layout.tsx, src/app/admin/{errors/,AdminShell.tsx}, src/server/db/{collections,migrate}.ts, e2e/{monitoring (new),accessibility,accounts}.spec.ts, docs/ops/monitoring.md, PROJECT.md |
 | 2026-11-11 | **Backups verified by a real restore; missing auth indexes added.** `deploy/backup-offsite.sh` (checks the newest dump is recent, complete and readable by mongorestore; writes a manifest with size, SHA-256 and live document counts; when `/etc/studio-companion/offsite.conf` exists, encrypts with `age` to the owner's public key, uploads with `rclone --immutable` and checks the upload; healthchecks.io pings) and `deploy/restore-drill.sh` (restores one database into a throwaway one, compares counts with the manifest or the live database, checks unique indexes, drops it; the admin password never on the command line). Run on staging: restored in 4 s, counts OK. The drill found that Better Auth's MongoDB adapter creates no indexes: `users.email` unique, `sessions.token` unique and the userId/identifier lookups are now in the migration. Off-site copies wait for the owner's B2 bucket, age key and healthchecks.io check (docs/ops/backups.md, exact steps). vitest test timeout 20 s (integration tests migrate throwaway databases in parallel). Admin pages added to the regular-user 404 test. | deploy/{backup-offsite.sh,restore-drill.sh,cron/studio-offsite-backup} (new), src/server/db/migrate.ts, vitest.config.ts, e2e/accounts.spec.ts, docs/ops/backups.md, docs/launch/checklist.md, PROJECT.md |
 | 2026-11-11 | **Studio zoom limit narrowed to iOS.** The studio no longer sends `maximum-scale=1`; on iPhone and iPad only, `useIosNoInputZoom` (StudioClient) adds it after load, where Safari ignores it for pinch-zoom but stops zooming into small fields. Android and desktop can zoom the page; every tool canvas already handles its own pinch (`touch-action: none`). The accessibility spec's documented exception now applies to WebKit iPhone emulation only, and a test checks both cases. | src/components/shell/StudioClient.tsx, src/app/app/layout.tsx, e2e/accessibility.spec.ts, docs/accessibility/README.md, PROJECT.md |
+| 2026-11-11 | **Phase 3b-2 — the five tools in Hebrew.** Measure (138 messages), Study (139), Color (103) and Grid (36), Compare (263), translated in parallel by four agents in isolated worktrees from one brief (English verbatim, gender-neutral Hebrew, canvases and coordinate-based controls kept left to right, nothing drawn or exported changed), each checked by its agent against the original components' English output in jsdom, then merged; plus the shared parts (header, upload, save sheet, Pro notice — `PRO_FEATURE_INFO` moved into the messages —, tours restructured into structure + messages, illustrations). `ToolFrame` removed. New e2e: the five tools in Hebrew (photo loaded, Hebrew controls, canvases left to right) and on a Hebrew phone without sideways scrolling; visual review of the Hebrew phone screenshots. English unchanged: visual parity 36/36. | src/components/{measure,value,color,grid}/*, src/features/compare-art/*, src/components/common/{ImageUploader,SaveMedia,ProFeature}.tsx, src/components/shell/{Studio,ToolHeader,ToolArt}.tsx, src/onboarding/*, src/i18n/messages/tools/*, src/lib/plans.ts, src/app/app/layout.tsx, e2e/i18n.spec.ts, docs/adr/0009, PROJECT.md |

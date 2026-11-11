@@ -19,7 +19,6 @@ import {
 } from 'react';
 import { Download, ExternalLink, Image as ImageIcon, Share2, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'use-intl';
-import { ToolFrame } from '@/components/shell/ToolFrame';
 import {
   canShareFile,
   downloadBlob,
@@ -87,12 +86,7 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
   return (
     <SaveMediaContext.Provider value={value}>
       {children}
-      {/* Saving belongs to the tools, which are not translated yet. */}
-      {active && (
-        <ToolFrame>
-          <SaveMediaSheet media={active} onClose={close} />
-        </ToolFrame>
-      )}
+      {active && <SaveMediaSheet media={active} onClose={close} />}
     </SaveMediaContext.Provider>
   );
 }

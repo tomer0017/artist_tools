@@ -1,9 +1,10 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { photo } from './fixtures/photo';
 
 // English and Hebrew end to end: the public pages and account email (/he
 // addresses, the language switch, Accept-Language, right-to-left layout) and
-// the studio's frame (Home, navigation, introductions, account page), with
-// each tool's own workspace still English and left to right inside.
+// the whole studio (Home, navigation, the five tools, introductions, account
+// page), with the tools' canvases kept left to right.
 //
 // Simulated, not real devices: Desktop Chrome, and WebKit with iPhone 13
 // emulation for the `mobile` test.
@@ -102,7 +103,7 @@ async function asHebrewAccount(browser: Browser, name = `ivrit-${test.info().pro
 test.describe('the studio in Hebrew', () => {
   test.use({ locale: 'he-IL' });
 
-  test('Home and the navigation are in Hebrew, while each tool stays English and left to right inside', async ({ page }) => {
+  test('Home, the navigation and the tools are in Hebrew, right to left', async ({ page }) => {
     await page.goto('/app');
     await expectDirection(page, 'he', 'rtl');
     await expect(page.getByRole('heading', { name: 'על מה עובדים היום?' })).toBeVisible();
@@ -110,9 +111,46 @@ test.describe('the studio in Hebrew', () => {
     for (const label of ['בית', 'מדידה', 'לימוד', 'רשת', 'השוואה', 'צבע']) await expect(nav.getByRole('link', { name: label, exact: true })).toBeVisible();
     await page.getByRole('link', { name: /^יצירת רשת/ }).click();
     await expect(page).toHaveURL(/\/app\/grid$/);
-    await expect(page.getByRole('heading', { name: 'Create a Grid', level: 1 })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Create a Grid', level: 1 }).locator('xpath=ancestor::*[@dir][1]')).toHaveAttribute('dir', 'ltr');
+    const heading = page.getByRole('heading', { name: 'יצירת רשת', level: 1 });
+    await expect(heading).toBeVisible();
+    expect(await heading.evaluate((el) => getComputedStyle(el).direction)).toBe('rtl');
     await expect(nav.getByRole('link', { name: 'רשת', exact: true })).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('the five tools work in Hebrew, with their canvases left to right', async ({ page }) => {
+    const ltr = (selector: string) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).direction);
+    const upload = async (name: string) => {
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name }).first().click()]);
+      await chooser.setFiles(photo);
+    };
+
+    await page.goto('/app/grid');
+    await expect(page.getByRole('heading', { name: 'יצירת רשת', level: 1 })).toBeVisible();
+    await upload('להעלות תמונת ייחוס');
+    await expect(page.getByRole('button', { name: 'שמירת תמונת הרשת' }).first()).toBeVisible();
+    expect(await ltr('canvas')).toBe('ltr');
+
+    await page.goto('/app/study');
+    await expect(page.getByRole('heading', { name: 'לימוד ופישוט', level: 1 })).toBeVisible();
+    await upload('להעלות תמונת ייחוס');
+    await expect(page.getByRole('radio', { name: /ערכים/ })).toBeVisible();
+
+    await page.goto('/app/color');
+    await expect(page.getByRole('heading', { name: 'צבע וערבוב', level: 1 })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'הרמוניות' })).toBeVisible();
+
+    await page.goto('/app/measure');
+    await expect(page.getByRole('heading', { name: 'מדידה ותכנון', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'תכנון הפרופורציות' })).toBeVisible();
+    await upload('להעלות תמונת ייחוס');
+    // The photo and its measurement overlay sit in a left-to-right layer.
+    await expect(page.locator('main [dir="ltr"] img').first()).toBeVisible();
+
+    await page.goto('/app/compare');
+    await expect(page.getByRole('heading', { name: 'השוואה ותיקון', level: 1 })).toBeVisible();
+    await expect(page.getByText('הציור שלך').first()).toBeVisible();
+    // The small Hebrew hints under the English labels are for English pages only.
+    await expect(page.getByText('הציור שלי')).toHaveCount(0);
   });
 
   test('a tool introduces itself in Hebrew the first time it opens', async ({ browser }) => {
@@ -124,7 +162,7 @@ test.describe('the studio in Hebrew', () => {
     await expect(intro.getByText('איך זה עובד')).toBeVisible();
     await intro.getByRole('button', { name: 'ליצור רשת' }).click();
     await expect(intro).toBeHidden();
-    await expect(page.getByRole('heading', { name: 'Create a Grid', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'יצירת רשת', level: 1 })).toBeVisible();
     await context.close();
   });
 
@@ -191,6 +229,28 @@ test.describe('mobile', () => {
     await expect(page.getByRole('heading', { name: 'החשבון שלך', level: 1 })).toBeVisible();
     expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: test.info().outputPath('he-studio-account.png'), fullPage: true });
+    await context.close();
+  });
+
+  test('the five tools fit a phone in Hebrew', async ({ browser }) => {
+    // A Hebrew account that has seen every introduction.
+    const context = await browser.newContext({ baseURL: test.info().project.use.baseURL, storageState: 'e2e/.auth/user.json', locale: 'he-IL', ...phone });
+    const page = await context.newPage();
+    const tools: [string, string][] = [['measure', 'מדידה ותכנון'], ['study', 'לימוד ופישוט'], ['color', 'צבע וערבוב'], ['grid', 'יצירת רשת'], ['compare', 'השוואה ותיקון']];
+    for (const [path, title] of tools) {
+      await page.goto(`/app/${path}`);
+      await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible();
+      expect(await noSideScroll(page), path).toBeLessThanOrEqual(0);
+      // A photo loaded in one tool opens in the others, so upload only where it is asked for.
+      const uploadButton = page.getByRole('button', { name: 'להעלות תמונת ייחוס' }).first();
+      if (await uploadButton.isVisible()) {
+        const [chooser] = await Promise.all([page.waitForEvent('filechooser'), uploadButton.click()]);
+        await chooser.setFiles(photo);
+        await page.waitForTimeout(400);
+        expect(await noSideScroll(page), `${path} with a photo`).toBeLessThanOrEqual(0);
+      }
+      await page.screenshot({ path: test.info().outputPath(`he-tool-${path}.png`), fullPage: true });
+    }
     await context.close();
   });
 

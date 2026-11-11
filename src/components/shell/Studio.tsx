@@ -18,7 +18,6 @@ import GridTab from '@/components/grid/GridTab';
 import HomeScreen from '@/components/shell/HomeScreen';
 import ProfileScreen from '@/components/shell/ProfileScreen';
 import PlansScreen from '@/components/shell/PlansScreen';
-import { ToolFrame } from '@/components/shell/ToolFrame';
 import { ToolIntroHost } from '@/components/shell/ToolIntro';
 import { ToolOpenTracker } from '@/components/shell/ToolOpenTracker';
 import { BottomNav, TopNav } from '@/components/shell/AppNav';
@@ -146,40 +145,34 @@ function Workspace() {
       className="flex flex-col overflow-hidden bg-background"
       style={{ height: 'var(--app-height, 100vh)', paddingTop: 'env(safe-area-inset-top)' }}
     >
-      {/* The guided tours belong to the tools (still English inside). */}
-      <ToolFrame>
-        <OnboardingHost />
-      </ToolFrame>
+      <OnboardingHost />
       <ToolIntroHost />
       <ToolOpenTracker />
       {!isMobile && <TopNav />}
       {/* min-w-0 on every tool root: a flex item otherwise grows to its
-          content (e.g. a full-resolution image) and pushes controls offscreen.
-          The tool roots sit inside ToolFrame, which has no box of its own. */}
-      <main className="flex min-h-0 min-w-0 flex-1 [&>*]:min-w-0 [&>[data-tool-frame]>*]:min-w-0">
+          content (e.g. a full-resolution image) and pushes controls offscreen. */}
+      <main className="flex min-h-0 min-w-0 flex-1 [&>*]:min-w-0">
         {activeTab === 'home' && <HomeScreen />}
         {activeTab === 'profile' && <ProfileScreen />}
         {activeTab === 'plans' && <PlansScreen />}
         {/* Measure keeps all of its work in the persisted project store and
             listens for keyboard shortcuts on window, so it mounts only while
             visible rather than being kept alive. Grid is fully persisted too. */}
-        <ToolFrame>
-          {activeTab === 'measure' && <MeasureTab />}
-          {activeTab === 'grid' && <GridTab />}
-          <KeepAlive active={activeTab === 'value'}><ValueTab /></KeepAlive>
-          <KeepAlive active={activeTab === 'color'}><ColorTab /></KeepAlive>
-          <KeepAlive active={activeTab === 'compare'}>
-            <Suspense
-              fallback={
-                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                  {t('loadingCompare')}
-                </div>
-              }
-            >
-              <CompareArt />
-            </Suspense>
-          </KeepAlive>
-        </ToolFrame>
+        {activeTab === 'measure' && <MeasureTab />}
+        {activeTab === 'grid' && <GridTab />}
+        <KeepAlive active={activeTab === 'value'}><ValueTab /></KeepAlive>
+        <KeepAlive active={activeTab === 'color'}><ColorTab /></KeepAlive>
+        <KeepAlive active={activeTab === 'compare'}>
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                {t('loadingCompare')}
+              </div>
+            }
+          >
+            <CompareArt />
+          </Suspense>
+        </KeepAlive>
       </main>
       {isMobile && !typing && <BottomNav />}
     </div>

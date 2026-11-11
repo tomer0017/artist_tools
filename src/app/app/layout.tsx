@@ -27,9 +27,9 @@ export default async function StudioLayout({ children }: { children: React.React
   const summary = await getAccountSummary(getDb(), toObjectId(user.id)!, { emailPasswordEnabled: emailPasswordAvailable() });
   if (!summary) redirect(signInPath(returnTo));
   await recordActiveDay(getDb(), user.id).catch(() => undefined);
-  // The studio's frame (Home, navigation, introductions, plans and account
-  // pages) follows the page language. Each tool's own workspace stays English
-  // and left to right until it is translated (ToolFrame, docs/adr/0009).
+  // The whole studio follows the page language: Home, navigation, the five
+  // tools, introductions, the plans and account pages (docs/adr/0009). Inside
+  // the tools, canvases and coordinate-based controls stay left to right.
   const locale = await getRequestLocale();
   return (
     <I18nProvider locale={locale} messages={messagesFor(locale)}>
