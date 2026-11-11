@@ -34,16 +34,17 @@ export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
 };
 
 /** The plan comparison as people read it (profile page, documentation). */
-export const FEATURE_MATRIX: { label: string; detail: string; features: FeatureId[] }[] = [
+export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'difference'; label: string; detail: string; features: FeatureId[] }[] = [
   {
+    id: 'tools',
     label: 'All five tools',
     detail: 'Measure & Plan, Study & Simplify, Color & Mixing, Create a Grid, Compare & Correct',
     features: ['tool.measure', 'tool.study', 'tool.color', 'tool.grid', 'tool.compare'],
   },
-  { label: 'Save images', detail: 'Grids, studies and comparisons as PNG', features: ['export.image'] },
-  { label: 'Comparison GIFs', detail: 'Opacity pulse and blink, small and medium sizes', features: ['export.gif'] },
-  { label: 'Large GIFs', detail: 'Up to 800 px, for sharing and printing', features: ['export.gif_large'] },
-  { label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs', features: ['export.gif_difference'] },
+  { id: 'images', label: 'Save images', detail: 'Grids, studies and comparisons as PNG', features: ['export.image'] },
+  { id: 'gifs', label: 'Comparison GIFs', detail: 'Opacity pulse and blink, small and medium sizes', features: ['export.gif'] },
+  { id: 'large', label: 'Large GIFs', detail: 'Up to 800 px, for sharing and printing', features: ['export.gif_large'] },
+  { id: 'difference', label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs', features: ['export.gif_difference'] },
 ];
 
 /**

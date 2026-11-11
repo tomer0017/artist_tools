@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useLocale, useTranslations } from 'use-intl';
 import { Check, Loader2 } from 'lucide-react';
+import { localizedPath } from '@/i18n/config';
 import { authClient } from '@/lib/auth-client';
 import { AuthCard, Notice, PasswordField, TextField } from './AuthCard';
-import { PRIMARY_BUTTON, authErrorMessage, verifiedReturn } from './ui';
+import { PRIMARY_BUTTON, authErrorKey, verifiedReturn } from './ui';
 
 function GoogleLogo() {
   return (
@@ -18,11 +20,6 @@ function GoogleLogo() {
   );
 }
 
-const INCLUDED = (emailPassword: boolean) => [
-  'All five tools, free with no time limit',
-  emailPassword ? 'Sign in with Google, or with your email and a password' : 'No password: Google signs you in',
-  'Your images stay on your device',
-];
 
 export default function SignInCard({
   callbackPath,
@@ -40,6 +37,9 @@ export default function SignInCard({
   /** Whether this server offers email + password sign-in. */
   emailPassword?: boolean;
 }) {
+  const t = useTranslations('auth');
+  const locale = useLocale();
+  const included = [t('includedTools'), emailPassword ? t('includedMethods') : t('includedGoogleOnly'), t('includedPrivacy')];
   const [state, setState] = useState<'idle' | 'redirecting' | 'failed'>('idle');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,35 +60,28 @@ export default function SignInCard({
     event.preventDefault();
     setEmailState({ status: 'busy' });
     const address = email.trim();
-    const result = await authClient.signIn.email({ email: address, password, callbackURL: verifiedReturn(callbackPath) });
+    const result = await authClient.signIn.email({ email: address, password, callbackURL: verifiedReturn(callbackPath, locale) });
     // On success the browser is already on its way back into the studio.
     if (!result.error) return;
     setPassword('');
     if (result.error.code === 'EMAIL_NOT_VERIFIED') setEmailState({ status: 'unverified', email: address });
-    else setEmailState({ status: 'error', message: authErrorMessage(result.error) });
+    else setEmailState({ status: 'error', message: t(`errors.${authErrorKey(result.error)}`) });
   }
 
-  const message = state === 'failed' ? 'Could not reach Google sign-in. Check your connection and try again.' : error;
-  const createAccount = `/sign-up?callbackURL=${encodeURIComponent(callbackPath)}`;
+  const message = state === 'failed' ? t('googleUnreachable') : error;
+  const createAccount = `${localizedPath('/sign-up', locale)}?callbackURL=${encodeURIComponent(callbackPath)}`;
 
   return (
-    <AuthCard
-      title={registration === 'open' ? 'Sign in or create your free account' : 'Sign in to Studio Companion'}
-      lead={
-        registration === 'open'
-          ? 'Continue with Google. If you are new, your free account is created automatically; if you already have one, the same button signs you in.'
-          : 'Studio Companion is invite-only while we test it. Continue with Google: if your account has been invited, your free account is created automatically the first time.'
-      }
-    >
-      <ul className="mt-4 space-y-1.5" aria-label="What you get">
-        {INCLUDED(emailPassword).map((item) => (
+    <AuthCard title={registration === 'open' ? t('titleOpen') : t('titleInvite')} lead={registration === 'open' ? t('leadOpen') : t('leadInvite')}>
+      <ul className="mt-4 space-y-1.5" aria-label={t('whatYouGet')}>
+        {included.map((item) => (
           <li key={item} className="flex items-center gap-2 text-sm text-foreground">
             <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> {item}
           </li>
         ))}
       </ul>
 
-      {!available && <Notice tone="info">Sign-in is not set up on this server yet. Please check back soon.</Notice>}
+      {!available && <Notice tone="info">{t('notSetUp')}</Notice>}
       {message && <Notice tone="error">{message}</Notice>}
 
       <button
@@ -98,17 +91,17 @@ export default function SignInCard({
         className="mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white px-4 text-[15px] font-semibold text-neutral-900 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
       >
         {state === 'redirecting' ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <GoogleLogo />}
-        {state === 'redirecting' ? 'Opening Google…' : 'Continue with Google'}
+        {state === 'redirecting' ? t('openingGoogle') : t('continueGoogle')}
       </button>
 
       {emailPassword && (
         <>
           <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-wider text-muted-foreground" aria-hidden="true">
-            <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+            <span className="h-px flex-1 bg-border" /> {t('or')} <span className="h-px flex-1 bg-border" />
           </div>
-          <form onSubmit={signInWithEmail} aria-label="Sign in with email" className="space-y-4" noValidate>
+          <form onSubmit={signInWithEmail} aria-label={t('signInWithEmail')} className="space-y-4" noValidate>
             <TextField
-              label="Email address"
+              label={t('email')}
               type="email"
               name="email"
               autoComplete="username"
@@ -116,46 +109,46 @@ export default function SignInCard({
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
+              dir="ltr"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-            <PasswordField label="Password" name="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-            <div className="-mt-1 text-right">
-              <Link href="/forgot-password" className="text-sm font-medium text-primary underline-offset-2 hover:underline">
-                Forgot password?
+            <PasswordField label={t('password')} name="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+            <div className="-mt-1 text-end">
+              <Link href={localizedPath('/forgot-password', locale)} className="text-sm font-medium text-primary underline-offset-2 hover:underline">
+                {t('forgot')}
               </Link>
             </div>
             <button type="submit" disabled={emailState.status === 'busy' || !email.trim() || !password} className={PRIMARY_BUTTON}>
               {emailState.status === 'busy' && <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />}
-              {emailState.status === 'busy' ? 'Signing in…' : 'Sign in'}
+              {emailState.status === 'busy' ? t('signingIn') : t('signIn')}
             </button>
           </form>
           {emailState.status === 'error' && <Notice tone="error">{emailState.message}</Notice>}
           {emailState.status === 'unverified' && (
-            <Notice tone="info">
-              Please confirm your email address first. We have sent a new link to {emailState.email}; it works for 24 hours. If it does not arrive,
-              check your spam folder.
-            </Notice>
+            <Notice tone="info">{t('unverified', { email: emailState.email })}</Notice>
           )}
           <p className="mt-5 text-sm text-muted-foreground">
-            New to Studio Companion?{' '}
+            {t('newHere')}{' '}
             <Link href={createAccount} className="font-medium text-primary underline-offset-2 hover:underline">
-              Create an account
+              {t('createAccount')}
             </Link>
           </p>
         </>
       )}
 
       <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
-        {emailPassword ? 'With Google, we use your name, email address and profile picture from Google to create your account.' : 'We use your name, email address and profile picture from Google to create your account.'}{' '}
-        Signing in never subscribes you to marketing emails.
+        {emailPassword ? t('googleDataNoteWithEmail') : t('googleDataNote')} {t('noMarketing')}
       </p>
       <p className="mt-3 text-xs text-muted-foreground">
-        Free now, Pro coming soon:{' '}
-        <Link href="/pricing" className="font-medium text-primary underline-offset-2 hover:underline">
-          compare plans
-        </Link>
+        {t.rich('plansLink', {
+          link: (chunks) => (
+            <Link href={localizedPath('/pricing', locale)} className="font-medium text-primary underline-offset-2 hover:underline">
+              {chunks}
+            </Link>
+          ),
+        })}
       </p>
     </AuthCard>
   );

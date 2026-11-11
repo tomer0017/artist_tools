@@ -67,6 +67,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "use-intl": "4.14.9",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -93,5 +94,10 @@
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "icu-minify": "4.14.9",
+    "@formatjs/icu-messageformat-parser": "3.5.18",
+    "@formatjs/icu-skeleton-parser": "2.1.11"
   }
 }

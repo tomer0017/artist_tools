@@ -1,15 +1,20 @@
 import type { Metadata, Viewport } from 'next';
+import { I18nProvider } from '@/i18n/client';
+import { dirOf } from '@/i18n/config';
+import { getRequestLocale, getT, messagesFor } from '@/i18n/server';
 import '@/index.css';
 
-const description = "A painter's toolkit for measuring, value studies, color mixing, and grid drawing.";
-
-export const metadata: Metadata = {
-  title: 'Studio Companion',
-  description,
-  authors: [{ name: 'Studio Companion' }],
-  openGraph: { title: 'Studio Companion', description, type: 'website' },
-  twitter: { card: 'summary', title: 'Studio Companion', description },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT('meta');
+  const description = t('siteDescription');
+  return {
+    title: 'Studio Companion',
+    description,
+    authors: [{ name: 'Studio Companion' }],
+    openGraph: { title: 'Studio Companion', description, type: 'website' },
+    twitter: { card: 'summary', title: 'Studio Companion', description },
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -18,10 +23,16 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// The page's language and direction follow the request (src/i18n/config.ts).
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getRequestLocale();
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang={locale} dir={dirOf(locale)}>
+      <body>
+        <I18nProvider locale={locale} messages={messagesFor(locale)}>
+          {children}
+        </I18nProvider>
+      </body>
     </html>
   );
 }

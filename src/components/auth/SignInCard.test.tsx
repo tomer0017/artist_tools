@@ -1,6 +1,19 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { render as rtlRender, screen } from '@testing-library/react';
+import { I18nProvider } from '@/i18n/client';
+import { en } from '@/i18n/messages/en';
+import { he } from '@/i18n/messages/he';
 import SignInCard from './SignInCard';
+
+// The language switch calls a server action; components under test only need it to exist.
+vi.mock('@/app/locale-actions', () => ({ chooseLocale: vi.fn(async () => ({ ok: true })) }));
+
+const render = (ui: React.ReactElement, locale: 'en' | 'he' = 'en') =>
+  rtlRender(
+    <I18nProvider locale={locale} messages={locale === 'he' ? he : en}>
+      {ui}
+    </I18nProvider>,
+  );
 
 describe('SignInCard', () => {
   it('offers Google sign-in when the server has it configured', () => {
@@ -51,5 +64,16 @@ describe('SignInCard', () => {
     expect(screen.getByText(/invite-only while we test it/)).toBeInTheDocument();
     expect(screen.getByText(/your free account is created automatically the first time/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'compare plans' })).toHaveAttribute('href', '/pricing');
+  });
+
+  it('speaks Hebrew on Hebrew pages, with localized links and an email field that stays left-to-right', () => {
+    render(<SignInCard callbackPath="/app" available error={null} registration="invite" emailPassword />, 'he');
+    expect(screen.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'כניסה עם Google' })).toBeEnabled();
+    expect(screen.getByLabelText('כתובת אימייל')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByRole('link', { name: 'שכחת את הסיסמה?' })).toHaveAttribute('href', '/he/forgot-password');
+    expect(screen.getByRole('link', { name: 'יצירת חשבון' })).toHaveAttribute('href', '/he/sign-up?callbackURL=%2Fapp');
+    expect(screen.getByRole('link', { name: 'השוואת מסלולים' })).toHaveAttribute('href', '/he/pricing');
+    expect(screen.getByRole('group', { name: 'בחירת שפה' })).toBeInTheDocument();
   });
 });

@@ -4,7 +4,8 @@ import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { APIError, createAuthMiddleware, isAPIError } from 'better-auth/api';
 import { nextCookies } from 'better-auth/next-js';
 import type { Db, MongoClient } from 'mongodb';
-import { DEFAULT_CURRENCY, DEFAULT_LOCALE } from '@/lib/locale';
+import { LOCALE_COOKIE, localeFromAcceptLanguage, localizedPath } from '@/i18n/config';
+import { DEFAULT_CURRENCY, DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/locale';
 import { authConfig, type SignupPolicy } from '@/server/env';
 import { getMongo } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
@@ -13,7 +14,7 @@ import { trackEvent } from '@/server/analytics';
 import { runInBackground } from '@/server/background';
 import { log } from '@/server/log';
 import { createMailer, type Mailer } from '@/server/mail/mailer';
-import { mailTemplates } from '@/server/mail/templates';
+import { mailTemplates, type RenderedMail } from '@/server/mail/templates';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MESSAGES, PASSWORD_MIN_LENGTH, checkPassword } from '@/server/security/password-policy';
 import { THROTTLES, clearThrottle, consumeThrottle, throttleCount } from '@/server/security/throttle';
 
@@ -69,6 +70,16 @@ export function signupAllowed(
   return policy.invited.includes(user.email.trim().toLowerCase());
 }
 
+/** The language a request asks for: the language cookie, else Accept-Language, else English. */
+function requestLocale(headers: Headers | null): Locale {
+  const cookie = headers
+    ?.get('cookie')
+    ?.split(';')
+    .map((part) => part.trim().split('='))
+    .find(([name]) => name === LOCALE_COOKIE)?.[1];
+  return isLocale(cookie) ? cookie : (localeFromAcceptLanguage(headers?.get('accept-language')) ?? DEFAULT_LOCALE);
+}
+
 /** The sign-in method behind a Better Auth request, from its endpoint path. */
 const methodOf = (path: string | undefined) =>
   path === '/sign-in/email' ? 'password' : path === '/verify-email' ? 'email_link' : path?.startsWith('/callback/') ? 'google' : 'other';
@@ -95,6 +106,13 @@ export function createAuth(deps: AuthDeps) {
   const appURL = new URL(deps.baseURL).origin;
   const users = () => collections(db).users;
 
+  /** The language an account's emails are written in, and its pages' addresses in that language. */
+  const localeOf = (user: unknown) => (user as { locale?: unknown } | null)?.locale;
+  const pageFor = (user: unknown, path: string) => {
+    const locale = localeOf(user);
+    return localizedPath(path, isLocale(locale) ? locale : DEFAULT_LOCALE);
+  };
+
   /** Sign-in methods an account has, for messages that tell people how they sign in. */
   async function methodsOf(userId: string) {
     const accounts = await collections(db).accounts.find({ userId: toObjectId(userId)! }, { projection: { providerId: 1 } }).toArray();
@@ -103,7 +121,7 @@ export function createAuth(deps: AuthDeps) {
 
   // Mail goes out in the background: a response takes the same time whether
   // or not the address has an account.
-  const send = async (mail: ReturnType<(typeof mailTemplates)[keyof typeof mailTemplates]>, user: { email?: string | null; id?: string | null }) => {
+  const send = async (mail: RenderedMail, user: { email?: string | null; id?: string | null }) => {
     if (user.email) await mailer.deliver(mail, { address: user.email, userId: user.id ?? null });
   };
 
@@ -132,14 +150,20 @@ export function createAuth(deps: AuthDeps) {
           resetPasswordTokenExpiresIn: 30 * 60,
           revokeSessionsOnPasswordReset: true,
           sendResetPassword: async ({ user, token }) => {
-            await send(mailTemplates.resetPassword(user.name, `${appURL}/reset-password?token=${encodeURIComponent(token)}`), user);
+            await send(mailTemplates(localeOf(user)).resetPassword(user.name, `${appURL}${pageFor(user, '/reset-password')}?token=${encodeURIComponent(token)}`), user);
           },
           onPasswordReset: async ({ user }) => {
             await safely('auth.audit_failed', () => recordAudit(db, { type: 'user.password_reset', userId: user.id, actor: `user:${user.id}`, metadata: {} }));
-            runInBackground(send(mailTemplates.passwordChanged(user.name, `${appURL}/sign-in`), user));
+            runInBackground(send(mailTemplates(localeOf(user)).passwordChanged(user.name, `${appURL}${pageFor(user, '/sign-in')}`), user));
           },
           onExistingUserSignUp: async ({ user }) => {
-            await send(mailTemplates.existingAccount(user.name, await methodsOf(user.id), { signIn: `${appURL}/sign-in`, reset: `${appURL}/forgot-password` }), user);
+            await send(
+              mailTemplates(localeOf(user)).existingAccount(user.name, await methodsOf(user.id), {
+                signIn: `${appURL}${pageFor(user, '/sign-in')}`,
+                reset: `${appURL}${pageFor(user, '/forgot-password')}`,
+              }),
+              user,
+            );
           },
         }
       : { enabled: false },
@@ -151,7 +175,7 @@ export function createAuth(deps: AuthDeps) {
           autoSignInAfterVerification: true,
           expiresIn: 24 * 60 * 60,
           sendVerificationEmail: async ({ user, url }) => {
-            await send(mailTemplates.verifyEmail(user.name, url), user);
+            await send(mailTemplates(localeOf(user)).verifyEmail(user.name, url), user);
           },
           afterEmailVerification: async (user) => {
             await safely('auth.audit_failed', () => recordAudit(db, { type: 'user.email_verified', userId: user.id, actor: `user:${user.id}`, metadata: {} }));
@@ -293,7 +317,7 @@ export function createAuth(deps: AuthDeps) {
         if (ctx.path === '/change-password' && !failed && ctx.context.session) {
           const user = ctx.context.session.user;
           await safely('auth.audit_failed', () => recordAudit(db, { type: 'user.password_changed', userId: user.id, actor: `user:${user.id}`, metadata: {} }));
-          runInBackground(send(mailTemplates.passwordChanged(user.name, `${appURL}/sign-in`), user));
+          runInBackground(send(mailTemplates(localeOf(user)).passwordChanged(user.name, `${appURL}${pageFor(user, '/sign-in')}`), user));
         }
       }),
     },
@@ -321,6 +345,10 @@ export function createAuth(deps: AuthDeps) {
               log.error('auth.signup_gate_bypassed', { method });
               return false;
             }
+            // The language of the page they signed up from (cookie, else the
+            // browser's), and the matching currency; both changeable later.
+            const locale = requestLocale(ctx?.headers ?? null);
+            return { data: { ...user, locale, currency: locale === 'he' ? 'ILS' : DEFAULT_CURRENCY } };
           },
           after: async (user, ctx) => {
             const provider = ctx?.path === '/sign-up/email' ? 'credential' : 'google';
@@ -361,12 +389,12 @@ export function createAuth(deps: AuthDeps) {
             // audited, and the owner is told. The first one is the sign-up.
             const userId = toObjectId(account.userId)!;
             if ((await collections(db).accounts.countDocuments({ userId })) < 2) return;
-            const user = await users().findOne({ _id: userId }, { projection: { name: 1, email: 1 } });
+            const user = await users().findOne({ _id: userId }, { projection: { name: 1, email: 1, locale: 1 } });
             if (!user) return;
             await safely('auth.audit_failed', () =>
               recordAudit(db, { type: 'account.linked', userId: account.userId, actor: `user:${account.userId}`, metadata: { provider: account.providerId } }),
             );
-            const mail = account.providerId === 'google' ? mailTemplates.googleConnected(user.name) : mailTemplates.passwordAdded(user.name);
+            const mail = account.providerId === 'google' ? mailTemplates(localeOf(user)).googleConnected(user.name) : mailTemplates(localeOf(user)).passwordAdded(user.name);
             runInBackground(send(mail, { email: user.email, id: account.userId }));
           },
         },

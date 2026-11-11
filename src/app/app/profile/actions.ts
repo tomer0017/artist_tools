@@ -3,6 +3,7 @@
 import { cookies, headers } from 'next/headers';
 import { z } from 'zod';
 import { CURRENCIES, LOCALES } from '@/lib/locale';
+import { LOCALE_COOKIE } from '@/i18n/config';
 import {
   deleteAccount,
   listDeviceSessions,
@@ -65,6 +66,8 @@ export async function saveProfile(input: unknown): Promise<ActionResult> {
     const result = await updateProfile(getDb(), who.userId, parsed.data);
     if (result === 'invalid') return { ok: false, reason: 'invalid', message: 'Use a name of 1 to 80 characters.' };
     if (result === 'not_found') return SIGNED_OUT;
+    // Public pages and emails follow the chosen language from now on.
+    if (parsed.data.locale) (await cookies()).set(LOCALE_COOKIE, parsed.data.locale, { path: '/', sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 });
     return { ok: true, message: result === 'updated' ? 'Saved.' : undefined };
   } catch (error) {
     log.error('account.profile_failed', { error });
@@ -170,7 +173,7 @@ export async function deleteMyAccount(input: unknown): Promise<ActionResult> {
     }
     if (result.status === 'not_found') return SIGNED_OUT;
     log.info('account.deleted', { userId: who.userId.toHexString() });
-    runInBackground(createMailer(db, authConfig().mail.transport).deliver(mailTemplates.accountDeleted(result.name), { address: result.email, userId: null }));
+    runInBackground(createMailer(db, authConfig().mail.transport).deliver(mailTemplates(result.locale).accountDeleted(result.name), { address: result.email, userId: null }));
     const jar = await cookies();
     for (const name of ['session_token', 'session_data', 'dont_remember']) {
       jar.delete(`${COOKIE_PREFIX}.${name}`);

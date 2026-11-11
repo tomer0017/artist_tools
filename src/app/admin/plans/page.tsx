@@ -49,7 +49,7 @@ export default async function AdminPlansPage() {
           viewer={{ email: admin.user.email, hasPassword: methods.password !== null, returnTo: '/admin/plans' }}
         />
       </div>
-      <CatalogEditor key={`${draft?.version ?? 'live'}-${draft?.updatedAt?.getTime() ?? 0}`} catalog={toForm(working)} editable={draft !== null} />
+      <CatalogEditor key={draft ? `draft-${draft.version}` : `live-${published?.version ?? 0}`} catalog={toForm(working)} editable={draft !== null} />
       <VersionHistory
         kind="catalog"
         versions={versions.map((v) => ({ version: v.version, status: v.status as 'published' | 'archived', publishedAt: v.publishedAt?.toISOString() ?? null, publishedBy: publishedByLabel(v.publishedBy, admin.id.toHexString()), note: v.note }))}

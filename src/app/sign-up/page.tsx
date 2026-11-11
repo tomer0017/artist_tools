@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
+import { getT } from '@/i18n/server';
 import { notFound, redirect } from 'next/navigation';
 import SignUpCard from '@/components/auth/SignUpCard';
 import { safeCallbackPath } from '@/lib/redirects';
 import { emailPasswordAvailable, registrationMode } from '@/server/auth';
 import { getSession } from '@/server/session';
 
-export const metadata: Metadata = {
-  title: 'Create your account · Studio Companion',
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT('meta');
+  return { title: t('signUpTitle'), robots: { index: false, follow: false }, alternates: { languages: { en: '/sign-up', he: '/he/sign-up' } } };
+}
 
 export const dynamic = 'force-dynamic';
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { Download, KeyRound, Laptop, Link2, LogOut, Pencil, Trash2 } from 'lucide-react';
 import { PasswordField } from '@/components/auth/AuthCard';
+import { LOCALE_COOKIE } from '@/i18n/config';
 import { authClient } from '@/lib/auth-client';
 import { clearDeviceWork } from '@/lib/device-data';
 import { CURRENCIES, CURRENCY_NAMES, LOCALES, LOCALE_NAMES, type Currency, type Locale } from '@/lib/locale';
@@ -103,6 +104,8 @@ export function PreferencesCard({ account, onChanged }: { account: StudioAccount
 
   async function save(change: { locale?: Locale; currency?: Currency }) {
     setBusy(true);
+    // Public pages and emails follow the language from now on (this browser too).
+    if (change.locale) document.cookie = `${LOCALE_COOKIE}=${change.locale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
     const result = await saveProfile(change);
     setBusy(false);
     setStatus(statusOf(result) ?? { tone: 'ok', text: 'Saved.' });

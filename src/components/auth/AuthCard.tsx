@@ -2,20 +2,28 @@
 
 import Link from 'next/link';
 import { useId, useState } from 'react';
+import { useLocale, useTranslations } from 'use-intl';
 import { Eye, EyeOff } from 'lucide-react';
+import { LanguageSwitch } from '@/components/common/LanguageSwitch';
 import { BrandMark } from '@/components/shell/BrandMark';
+import { localizedPath } from '@/i18n/config';
 
 // Shared pieces of the sign-in, sign-up and password pages: the card, labelled
 // fields sized for phones (16 px text, so iOS does not zoom on focus), and
 // plain-language messages for the server's error codes.
 
 export function AuthCard({ title, lead, children }: { title: string; lead?: React.ReactNode; children: React.ReactNode }) {
+  const t = useTranslations('common');
+  const locale = useLocale();
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-sm md:p-8">
-        <Link href="/" aria-label="Studio Companion home" className="inline-block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <BrandMark />
-        </Link>
+        <div className="flex items-start justify-between gap-3">
+          <Link href={localizedPath('/', locale)} aria-label={t('home')} className="inline-block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <BrandMark />
+          </Link>
+          <LanguageSwitch />
+        </div>
         <h1 className="mt-6 text-2xl font-bold tracking-tight text-foreground">{title}</h1>
         {lead && <div className="mt-2 text-sm leading-relaxed text-muted-foreground">{lead}</div>}
         {children}
@@ -63,6 +71,7 @@ export function PasswordField({
   ...input
 }: { label: string; error?: string | null; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   const id = useId();
+  const t = useTranslations('auth');
   const [visible, setVisible] = useState(false);
   const described = [error ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(' ') || undefined;
   return (
@@ -79,15 +88,15 @@ export function PasswordField({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          className={`${INPUT} pr-12`}
+          className={`${INPUT} pe-12`}
           {...input}
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          aria-label={visible ? 'Hide password' : 'Show password'}
+          aria-label={visible ? t('hidePassword') : t('showPassword')}
           aria-pressed={visible}
-          className="absolute right-1 top-1/2 mt-[3px] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="absolute end-1 top-1/2 mt-[3px] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {visible ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
         </button>

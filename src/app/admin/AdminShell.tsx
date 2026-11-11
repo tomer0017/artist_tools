@@ -21,7 +21,10 @@ export function AdminShell({ active, children }: { active: (typeof TABS)[number]
   const outbox = authConfig().mail.transport === 'outbox';
   const tabs = TABS.filter((tab) => tab.id !== 'mail' || outbox);
   return (
+    // English and left-to-right: the admin dashboard is not translated.
     <main
+      lang="en"
+      dir="ltr"
       className="min-h-[100dvh] bg-background px-4 pb-12 md:px-8"
       style={{ paddingTop: 'max(1.25rem, env(safe-area-inset-top))', paddingBottom: 'max(3rem, env(safe-area-inset-bottom))' }}
     >

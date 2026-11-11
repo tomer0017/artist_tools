@@ -51,7 +51,7 @@ export default async function AdminPricingPage() {
           viewer={{ email: admin.user.email, hasPassword: methods.password !== null, returnTo: '/admin/pricing' }}
         />
       </div>
-      <PricingEditor key={`${draft?.version ?? 'live'}-${draft?.updatedAt?.getTime() ?? 0}`} prices={(working.prices ?? []) as PriceRow[]} editable={draft !== null} />
+      <PricingEditor key={draft ? `draft-${draft.version}` : `live-${published?.version ?? 0}`} prices={(working.prices ?? []) as PriceRow[]} editable={draft !== null} />
       <VersionHistory
         kind="pricing"
         versions={versions.map((v) => ({ version: v.version, status: v.status as 'published' | 'archived', publishedAt: v.publishedAt?.toISOString() ?? null, publishedBy: publishedByLabel(v.publishedBy, admin.id.toHexString()), note: v.note }))}

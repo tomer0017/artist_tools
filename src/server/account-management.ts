@@ -191,7 +191,7 @@ export async function exportAccountData(db: Db, userId: ObjectId, now = new Date
 }
 
 export type DeletionResult =
-  | { status: 'deleted'; email: string; name: string }
+  | { status: 'deleted'; email: string; name: string; locale: string | null }
   | { status: 'last_admin' }
   | { status: 'active_subscription' }
   | { status: 'not_found' };
@@ -204,7 +204,7 @@ export type DeletionResult =
  */
 export async function deleteAccount(db: Db, userId: ObjectId): Promise<DeletionResult> {
   const c = collections(db);
-  const user = await c.users.findOne({ _id: userId }, { projection: { email: 1, name: 1, role: 1 } });
+  const user = await c.users.findOne({ _id: userId }, { projection: { email: 1, name: 1, role: 1, locale: 1 } });
   if (!user) return { status: 'not_found' };
   if (user.role === 'admin' && (await c.users.countDocuments({ _id: { $ne: userId }, role: 'admin', status: { $ne: 'suspended' } })) === 0) {
     return { status: 'last_admin' };
@@ -215,7 +215,7 @@ export async function deleteAccount(db: Db, userId: ObjectId): Promise<DeletionR
   }
   await recordAudit(db, { type: 'account.deleted', userId, actor: `user:${userId}`, metadata: { role: user.role === 'admin' ? 'admin' : 'user' } });
   await removeUserData(db, userId, user.email);
-  return { status: 'deleted', email: user.email, name: user.name };
+  return { status: 'deleted', email: user.email, name: user.name, locale: user.locale ?? null };
 }
 
 /** Remove a user and everything personal kept with them; audit events keep only the bare id. */

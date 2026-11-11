@@ -14,7 +14,7 @@ change its decision; a new record supersedes it.
 | [0006](0006-versioned-admin-configuration.md) | Admin configuration as versioned drafts and publications | Accepted |
 | [0007](0007-money-and-currencies.md) | Integer minor units, per-currency price entries | Accepted |
 | [0008](0008-provider-neutral-billing.md) | Provider-neutral billing; webhooks are the source of truth | Accepted |
-| [0009](0009-internationalisation.md) | Internationalisation and RTL strategy | Proposed (library verified in Phase 3) |
+| [0009](0009-internationalisation.md) | Internationalisation and RTL strategy (use-intl) | Accepted |
 | [0010](0010-account-deletion-export-and-audit-retention.md) | Account deletion, data export and audit retention | Accepted |
 | [0011](0011-first-party-privacy-preserving-analytics.md) | First-party, privacy-preserving analytics | Accepted |
 

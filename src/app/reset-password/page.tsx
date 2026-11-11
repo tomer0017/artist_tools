@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
+import { getT } from '@/i18n/server';
 import { notFound } from 'next/navigation';
 import { ResetPasswordCard } from '@/components/auth/PasswordResetCards';
 import { emailPasswordAvailable } from '@/server/auth';
 
-export const metadata: Metadata = {
-  title: 'Choose a new password · Studio Companion',
-  robots: { index: false, follow: false },
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT('meta');
   // The reset token is in this page's address: never send it on in a Referer.
-  referrer: 'no-referrer',
-};
+  return { title: t('resetTitle'), robots: { index: false, follow: false }, referrer: 'no-referrer' };
+}
 
 export const dynamic = 'force-dynamic';
 

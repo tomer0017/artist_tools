@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getT } from '@/i18n/server';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AuthCard, Notice } from '@/components/auth/AuthCard';
@@ -6,10 +7,10 @@ import { PRIMARY_BUTTON } from '@/components/auth/ui';
 import { safeCallbackPath, signInPath } from '@/lib/redirects';
 import { getSession } from '@/server/session';
 
-export const metadata: Metadata = {
-  title: 'Email address · Studio Companion',
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT('meta');
+  return { title: t('verifiedTitle'), robots: { index: false, follow: false } };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -23,19 +24,13 @@ export default async function EmailVerifiedPage({ searchParams }: { searchParams
   const next = safeCallbackPath(first(params.next));
   const error = first(params.error);
   if (!error && (await getSession())) redirect(next);
+  const t = await getT('auth');
 
   return (
-    <AuthCard title={error ? 'This link no longer works' : 'Email address confirmed'}>
-      {error ? (
-        <Notice tone="error">
-          The link has expired or was already used. Sign in with your email and password, and we will send you a new one if your address still
-          needs confirming.
-        </Notice>
-      ) : (
-        <Notice tone="success">Thank you: your email address is confirmed. Sign in to continue.</Notice>
-      )}
+    <AuthCard title={error ? t('verified.expiredTitle') : t('verified.title')}>
+      {error ? <Notice tone="error">{t('verified.expired')}</Notice> : <Notice tone="success">{t('verified.done')}</Notice>}
       <Link href={signInPath(next)} className={`mt-6 ${PRIMARY_BUTTON}`}>
-        Sign in
+        {t('signIn')}
       </Link>
     </AuthCard>
   );

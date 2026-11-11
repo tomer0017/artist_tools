@@ -1,6 +1,6 @@
 # 0009 — Internationalisation and RTL strategy
 
-**Status:** Proposed — library compatibility is verified at the start of Phase 3
+**Status:** Accepted (2026-11-11) — Phase 3a built; 3b (studio and tools) next
 
 ## Context
 English and Hebrew first (Hebrew is RTL), Spanish and French later. The studio
@@ -8,16 +8,27 @@ is a client-rendered app whose tools draw on canvases with pointer gestures;
 public pages need SEO.
 
 ## Decision
-- Library: `next-intl` if its current release supports the installed Next.js
-  16 App Router (checked against its release notes and our build before
-  adoption); otherwise the closest maintained alternative, recorded here.
-- Messages: one ICU dictionary per locale in the repo (`messages/en.json`,
-  `messages/he.json`); a test requires identical keys across locales and valid
-  ICU syntax.
-- Locale resolution: signed-in → `users.locale`; visitors → cookie, then
-  `Accept-Language`, then English. Public marketing pages are also served under
-  a locale prefix (`/he/…`) with `hreflang` alternates; the studio (`/app`) does
-  not use prefixes, so tool URLs stay stable.
+- Library: **`use-intl` 4.14.9**, the core of next-intl by the same
+  maintainer. next-intl 4.14 supports Next.js 16, but we do not use its
+  locale routing for the studio, and it now pulls native build tools
+  (`@swc/core`, `@parcel/watcher`) for message extraction we do not need.
+  Server components translate with `createTranslator` (`src/i18n/server.ts`);
+  client components with `useTranslations` under `I18nProvider`. Versions are
+  pinned (dependencies at least two weeks old; three fresh transitive packages
+  pinned with `overrides`).
+- Messages: one ICU dictionary per locale in the repo, as TypeScript
+  (`src/i18n/messages/en.ts` is the source; `he.ts` must have the same type,
+  so a missing key fails the build); a test also checks identical keys, valid
+  ICU in each language and the same placeholders and link tags.
+- Locale resolution: an explicit `/he/…` public address (the proxy rewrites
+  it and sets a trusted header) → signed-in `users.locale` → the `sc_locale`
+  cookie (set by the language switch) → `Accept-Language` → English. Public
+  pages (landing, pricing, sign-in/up, password pages) are served under `/he`
+  with `hreflang` alternates; the studio (`/app`) never uses prefixes, so tool
+  URLs stay stable. New accounts take the language (and ILS for Hebrew) of the
+  page they signed up from; account email follows `users.locale`.
+- Phase 3a keeps the studio and admin English and left-to-right inside
+  (`lang="en" dir="ltr"`) until their text is translated in 3b.
 - Direction: `lang` and `dir` on `<html>`; layouts use logical CSS properties
   (`ms-`, `me-`, `start-`, `end-`, `rtl:` variants). Canvas surfaces, their
   overlays and gesture math stay `dir="ltr"`; only surrounding text and

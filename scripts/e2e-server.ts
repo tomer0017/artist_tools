@@ -122,7 +122,7 @@ const server = spawn('node', ['.next/standalone/server.js'], {
     APP_ENV: 'test',
     AUTH_EMAIL_PASSWORD: 'on',
     MAIL_TRANSPORT: 'outbox',
-    AUTH_SIGNUP_ALLOWLIST: 'newcomer-chromium@e2e.test,phone-chromium@e2e.test,phone-iphone-webkit@e2e.test',
+    AUTH_SIGNUP_ALLOWLIST: 'newcomer-chromium@e2e.test,phone-chromium@e2e.test,phone-iphone-webkit@e2e.test,hebrew-chromium@e2e.test',
   },
 });
 
