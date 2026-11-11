@@ -14,6 +14,9 @@ const signedIn = { storageState: "e2e/.auth/user.json" };
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // On GitHub Actions, failures are also shown as annotations on the run page,
+  // which can be read without signing in (the full log cannot).
+  reporter: process.env.CI ? [["github"], ["list"]] : "list",
   use: {
     baseURL: external ?? "http://localhost:8080",
     trace: "on-first-retry",

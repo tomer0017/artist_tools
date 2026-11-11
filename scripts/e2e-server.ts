@@ -128,6 +128,10 @@ const server = spawn('node', ['.next/standalone/server.js'], {
     ...process.env,
     NODE_ENV: 'production',
     PORT: String(PORT),
+    // Loopback only, as in production (deploy/studio-companion.service). The
+    // standalone server listens on $HOSTNAME, which Docker sets to the
+    // container's name: in CI's container it never answered on localhost.
+    HOSTNAME: '127.0.0.1',
     MONGODB_URI: replSet.getUri(),
     MONGODB_DB: DB_NAME,
     BETTER_AUTH_URL: BASE_URL,
