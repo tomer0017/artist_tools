@@ -175,3 +175,19 @@ so older releases run against the newer schema.
   release script are in `/root/backups/phase1-20261110T233138Z/`.
 - **Off-site backups:** see `deploy/offsite-backups-plan.md` (plan, not yet
   implemented).
+
+## Smoke test after a release
+
+`deploy/smoke.sh <base-url> <commit>` checks over HTTPS, read-only, from any
+machine:
+
+- `/api/health` reports the expected commit;
+- the public pages answer in English, and in Hebrew right to left;
+- signed-out visitors are sent to sign-in from `/app` and `/admin`;
+- there is exactly one Content-Security-Policy, with a fresh nonce on every
+  request;
+- the auth API answers;
+- oversized request bodies are refused (413).
+
+It never signs in. Signing in as the owner, and as a returning user, is
+checked separately, by person and in the database records.
