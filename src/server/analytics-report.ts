@@ -4,6 +4,7 @@ import { TOOL_IDS, type ToolId } from '@/lib/account';
 import { FEATURES, type FeatureId } from '@/lib/plans';
 import { collections } from '@/server/db/collections';
 import { usagePeriod } from '@/server/usage';
+import { billingMetrics } from '@/server/billing/metrics';
 
 // ─── Product analytics for the admin dashboard (ADR-0011) ─────────────────────
 // Computed from first-party data only: account records, the allow-listed
@@ -35,7 +36,17 @@ export interface AnalyticsReport {
   /** Weekly cohorts: of the accounts registered that week, the share active 1–4 weeks later (null: not reached yet). */
   retention: { week: string; size: number; weeks: (number | null)[] }[];
   plans: { proAssigned: number; proGiven: number; paying: number };
-  billing: { live: boolean; mrrMinor: number; arrMinor: number; cancellations30: number; refunds30: number; failedPayments30: number };
+  /** Revenue from verified provider events (none until a provider is connected): per currency, minor units. */
+  billing: {
+    live: boolean;
+    mrrMinor: Record<string, number>;
+    arrMinor: Record<string, number>;
+    cancellations30: number;
+    churnRate30: number | null;
+    refunds30: number;
+    failedPayments30: number;
+    chargebacks30: number;
+  };
 }
 
 function series(days: number, today: Date, counts: Map<string, number>): DailyPoint[] {
@@ -122,7 +133,7 @@ export async function analyticsReport(db: Db, now = new Date()): Promise<Analyti
     c.accessGrants.distinct('userId', { userId: real, planId: 'pro', revokedAt: null, startsAt: { $lte: now }, endsAt: { $gt: now } }).then((ids) => ids.length),
     c.subscriptions.countDocuments({ userId: real, status: { $in: ['active', 'trialing', 'past_due'] } }),
   ]);
-  const cancellations30 = await c.subscriptions.countDocuments({ userId: real, canceledAt: { $gte: since30 } });
+  const money = await billingMetrics(db, { now });
 
   return {
     generatedAt: now.toISOString(),
@@ -139,7 +150,17 @@ export async function analyticsReport(db: Db, now = new Date()): Promise<Analyti
     }).filter((f) => f.uses > 0),
     retention,
     plans: { proAssigned, proGiven, paying },
-    // No payment provider yet: revenue, refunds and failed payments are zero by definition (Phase 4).
-    billing: { live: false, mrrMinor: 0, arrMinor: 0, cancellations30, refunds30: 0, failedPayments30: 0 },
+    // Computed from subscriptions and payments written by verified provider
+    // events; no provider is connected yet, so they stay empty until then.
+    billing: {
+      live: money.subscriptions.active + money.subscriptions.trialing + money.subscriptions.pastDue > 0,
+      mrrMinor: money.mrrMinor,
+      arrMinor: money.arrMinor,
+      cancellations30: money.last30Days.ended,
+      churnRate30: money.last30Days.churnRate,
+      refunds30: money.last30Days.refunds.count,
+      failedPayments30: money.last30Days.failedPayments,
+      chargebacks30: money.last30Days.chargebacks,
+    },
   };
 }

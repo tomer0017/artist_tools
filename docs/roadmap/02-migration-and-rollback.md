@@ -62,9 +62,11 @@ always preceded by a fresh dump of the damaged state for analysis.
   existing URLs keep working.
 
 ### Phase 4
-- New billing collections, empty. `subscriptions` gains fields; existing
-  documents (none today) are read with defaults. The mock provider is the only
-  one enabled until a real provider is authorised.
+- New billing collections (`billing_customers`, `payments`,
+  `checkout_sessions`, `reconciliation_runs`), empty, and new indexes only.
+  `subscriptions` gains optional fields; existing documents (none today) are
+  read with defaults. Rolling back the code leaves the empty collections
+  harmlessly in place. No provider is enabled until one is authorised.
 
 ## Restore drill (to run before Phase 2's first configuration migration)
 

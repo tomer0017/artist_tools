@@ -111,7 +111,7 @@ test.describe('Free account', () => {
   });
 
   test('admin pages do not exist for a regular user', async ({ page }) => {
-    for (const path of ['/admin', '/admin/activity', `/admin/users/${'0'.repeat(24)}`]) {
+    for (const path of ['/admin', '/admin/activity', '/admin/analytics', '/admin/plans', '/admin/pricing', '/admin/coupons', '/admin/billing', `/admin/users/${'0'.repeat(24)}`]) {
       expect((await page.goto(path))?.status()).toBe(404);
     }
   });

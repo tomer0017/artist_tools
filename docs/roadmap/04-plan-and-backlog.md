@@ -75,7 +75,7 @@ still invite-only. Test emails are read in `/admin/mail`.
 |---|---|---|
 | P4-01 | Provider research | Written comparison of Israeli PSPs and merchants of record with sources and dates: eligibility for an Israel-based business, currencies, subscriptions, tax handling, invoices, refunds, payouts, fees, integration effort; recommendation for owner decision |
 | P4-02 | Billing core | Provider adapter interface (checkout, portal, webhook verify, fetch subscription); state machine (trialing, active, past_due, canceled, expired, refunded); entitlement sync from server-written state only |
-| P4-03 | Mock provider | Full sandbox flow on staging: checkout page, signed webhooks (HMAC), renewals, failures, cancellations, refunds, chargebacks; no real money |
+| P4-03 | Provider sandbox *(replaces the planned mock provider, 2026-11-11)* | Once the owner chooses a provider and opens its sandbox: full flow on staging through the provider's own test checkout — renewals, failures, cancellations, refunds, chargebacks; no real money. Until then the core is tested with verified events built in the tests |
 | P4-04 | Webhooks | Raw-body signature verification, idempotent by event id, out-of-order safe (by provider timestamps/versions), audited |
 | P4-05 | Coupons at checkout | Server-side validation and redemption |
 | P4-06 | Reconciliation | Scheduled comparison of provider vs database; fixes drift; report in admin |

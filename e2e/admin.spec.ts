@@ -163,6 +163,18 @@ test.describe('configuration, coupons and analytics', () => {
     }
     await expect(page.getByRole('region', { name: 'Headline figures' })).toContainText('Accounts');
   });
+
+  test('shows billing read-only, with no payment provider connected', async ({ page }) => {
+    await page.goto('/admin/billing');
+    await expect(page.getByRole('heading', { level: 1, name: 'Billing' })).toBeVisible();
+    await expect(page.getByText('No payment provider is connected yet')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Headline figures' })).toContainText('MRR');
+    for (const name of ['Subscriptions', 'Payments and refunds', 'Notifications from the provider', 'Checks against the provider']) {
+      await expect(page.getByRole('heading', { name })).toBeVisible();
+    }
+    // Read-only: nothing on the page can change billing.
+    await expect(page.locator('main form, main button')).toHaveCount(0);
+  });
 });
 
 test.describe('an admin signed in an hour ago', () => {
@@ -186,7 +198,7 @@ test.describe('mobile', () => {
   test.use({ ...phone, ...as('admin') });
 
   test('analytics and plans fit a phone', async ({ page }) => {
-    for (const path of ['/admin/analytics', '/admin/plans', '/admin/coupons']) {
+    for (const path of ['/admin/analytics', '/admin/plans', '/admin/coupons', '/admin/billing']) {
       await page.goto(path);
       await expect(page.locator('h1')).toBeVisible();
       expect(await noSideScroll(page)).toBeLessThanOrEqual(0);

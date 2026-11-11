@@ -16,7 +16,7 @@ accounts, approvals), **legal** (qualified counsel).
 | R8 | Account enumeration | 2 | 2 | Generic sign-up/reset responses (library), same work for unknown users, per-address throttles without revealing existence | eng | P1 |
 | R9 | Email bombing a victim through sign-up/reset | 2 | 2 | Per-address send limits (3/h, 10/day), per-IP limits | eng | P1 |
 | R10 | Admin account compromise | 1 | 3 | Fresh-session re-authentication for sensitive admin actions, audit of every change, last-admin guard; 2FA for admins | eng | P2/P5 |
-| R11 | Payment provider unavailable to an Israeli merchant, or terms change | 2 | 3 | Verified research before integration; provider-neutral design (ADR-0008); mock provider until approved | owner, eng | P4 |
+| R11 | Payment provider unavailable to an Israeli merchant, or terms change | 2 | 3 | Verified research before integration (docs/billing/01-provider-research.md); provider-neutral design (ADR-0008); nothing enabled until approved | owner, eng | P4 |
 | R12 | Pro granted without payment (redirect/client tampering) | 2 | 3 | Entitlements only from server-written subscriptions from verified, idempotent webhooks + reconciliation | eng | P4 |
 | R13 | Browser-side enforcement of Pro options | 3 | 1 | Accepted: options without server cost; the server counts and authorises; nothing costly depends on the browser copy (documented) | — | accepted |
 | R14 | Shared device shows the previous person's local work | 2 | 2 | Offer "remove this device's work" at sign-out and on deletion (P1); per-account local namespaces with saved projects (P6) | eng | P1 partial |

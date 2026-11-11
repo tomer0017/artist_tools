@@ -1,3 +1,4 @@
+import { formatMoney } from '@/lib/money';
 import { PLAN_NAMES, isPlanId } from '@/lib/plans';
 import type { AdminAuditEvent } from '@/server/admin';
 
@@ -70,6 +71,14 @@ export function describeEvent(event: AdminAuditEvent): string {
       return `Account ${String(m.status ?? 'status changed')}`;
     case 'subscription.changed':
       return `Subscription ${String(m.status ?? 'changed')}`;
+    case 'billing.checkout_started':
+      return `Started checkout (${String(m.priceId ?? 'price')}${m.coupon ? `, coupon ${String(m.coupon)}` : ''})`;
+    case 'billing.payment':
+      return `${m.kind === 'refund' ? 'Refund' : m.kind === 'chargeback' ? 'Chargeback' : 'Payment'} ${m.status === 'failed' ? 'failed' : 'recorded'}: ${formatMoney(Number(m.amountMinor ?? 0), String(m.currency ?? 'USD') as 'USD')}`;
+    case 'billing.cancel_requested':
+      return m.mode === 'now' ? 'Asked to cancel the subscription now' : 'Asked to cancel the subscription at the end of the period';
+    case 'billing.reconciled':
+      return `Subscription corrected to match the payment provider (${String(m.fields ?? '')})`;
     default:
       return event.type;
   }
@@ -112,7 +121,7 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
       'account.status_changed',
     ],
   },
-  { id: 'billing', label: 'Billing', types: ['subscription.changed'] },
+  { id: 'billing', label: 'Billing', types: ['subscription.changed', 'billing.checkout_started', 'billing.payment', 'billing.cancel_requested', 'billing.reconciled'] },
 ];
 
 /** Who published a configuration version, as the reading admin sees it. */

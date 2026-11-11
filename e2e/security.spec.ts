@@ -56,7 +56,7 @@ test.describe('admin under the policy', () => {
 
   test('admin pages run without violations', async ({ page }) => {
     const seen = violations(page);
-    for (const path of ['/admin', '/admin/analytics', '/admin/plans', '/admin/activity']) {
+    for (const path of ['/admin', '/admin/analytics', '/admin/plans', '/admin/activity', '/admin/billing']) {
       await page.goto(path);
       await expect(page.locator('h1')).toBeVisible();
     }

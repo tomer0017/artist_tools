@@ -213,6 +213,6 @@ describe('analytics', () => {
     // Last week's cohort (2 accounts): 1 came back the following week.
     const cohort = r.retention.find((c) => c.size === 2)!;
     expect(cohort.weeks[0]).toBe(50);
-    expect(r.billing).toMatchObject({ live: false, mrrMinor: 0 });
+    expect(r.billing).toMatchObject({ live: false, mrrMinor: {}, arrMinor: {}, cancellations30: 0, churnRate30: null });
   });
 });

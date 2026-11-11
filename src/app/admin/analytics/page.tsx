@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { TOOLS } from '@/components/shell/tools';
 import { FEATURE_LABELS } from '@/lib/plans';
-import { formatMoney } from '@/lib/money';
 import { analyticsReport, type DailyPoint } from '@/server/analytics-report';
 import { getDb } from '@/server/db/client';
 import { requireAdmin } from '@/server/session';
 import { AdminShell } from '../AdminShell';
+import { Tile, moneyList } from '../figures';
 
 // Product analytics (ADR-0011): registrations, active accounts, tools and
 // features used, weekly retention, plans and (once billing is live) revenue.
@@ -15,16 +15,6 @@ export const metadata: Metadata = { title: 'Analytics · Studio Companion admin'
 export const dynamic = 'force-dynamic';
 
 const shortDay = (day: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
-
-function Tile({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
-      {detail && <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>}
-    </div>
-  );
-}
 
 /** One series of daily counts as thin bars on a shared baseline, with a hover label per day and a table view. */
 function DailyBars({ title, unit, points }: { title: string; unit: string; points: DailyPoint[] }) {
@@ -145,12 +135,14 @@ export default async function AdminAnalyticsPage() {
 
         <section aria-labelledby="billing-heading" className="rounded-2xl border border-border bg-card p-4 md:p-5">
           <h2 id="billing-heading" className="text-base font-semibold text-foreground">Revenue</h2>
-          <p className="text-xs text-muted-foreground">Billing is not live yet, so these are zero until a payment provider is connected.</p>
+          <p className="text-xs text-muted-foreground">
+            {r.billing.live ? 'From verified payment-provider events, per currency.' : 'No payment provider is connected yet, so there is no revenue to show.'}
+          </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <Tile label="MRR" value={formatMoney(r.billing.mrrMinor, 'USD')} />
-            <Tile label="ARR" value={formatMoney(r.billing.arrMinor, 'USD')} />
-            <Tile label="Cancellations (30 d)" value={r.billing.cancellations30} />
-            <Tile label="Refunds / failed (30 d)" value={`${r.billing.refunds30} / ${r.billing.failedPayments30}`} />
+            <Tile label="MRR" value={moneyList(r.billing.mrrMinor)} />
+            <Tile label="ARR" value={moneyList(r.billing.arrMinor)} />
+            <Tile label="Ended (30 d)" value={r.billing.cancellations30} detail={r.billing.churnRate30 === null ? undefined : `churn ${(r.billing.churnRate30 * 100).toFixed(1)}%`} />
+            <Tile label="Refunds / failed / disputes (30 d)" value={`${r.billing.refunds30} / ${r.billing.failedPayments30} / ${r.billing.chargebacks30}`} />
           </div>
         </section>
       </div>

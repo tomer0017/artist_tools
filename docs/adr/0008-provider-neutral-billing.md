@@ -1,6 +1,6 @@
 # 0008 — Provider-neutral billing; verified webhooks are the source of truth
 
-**Status:** Accepted (2026-11-10)
+**Status:** Accepted (2026-11-10), amended 2026-11-11
 
 ## Context
 The payment provider is not chosen: eligibility for an Israel-based business,
@@ -19,8 +19,11 @@ processor.
 - Pro access from billing comes only from `subscriptions` written by verified
   webhooks or reconciliation. A browser redirect only shows "processing".
 - Every event is processed once (`(provider, eventId)` unique) and audited.
-- A mock provider (HMAC-signed webhooks, sandbox checkout page) is the only
-  enabled provider until a real one is authorised.
+- No provider is enabled until the owner authorises one. There is no
+  simulated provider in the app *(amended 2026-11-11; the first version
+  planned a mock provider)*: the provider-neutral parts are tested with
+  verified events built in the tests, and the full lifecycle in the chosen
+  provider's sandbox.
 - No card data ever touches our servers (hosted checkout/portal only).
 
 ## Consequences

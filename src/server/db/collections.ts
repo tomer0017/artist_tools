@@ -177,6 +177,69 @@ export interface SubscriptionDoc {
   canceledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** The price (pricing configuration id) and what it costs, as the provider reported it. */
+  priceId?: string | null;
+  interval?: 'month' | 'year' | null;
+  currency?: string | null;
+  amountMinor?: number | null;
+  trialEndsAt?: Date | null;
+  couponCode?: string | null;
+  /** When the subscription ended for good (expired or cancelled immediately). */
+  endedAt?: Date | null;
+  /** Provider time of the newest event applied, so older events arriving late are not applied over it. */
+  lastEventAt?: Date | null;
+}
+
+/** The provider's customer record for an account (one per provider). */
+export interface BillingCustomerDoc {
+  _id?: ObjectId;
+  userId: ObjectId;
+  provider: string;
+  providerCustomerId: string;
+  createdAt: Date;
+}
+
+/** Money that moved: a charge, a refund or a chargeback, as the provider reported it. */
+export interface PaymentDoc {
+  _id?: ObjectId;
+  provider: string;
+  providerPaymentId: string;
+  userId: ObjectId;
+  providerSubscriptionId: string | null;
+  kind: 'charge' | 'refund' | 'chargeback';
+  status: 'succeeded' | 'failed';
+  amountMinor: number;
+  currency: string;
+  occurredAt: Date;
+  /** Receipt or invoice page at the provider, when it has one. */
+  receiptUrl: string | null;
+  createdAt: Date;
+}
+
+/** A checkout the server started for an account (the browser never says what it paid for). */
+export interface CheckoutSessionDoc {
+  _id: string;
+  userId: ObjectId;
+  provider: string;
+  priceId: string;
+  couponCode: string | null;
+  status: 'open' | 'completed' | 'expired';
+  createdAt: Date;
+  expiresAt: Date;
+  completedAt: Date | null;
+}
+
+/** One comparison of our subscriptions with the provider's (src/server/billing/reconcile.ts). */
+export interface ReconciliationRunDoc {
+  _id?: ObjectId;
+  provider: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  checked: number;
+  fixed: { providerSubscriptionId: string; field: string; ours: string | null; theirs: string | null }[];
+  /** Ours, but unknown to the provider: not changed, for an admin to look into. */
+  missing: string[];
+  actor: string;
 }
 
 export interface UsageDoc {
@@ -221,6 +284,10 @@ export type AuditEventType =
   | 'admin.config_published'
   | 'admin.coupon_created'
   | 'admin.coupon_status_changed'
+  | 'billing.checkout_started'
+  | 'billing.payment'
+  | 'billing.cancel_requested'
+  | 'billing.reconciled'
   | 'account.status_changed'
   | 'subscription.changed';
 
@@ -348,6 +415,10 @@ export function collections(db: Db) {
     accessGrants: db.collection<AccessGrantDoc>('access_grants'),
     configVersions: db.collection<ConfigVersionDoc>('config_versions'),
     coupons: db.collection<CouponDoc>('coupons'),
+    billingCustomers: db.collection<BillingCustomerDoc>('billing_customers'),
+    payments: db.collection<PaymentDoc>('payments'),
+    checkoutSessions: db.collection<CheckoutSessionDoc>('checkout_sessions'),
+    reconciliationRuns: db.collection<ReconciliationRunDoc>('reconciliation_runs'),
     couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
   };
 }

@@ -66,6 +66,16 @@ export const INDEXES: IndexPlan[] = [
   { collection: 'coupons', key: { code: 1 }, options: { name: 'coupon_code_unique', unique: true } },
   { collection: 'coupon_redemptions', key: { couponId: 1, userId: 1 }, options: { name: 'redemption_by_coupon_user' } },
   { collection: 'analytics_events', key: { userId: 1, name: 1, at: -1 }, options: { name: 'analytics_by_user' } },
+  // Billing (docs/billing/02-architecture.md): one customer per account and provider,
+  // one record per provider payment, checkouts that expire on their own.
+  { collection: 'billing_customers', key: { provider: 1, userId: 1 }, options: { name: 'billing_customer_unique', unique: true } },
+  { collection: 'payments', key: { provider: 1, providerPaymentId: 1 }, options: { name: 'payment_unique', unique: true } },
+  { collection: 'payments', key: { userId: 1, occurredAt: -1 }, options: { name: 'payments_by_user' } },
+  { collection: 'payments', key: { occurredAt: -1 }, options: { name: 'payments_by_time' } },
+  { collection: 'payment_events', key: { receivedAt: -1 }, options: { name: 'payment_events_by_time' } },
+  { collection: 'subscriptions', key: { updatedAt: -1 }, options: { name: 'subscriptions_by_updated' } },
+  { collection: 'checkout_sessions', key: { expiresAt: 1 }, options: { name: 'checkout_expiry_ttl', expireAfterSeconds: 7 * 24 * 60 * 60 } },
+  { collection: 'reconciliation_runs', key: { startedAt: -1 }, options: { name: 'reconciliation_by_time' } },
 ];
 
 export interface MigrationReport {

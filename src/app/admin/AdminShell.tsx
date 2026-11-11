@@ -12,6 +12,7 @@ const TABS = [
   { id: 'plans', href: '/admin/plans', label: 'Plans' },
   { id: 'pricing', href: '/admin/pricing', label: 'Pricing' },
   { id: 'coupons', href: '/admin/coupons', label: 'Coupons' },
+  { id: 'billing', href: '/admin/billing', label: 'Billing' },
   { id: 'activity', href: '/admin/activity', label: 'Activity' },
   // Only where test emails are kept instead of sent (staging, development).
   { id: 'mail', href: '/admin/mail', label: 'Test mail' },
