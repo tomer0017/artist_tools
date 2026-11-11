@@ -43,16 +43,26 @@ every migration was additive).
   - exactly one Content-Security-Policy (nginx adds none), with a new nonce
     on every request;
   - oversized bodies get 413.
-- **Not verified yet** (SSH timed out from the Mac after the release):
-  - the release log (dump file name, migration output);
-  - the new indexes in MongoDB;
-  - the owner account (role admin, active) and that existing sessions
-    survived;
-  - signing in as the owner and as a returning user. The owner can confirm
-    on the iPhone; the auth secret and session store did not change.
-  - Commands for the next SSH session:
-    `journalctl -u studio-release-3782e2c-b`, then the checks in
-    `deploy/README.md`.
+- **Verified on the server** (SSH, ~12:50Z):
+  - **The release log** of `studio-release-3782e2c-b`, which succeeded:
+    - install 10:23:58, build 10:26:35;
+    - database dump 10:29:10 (`mongodb-20261111T102910Z`);
+    - migration 10:29:11: "34 indexes ensured, 0 configuration kinds
+      published with defaults, 0 plans inserted, 0 plans updated, 0 accounts
+      set to Free, 0 given default language and currency", so no data
+      changed;
+    - healthy and switched at 10:29:22.
+  - **The billing indexes:** `subscriptions_by_updated`, `payments_by_time`,
+    `payment_events_by_time`, `billing_customer_unique`, `payment_unique`,
+    `payments_by_user`, `checkout_expiry_ttl`, `reconciliation_by_time`.
+    The billing collections are empty.
+  - **Configuration** unchanged: catalog v1 and pricing v1 published.
+  - **The owner account:** admin, active, Free, `en`/USD, Google only, still
+    the only user and admin, 4 live sessions. **A Google sign-in at
+    12:42:36Z, after the release**, so a returning sign-in works on
+    `3782e2c`.
+  - Releases kept: `3782e2c 56b9629 6616888 40cbe24 b2a06ea`. `9f16951`
+    was pruned (keep 5).
 
 ## Awaiting deployment
 

@@ -1,4 +1,10 @@
 import type { Messages } from './en';
+import { measureHe } from './tools/measure';
+import { studyHe } from './tools/study';
+import { colorHe } from './tools/color';
+import { gridHe } from './tools/grid';
+import { compareHe } from './tools/compare';
+import { commonHe } from './tools/common';
 
 // Hebrew messages. Same keys as English (the type enforces it). Phrasing is
 // gender-neutral: actions are nouns or infinitives ("כניסה", "ליצור חשבון"),
@@ -7,6 +13,12 @@ import type { Messages } from './en';
 // before launch.
 
 export const he: Messages = {
+  measureTool: measureHe,
+  studyTool: studyHe,
+  colorTool: colorHe,
+  gridTool: gridHe,
+  compareTool: compareHe,
+  toolsCommon: commonHe,
   meta: {
     siteDescription: 'ערכת כלים לציירים: מדידה, לימוד ערכים, ערבוב צבעים ורשת להעברת ציור.',
     pricingTitle: 'מסלולים · Studio Companion',

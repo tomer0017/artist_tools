@@ -1,9 +1,23 @@
+import { measureEn } from './tools/measure';
+import { studyEn } from './tools/study';
+import { colorEn } from './tools/color';
+import { gridEn } from './tools/grid';
+import { compareEn } from './tools/compare';
+import { commonEn } from './tools/common';
+
 // English messages: the source of truth for every key. Other languages must
 // provide exactly the same keys (enforced by the type in ./types and by the
 // completeness test). ICU message syntax: {name} placeholders, plural/select
 // blocks, and <tag>…</tag> for links in rich text.
 
 export const en = {
+  // The five tools' own workspaces and what they share (src/i18n/messages/tools/).
+  measureTool: measureEn,
+  studyTool: studyEn,
+  colorTool: colorEn,
+  gridTool: gridEn,
+  compareTool: compareEn,
+  toolsCommon: commonEn,
   meta: {
     siteDescription: "A painter's toolkit for measuring, value studies, color mixing, and grid drawing.",
     pricingTitle: 'Plans · Studio Companion',
