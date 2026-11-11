@@ -43,7 +43,7 @@ moderation).
 | Information disclosure: data of other accounts | APIs, export | Every query is scoped to the session's user id; the export contains only that account's data, with no tokens or hashes | — |
 | Denial of service | All endpoints | Request bodies capped while they stream in (413); rate limits on sign-in; atomic quotas | No edge rate limiting or WAF; a single VPS |
 | Repudiation | Admin and security actions | Audit log with actor, time and what changed; CSV export is itself audited; kept 24 months | Logs are on the same server (no off-site copy) |
-| Elevation through dependencies | Supply chain | Versions pinned; new versions must be at least two weeks old; lock file | `npm audit`: 15 production-tree findings, mostly build tools; zod and lodash are reachable at runtime but mitigated (see the launch checklist). No CI scanning. |
+| Elevation through dependencies | Supply chain | Versions pinned; new versions must be at least two weeks old; lock file; `docs/security/dependency-audit.md` | 8 findings left, all needing majors; only zod runs in production (mitigated: body caps, sessions checked first) |
 | Data loss | Database | Nightly dump (14 days); dump before every release migration; migrations are additive only | **No off-site backup, no restore drill yet** |
 | Server compromise | VPS | SSH keys only; fail2ban; MongoDB on localhost; secrets in root-only environment files | No intrusion detection or monitoring. CloudPanel and other sites share the server. |
 

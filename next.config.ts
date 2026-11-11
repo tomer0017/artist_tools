@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
   // tools behave exactly as before the migration.
   reactStrictMode: false,
   poweredByHeader: false,
+  // Server action bodies are small (the largest is an admin's plan or price
+  // document, ~10 KB); 128 KB instead of the default 1 MB bounds the work an
+  // oversized request can cause (docs/security/dependency-audit.md).
+  experimental: { serverActions: { bodySizeLimit: '128kb' } },
   // Baseline browser protections for every response. The first three match
   // what CloudPanel's nginx adds for every site (/etc/nginx/global_settings),
   // so the duplicates agree; HSTS is honoured by browsers over HTTPS only.

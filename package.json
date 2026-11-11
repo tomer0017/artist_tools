@@ -75,7 +75,6 @@
     "@eslint/js": "^9.32.0",
     "@next/eslint-plugin-next": "^16.4.6",
     "@playwright/test": "^1.57.0",
-    "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^22.16.5",
@@ -100,6 +99,24 @@
     "icu-minify": "4.14.9",
     "@formatjs/icu-messageformat-parser": "3.5.18",
     "@formatjs/icu-skeleton-parser": "2.1.11",
-    "axe-core": "4.14.0"
+    "axe-core": "4.14.0",
+    "@humanfs/node": "0.16.8",
+    "ajv@^6": "6.14.0",
+    "brace-expansion@^1": "1.1.21",
+    "brace-expansion@^2": "2.1.7",
+    "browserslist": "4.28.7",
+    "flatted": "3.4.2",
+    "form-data": "4.0.6",
+    "js-yaml@^4": "4.3.2",
+    "lodash": "4.18.0",
+    "minimatch@^3": "3.1.4",
+    "picomatch@^2": "2.3.2",
+    "postcss-selector-parser@^6": "6.1.5",
+    "rollup": "4.59.0",
+    "source-map-js": "1.2.2",
+    "yaml@^2": "2.8.3",
+    "caniuse-lite": "1.0.30001819",
+    "electron-to-chromium": "1.5.467",
+    "node-releases": "2.0.60"
   }
 }

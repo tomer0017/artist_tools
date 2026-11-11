@@ -51,24 +51,15 @@ sign-off. Each gate is marked:
 | Rate limits, anti-enumeration, admin protections, audit log | Done (staging) | Unit and e2e tests |
 | Threat model | Done (draft) | `docs/security/threat-model.md` |
 | Incident response plan | Partial | `docs/security/incident-response.md`: contacts and notification rules to fill in |
-| Dependency audit clean | Open | 15 production-tree findings (see below) |
+| Dependency audit | Partial | 22 → 8 findings; the 8 left need major upgrades and are assessed one by one in `docs/security/dependency-audit.md` (only zod runs in production, mitigated) |
 | CI: type-check, lint, tests and audit on every push | Open | |
 | OWASP ASVS L2 review with evidence | Open | |
 | External penetration test | **Owner** (budget) | Recommended before billing |
 
-**The dependency findings (`npm audit --omit=dev`, 2026-11-11):**
-
-- **Build and test tools.** vitest and tinypool (2 critical); vite, rollup,
-  glob, minimatch, picomatch, brace-expansion and source-map-js (high);
-  esbuild, postcss-selector-parser and yaml (moderate). None of these run in
-  the server process.
-- **At runtime.** zod (high: memory exhaustion on oversized input — request
-  bodies are capped at 16–32 KB, which limits it) and lodash (high: in
-  functions we never call with user input).
-- **Plan.**
-  - Patch updates within the current ranges, at least two weeks old.
-  - Major upgrades: zod 4 (schemas to migrate) and vitest 4.
-  - Each upgrade gets its own commit, with the full test suite.
+**The dependency findings:** see `docs/security/dependency-audit.md`. 14 were
+fixed within their major versions, and 1 was removed (unused). Of the 8 left,
+only zod runs in production; it is mitigated by body caps and session checks,
+and its zod 4 migration is planned.
 
 ## Privacy and legal
 
