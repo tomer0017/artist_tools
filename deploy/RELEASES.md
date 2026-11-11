@@ -19,6 +19,10 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 | 2026-11-10 23:36 | `9f16951` | Phase 1: email/password, account management, data export and deletion (includes `3d16ac4`, `e4fc94e`, `c942f21`) | 1 account given language/currency defaults; new indexes. Env: `APP_ENV=staging`, `AUTH_EMAIL_PASSWORD=on`, `MAIL_TRANSPORT=outbox` (previous env file: `/root/backups/phase1-20261110T233138Z/`) | `mongodb-20261110T233626Z` |
 | 2026-11-10 16:3x | `77b92be` | Visitor journey, plans pages, tool introductions, Compare iPhone fix | — | `mongodb-20261110T163612Z` (manual) |
 
+Nightly backups: the first scheduled run after the cron fix was verified on
+the server on 2026-11-11 (`mongodb-20261111T014001Z`, 02:40 server time,
+logged by cron).
+
 Why staging moved from `77b92be` to `56b9629`: these are the five releases
 above, all made deliberately during the 2026-11-10/11 session, each after the
 full test suite passed. The owner's account (only user, only admin) was
@@ -35,8 +39,16 @@ up to date while the VPS is unreachable):
 
 | Commit | What | Data changes | Pushed to GitHub |
 |---|---|---|---|
-| `2785aa9` | Security: per-request CSP nonce (`'strict-dynamic'`), request body caps (413), `version.commit` in `/api/health`, absolute hreflang | none | not yet (GitHub unreachable from the Mac, 2026-11-11 ~09:00Z) |
-| `9e046a2` | Phase 4a: provider-neutral billing core (no provider connected), read-only `/admin/billing`, revenue per currency in `/admin/analytics` | new empty collections `billing_customers`, `payments`, `checkout_sessions`, `reconciliation_runs`; new indexes only | not yet |
+| `2785aa9` | Security: per-request CSP nonce (`'strict-dynamic'`), request body caps (413), `version.commit` in `/api/health`, absolute hreflang | none | yes |
+| `9e046a2` | Phase 4a: provider-neutral billing core (no provider connected), read-only `/admin/billing`, revenue per currency in `/admin/analytics` | new empty collections `billing_customers`, `payments`, `checkout_sessions`, `reconciliation_runs`; new indexes only | yes |
+| `677c3a4` | Docs: this list | none | yes |
+| `56d5f3c` | Phase 3b-1: the studio's frame (Home, navigation, introductions, account page) in English and Hebrew; tools stay English inside | none (Hebrew test accounts exist only in e2e) | yes |
+| `a58baa9` | Accessibility: automated WCAG checks; contrast, names, zoom outside the studio, labels | none | yes |
+| `c41c978` | Privacy inventory, legal drafts (docs only); nightly maintenance deletes analytics after 13 months and audit events after 24 | none at release; the nightly job starts pruning (nothing is old enough until 2027-12) | yes |
+
+Next release: `c41c978`. A release unit was ready to start twice on
+2026-11-11; both times the Mac could not reach the VPS (ports 22 and 443
+silent while GitHub answered), so nothing ran on the server.
 
 Checks for the next staging release, beyond the usual ones:
 - The CSP is new. After the switch, open the landing page, `/he`, sign-in
