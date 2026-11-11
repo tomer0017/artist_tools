@@ -7,9 +7,11 @@ import { publishedDocument, seedDefaults } from '@/server/config/versions';
 import { collections } from './collections';
 
 // Idempotent schema setup: safe to run on every deploy (`npm run db:migrate`).
-// Better Auth creates its own basic indexes (unique email and session token,
-// userId lookups); these are the constraints it does not cover plus the app's
-// own collections.
+// Better Auth's MongoDB adapter creates no indexes, so its collections' are
+// here too (unique email and session token, lookups), with the app's own.
+// A unique index cannot be created over duplicates: the migration then fails
+// and the release stops before switching (deploy/release.sh), with the dump
+// it took first.
 
 interface IndexPlan {
   collection: string;
@@ -20,6 +22,12 @@ interface IndexPlan {
 export const INDEXES: IndexPlan[] = [
   // One app account per Google identity, whatever happens to the email.
   { collection: 'accounts', key: { providerId: 1, accountId: 1 }, options: { name: 'provider_identity_unique', unique: true } },
+  // Better Auth's own lookups and uniqueness (found missing by the first restore drill, 2026-11-11).
+  { collection: 'users', key: { email: 1 }, options: { name: 'users_email_unique', unique: true } },
+  { collection: 'sessions', key: { token: 1 }, options: { name: 'sessions_token_unique', unique: true } },
+  { collection: 'sessions', key: { userId: 1 }, options: { name: 'sessions_by_user' } },
+  { collection: 'accounts', key: { userId: 1 }, options: { name: 'accounts_by_user' } },
+  { collection: 'verifications', key: { identifier: 1 }, options: { name: 'verifications_by_identifier' } },
   // Expired sessions and sign-in verifications delete themselves.
   { collection: 'sessions', key: { expiresAt: 1 }, options: { name: 'session_expiry_ttl', expireAfterSeconds: 0 } },
   { collection: 'verifications', key: { expiresAt: 1 }, options: { name: 'verification_expiry_ttl', expireAfterSeconds: 0 } },

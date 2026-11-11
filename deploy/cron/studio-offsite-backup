@@ -1,0 +1,4 @@
+# Off-site copy of the nightly MongoDB dump (docs/ops/backups.md): 30 minutes
+# after the dump at 02:40. Install as root with mode 0644 (cron ignores
+# group-writable files): install -m 0644 deploy/cron/studio-offsite-backup /etc/cron.d/
+10 3 * * * root /usr/local/sbin/studio-offsite-backup 2>&1 | logger -t studio-offsite-backup

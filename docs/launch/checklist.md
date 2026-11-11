@@ -53,7 +53,7 @@ sign-off. Each gate is marked:
 | Threat model | Done (draft) | `docs/security/threat-model.md` |
 | Incident response plan | Partial | `docs/security/incident-response.md`: contacts and notification rules to fill in |
 | Dependency audit | Partial | 22 → 8 findings; the 8 left need major upgrades and are assessed one by one in `docs/security/dependency-audit.md` (only zod runs in production, mitigated) |
-| CI: type-check, lint, tests and audit on every push | Open | |
+| CI: type-check, lint, tests and audit on every push | Done | `.github/workflows/ci.yml` |
 | OWASP ASVS L2 review with evidence | Open | |
 | External penetration test | **Owner** (budget) | Recommended before billing |
 
@@ -87,10 +87,10 @@ and its zod 4 migration is planned.
 | Gate | Status | Evidence or what is missing |
 |---|---|---|
 | Nightly database backup on the server | Done | First scheduled run verified: `mongodb-20261111T014001Z` |
-| Off-site encrypted backups | **Owner** (storage account) | `deploy/offsite-backups-plan.md` |
-| Restore drill (restore a dump into a scratch database and check it) | Open | |
-| Uptime monitoring and alerting | **Owner** (service) or self-hosted | |
-| Error reporting from browsers and the server | Open | |
+| Off-site encrypted backups | Built; **Owner** (B2 bucket, age key, healthchecks.io) | `deploy/backup-offsite.sh`; exact steps in `docs/ops/backups.md` |
+| Restore drill (restore a dump into a scratch database and check it) | Done (staging, 2026-11-11) | `deploy/restore-drill.sh`: restored in 4 s, counts OK; found and fixed the missing auth indexes |
+| Uptime monitoring and alerting | Built; **Owner** (merge `.github/workflows/uptime.yml` into the default branch, or use an external free monitor) | `docs/ops/monitoring.md` |
+| Error reporting from browsers and the server | Done (local) | First-party: `/admin/errors`, nothing personal stored |
 | Separate production environment and database | Open | Staging only so far |
 | Release process: dump, migrate, switch, health, verified commit | Done | `deploy/release.sh`, `deploy/RELEASES.md` |
 | GitHub Pages production unchanged until cutover | Done | Not touched |
