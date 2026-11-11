@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { useTranslations } from 'use-intl';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { BrandMark } from './BrandMark';
 import { AccountButton, AccountLine } from './account';
@@ -17,13 +18,15 @@ const HERO_FADE = 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 30
 
 export default function HomeScreen() {
   const isMobile = useIsMobile();
+  const t = useTranslations('studio');
+  const tl = useTranslations('landing');
   return (
     <div className="flex-1 overflow-y-auto overscroll-contain bg-background">
       <div className="mx-auto w-full max-w-6xl pb-8">
         {/* Hero */}
         <section className="relative overflow-hidden px-4 pb-5 pt-3 md:px-6 md:pb-8 md:pt-8 lg:px-8">
           <div
-            className="pointer-events-none absolute inset-y-0 right-0 w-[64%] md:w-[55%]"
+            className="pointer-events-none absolute inset-y-0 end-0 w-[64%] md:w-[55%] rtl:-scale-x-100"
             style={{ maskImage: HERO_FADE, WebkitMaskImage: HERO_FADE }}
           >
             <img
@@ -50,23 +53,23 @@ export default function HomeScreen() {
               </div>
             )}
             <h1 className="text-[28px] font-bold leading-[1.1] tracking-tight text-foreground md:text-[40px] lg:text-[46px]">
-              Your All-in-One
+              {tl('heroLine1')}
               <span className="relative block w-fit text-primary">
-                Art Studio
+                {tl('heroLine2')}
                 <svg viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true"
-                  className="absolute -bottom-1.5 left-0 h-2.5 w-[105%] text-primary md:-bottom-2 md:h-3">
+                  className="absolute -bottom-1.5 start-0 h-2.5 w-[105%] text-primary md:-bottom-2 md:h-3 rtl:-scale-x-100">
                   <path d="M2 9C50 3 120 1 198 6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                 </svg>
               </span>
             </h1>
             <p className="mt-4 max-w-[17rem] text-sm leading-relaxed text-foreground/80 md:mt-5 md:max-w-sm md:text-base">
-              Analyze, measure, plan and compare your artwork — all in one place.
+              {tl('heroLead')}
             </p>
           </div>
         </section>
 
         <h2 className="px-4 pb-2.5 text-sm font-semibold text-muted-foreground md:px-6 lg:px-8">
-          What do you want to work on?
+          {t('question')}
         </h2>
 
         {/* Tool cards: one column of wide cards on phones and tablets; on
@@ -80,7 +83,7 @@ export default function HomeScreen() {
         </ul>
 
         <p className="mt-6 px-4 text-center text-xs text-muted-foreground md:px-6">
-          Everything runs in your browser — your images never leave this device.
+          {t('privacy')}
         </p>
         <AccountLine />
       </div>
@@ -89,19 +92,22 @@ export default function HomeScreen() {
 }
 
 function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; eager: boolean }) {
-  const tool = TOOLS[id];
+  const t = useTranslations('studio');
+  const tt = useTranslations(`tools.${id}`);
   const art = TOOL_ART[id];
-  const Icon = tool.icon;
+  const Icon = TOOLS[id].icon;
+  const title = tt('title');
+  const description = tt('description');
   return (
     <Link
       href={pathForView(id)}
-      aria-label={`${tool.title}: ${tool.description}`}
-      className="group flex h-full items-stretch gap-3 rounded-2xl border border-border bg-card p-2 pr-2.5 shadow-sm transition-colors hover:border-primary/50 active:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:gap-5 md:p-2.5 md:pr-4 lg:flex-col lg:gap-0 lg:p-0"
+      aria-label={`${title}: ${description}`}
+      className="group flex h-full items-stretch gap-3 rounded-2xl border border-border bg-card p-2 pe-2.5 shadow-sm transition-colors hover:border-primary/50 active:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:gap-5 md:p-2.5 md:pe-4 lg:flex-col lg:gap-0 lg:p-0"
     >
       <div className={`relative aspect-[4/3] w-[38%] max-w-[260px] shrink-0 self-center overflow-hidden rounded-xl bg-secondary ${lead ? 'lg:aspect-[21/9]' : 'lg:aspect-[16/9]'} lg:w-full lg:max-w-none lg:rounded-b-none lg:rounded-t-2xl`}>
         <img
           src={art.src}
-          alt={art.alt}
+          alt={tt('alt')}
           width={art.width}
           height={art.height}
           loading={eager ? 'eager' : 'lazy'}
@@ -114,18 +120,18 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
         <div className="min-w-0 flex-1 py-1">
           <div className="flex items-center gap-2">
             <Icon className="h-[18px] w-[18px] shrink-0 text-primary md:h-6 md:w-6" aria-hidden="true" />
-            <h3 className="text-[15px] font-semibold leading-tight text-foreground md:text-xl">{tool.title}</h3>
+            <h3 className="text-[15px] font-semibold leading-tight text-foreground md:text-xl">{title}</h3>
           </div>
-          <p className="mt-1 text-[13px] leading-snug text-muted-foreground md:mt-1.5 md:text-[15px]">{tool.description}</p>
-          <ul className="mt-2.5 hidden flex-wrap gap-1.5 sm:flex" aria-label="Includes">
-            {tool.chips.map((chip) => (
+          <p className="mt-1 text-[13px] leading-snug text-muted-foreground md:mt-1.5 md:text-[15px]">{description}</p>
+          <ul className="mt-2.5 hidden flex-wrap gap-1.5 sm:flex" aria-label={t('includes')}>
+            {[tt('chip1'), tt('chip2'), tt('chip3')].map((chip) => (
               <li key={chip} className="rounded-full border border-border bg-secondary/50 px-2.5 py-1 text-xs text-foreground/80">
                 {chip}
               </li>
             ))}
           </ul>
         </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary lg:hidden" aria-hidden="true" />
+        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary rtl:-scale-x-100 rtl:group-hover:-translate-x-0.5 lg:hidden" aria-hidden="true" />
       </div>
     </Link>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useTranslations } from 'use-intl';
 import { PasswordField } from '@/components/auth/AuthCard';
 import { authClient } from '@/lib/auth-client';
 import type { ActionResult } from '@/app/app/profile/actions';
@@ -59,6 +60,8 @@ export function ReauthPanel({
   /** Where Google sign-in comes back to (an /app or /admin path). */
   returnTo?: string;
 }) {
+  const t = useTranslations('account');
+  const ta = useTranslations('auth');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export function ReauthPanel({
     setBusy(false);
     setPassword('');
     if (result.error) {
-      setError(result.error.code === 'INVALID_EMAIL_OR_PASSWORD' ? 'That password is not right.' : 'That did not work. Please try again.');
+      setError(result.error.code === 'INVALID_EMAIL_OR_PASSWORD' ? t('reauth.wrongPassword') : t('tryAgain'));
       return;
     }
     onConfirmed();
@@ -82,35 +85,33 @@ export function ReauthPanel({
     const result = await authClient.signIn.social({ provider: 'google', callbackURL: returnTo, errorCallbackURL: returnTo.split('?')[0] });
     if (result.error) {
       setBusy(false);
-      setError('Could not reach Google. Check your connection and try again.');
+      setError(t('methods.googleUnreachable'));
     }
   }
 
   return (
     <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
-      <p className="text-sm font-semibold text-foreground">Confirm it is you</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {hasPassword ? 'Enter your password to continue.' : 'Sign in with Google again to continue. You will come back to this page; then repeat the step.'}
-      </p>
+      <p className="text-sm font-semibold text-foreground">{t('reauth.title')}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{hasPassword ? t('reauth.leadPassword') : t('reauth.leadGoogle')}</p>
       {hasPassword ? (
-        <form onSubmit={withPassword} className="mt-3 space-y-3" aria-label="Confirm with your password">
-          <PasswordField label="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} error={error} />
+        <form onSubmit={withPassword} className="mt-3 space-y-3" aria-label={t('reauth.formLabel')}>
+          <PasswordField label={ta('password')} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} error={error} />
           <div className="flex flex-col gap-2 sm:flex-row">
             <button type="submit" disabled={busy || !password} className={PRIMARY_SMALL_BUTTON}>
-              <Busy busy={busy} label="Confirm" busyLabel="Checking…" />
+              <Busy busy={busy} label={t('reauth.confirm')} busyLabel={t('reauth.checking')} />
             </button>
             <button type="button" onClick={onCancel} className={SECONDARY_BUTTON}>
-              Cancel
+              {t('cancel')}
             </button>
           </div>
         </form>
       ) : (
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <button type="button" onClick={withGoogle} disabled={busy} className={PRIMARY_SMALL_BUTTON}>
-            <Busy busy={busy} label="Continue with Google" busyLabel="Opening Google…" />
+            <Busy busy={busy} label={ta('continueGoogle')} busyLabel={ta('openingGoogle')} />
           </button>
           <button type="button" onClick={onCancel} className={SECONDARY_BUTTON}>
-            Cancel
+            {t('cancel')}
           </button>
           {error && (
             <p role="alert" className="text-xs text-destructive">

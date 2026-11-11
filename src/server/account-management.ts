@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Db, ObjectId } from 'mongodb';
 import { isCurrency, isLocale, type Currency, type Locale } from '@/lib/locale';
-import { describeUserAgent, maskIp } from '@/lib/user-agent';
+import { describeUserAgent, maskIp, parseUserAgent } from '@/lib/user-agent';
 import { recordAudit } from '@/server/audit';
 import { collections } from '@/server/db/collections';
 
@@ -16,7 +16,10 @@ import { collections } from '@/server/db/collections';
 export interface DeviceSession {
   id: string;
   current: boolean;
+  /** "Safari on iPhone", in English; `browser` and `system` let the page word it in its language. */
   device: string;
+  browser: string | null;
+  system: string | null;
   /** Partly hidden, e.g. 203.0.113.x. */
   network: string | null;
   signedInAt: string;
@@ -32,6 +35,7 @@ export async function listDeviceSessions(db: Db, userId: ObjectId, currentToken:
     id: s._id.toHexString(),
     current: s.token === currentToken,
     device: describeUserAgent(s.userAgent),
+    ...parseUserAgent(s.userAgent),
     network: maskIp(s.ipAddress),
     signedInAt: s.createdAt.toISOString(),
     lastActiveAt: (s.updatedAt ?? s.createdAt).toISOString(),

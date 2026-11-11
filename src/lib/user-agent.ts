@@ -21,10 +21,18 @@ const SYSTEMS: [RegExp, string][] = [
   [/Linux/, 'Linux'],
 ];
 
+/** The browser and system names (product names, never translated), when recognised. */
+export function parseUserAgent(userAgent: string | null | undefined): { browser: string | null; system: string | null } {
+  if (!userAgent) return { browser: null, system: null };
+  return {
+    browser: BROWSERS.find(([pattern]) => pattern.test(userAgent))?.[1] ?? null,
+    system: SYSTEMS.find(([pattern]) => pattern.test(userAgent))?.[1] ?? null,
+  };
+}
+
+/** In English, for the data export ("Safari on iPhone"); the account page words it in its own language. */
 export function describeUserAgent(userAgent: string | null | undefined): string {
-  if (!userAgent) return 'Unknown device';
-  const browser = BROWSERS.find(([pattern]) => pattern.test(userAgent))?.[1];
-  const system = SYSTEMS.find(([pattern]) => pattern.test(userAgent))?.[1];
+  const { browser, system } = parseUserAgent(userAgent);
   if (browser && system) return `${browser} on ${system}`;
   return browser ?? system ?? 'Unknown device';
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'use-intl';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AccountSummary, ToolId } from '@/lib/account';
 import { clearDeviceWork } from '@/lib/device-data';
@@ -193,11 +194,12 @@ export function AccountAvatar({ account, size = 32 }: { account: Pick<StudioAcco
 /** The way into the account page: the person's avatar, top right. */
 export function AccountButton() {
   const state = useAccount();
+  const t = useTranslations('studio');
   if (!state) return null;
   return (
     <Link
       href={pathForView('profile')}
-      aria-label="Your account"
+      aria-label={t('yourAccount')}
       data-account-ui
       className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background/60 ring-1 ring-border/70 transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
@@ -210,14 +212,23 @@ export function AccountButton() {
 export function AccountLine() {
   const state = useAccount();
   const { signingOut, signOut } = useSignOut();
+  const t = useTranslations();
   if (!state) return null;
 
   return (
     <p data-account-line className="mt-2 px-4 text-center text-xs text-muted-foreground md:px-6">
-      Signed in as <span className="text-foreground/80">{state.account.email}</span>
+      {t.rich('studio.signedInAs', {
+        email: state.account.email,
+        // An address reads left to right inside Hebrew text too.
+        addr: (chunks) => (
+          <span dir="ltr" className="text-foreground/80">
+            {chunks}
+          </span>
+        ),
+      })}
       {' · '}
       <Link href={pathForView('plans')} className="font-medium text-primary underline-offset-2 hover:underline">
-        Plans
+        {t('common.plans')}
       </Link>
       {' · '}
       <button
@@ -226,7 +237,7 @@ export function AccountLine() {
         disabled={signingOut}
         className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
       >
-        {signingOut ? 'Signing out…' : 'Sign out'}
+        {signingOut ? t('studio.signingOut') : t('studio.signOut')}
       </button>
     </p>
   );

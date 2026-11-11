@@ -21,8 +21,8 @@ function leaves(tree: Tree, prefix = ''): Map<string, string> {
   return out;
 }
 
-/** Placeholder names and tag names a message uses, e.g. {email} and <link>. */
-const tokens = (message: string) => [...message.matchAll(/\{(\w+)[^}]*\}|<(\w+)>/g)].map((m) => m[1] ?? `<${m[2]}>`).sort();
+/** Placeholder names and tag names a message uses, e.g. {email}, {count, plural, …} and <link> (not the words inside plural branches). */
+const tokens = (message: string) => [...message.matchAll(/\{(\w+)\s*[,}]|<(\w+)>/g)].map((m) => m[1] ?? `<${m[2]}>`).sort();
 
 const english = leaves(en as unknown as Tree);
 const hebrew = leaves(he as unknown as Tree);

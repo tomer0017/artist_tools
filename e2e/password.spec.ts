@@ -136,13 +136,21 @@ test.describe('the account page', () => {
     await expect(profile.getByText('Edited Artist', { exact: true })).toBeVisible();
 
     const preferences = page.getByRole('region', { name: 'Preferences', exact: true });
-    await preferences.getByLabel('Language').selectOption('he');
-    await expect(preferences.getByRole('status')).toContainText('Saved.');
     await preferences.getByLabel('Currency').selectOption('ILS');
+    await expect(preferences.getByRole('status')).toContainText('Saved.');
     const news = preferences.getByRole('switch', { name: 'News by email' });
     await expect(news).toHaveAttribute('aria-checked', 'false');
     await news.click();
     await expect(news).toHaveAttribute('aria-checked', 'true');
+
+    await expect(page.getByRole('region', { name: 'Signed-in devices', exact: true }).getByText('This device')).toBeVisible();
+    const methods = page.getByRole('region', { name: 'Sign-in methods', exact: true });
+    await expect(methods).toContainText('Connected');
+    await expect(methods.getByRole('button', { name: 'Add a password' })).toBeVisible();
+
+    // A new language reloads the studio in it.
+    await preferences.getByLabel('Language').selectOption('he');
+    await expect(page.getByRole('heading', { name: 'החשבון שלך', level: 1 })).toBeVisible();
     await expect.poll(async () => (await (await page.request.get('/api/me')).json()).user).toMatchObject({
       name: 'Edited Artist',
       locale: 'he',
@@ -150,18 +158,13 @@ test.describe('the account page', () => {
       marketingConsent: true,
     });
 
-    await expect(page.getByRole('region', { name: 'Signed-in devices', exact: true }).getByText('This device')).toBeVisible();
-    const methods = page.getByRole('region', { name: 'Sign-in methods', exact: true });
-    await expect(methods).toContainText('Connected');
-    await expect(methods.getByRole('button', { name: 'Add a password' })).toBeVisible();
-
-    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download my data' }).click()]);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'הורדת הנתונים שלי' }).click()]);
     expect(download.suggestedFilename()).toMatch(/^studio-companion-account-\d{4}-\d{2}-\d{2}\.json$/);
     const data = JSON.parse(await readFile((await download.path())!, 'utf8'));
     expect(data.account).toMatchObject({ name: 'Edited Artist', language: 'he', currency: 'ILS', email: 'editor@e2e.test' });
     expect(data.marketingEmail).toMatchObject({ consent: true });
     expect(data.signInMethods).toEqual([expect.objectContaining({ method: 'google' })]);
-    await expect(page.getByRole('status').filter({ hasText: 'Your data was downloaded' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'הנתונים הורדו כקובץ JSON.' })).toBeVisible();
   });
 
   test('the test mail outbox does not exist for people who are not admins', async ({ page }) => {

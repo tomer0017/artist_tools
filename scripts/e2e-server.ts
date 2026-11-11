@@ -103,6 +103,12 @@ await seedSignedInUser(db, 'admin-settled', 'admin', 'free', false, ALL_TOOLS, 6
 await seedSignedInUser(db, 'grantee', 'user');
 await seedSignedInUser(db, 'suspendee', 'user');
 await seedSignedInUser(db, 'candidate', 'user');
+// Accounts set to Hebrew that have not seen the tool introductions yet (one per browser project, and one
+// whose language the i18n spec switches).
+for (const name of ['ivrit-chromium', 'ivrit-iphone-webkit', 'ivrit-switch']) {
+  await seedSignedInUser(db, name, 'user', 'free', false, []);
+  await db.collection('users').updateOne({ email: `${name}@e2e.test` }, { $set: { locale: 'he', currency: 'ILS' } });
+}
 await client.close();
 
 const server = spawn('node', ['.next/standalone/server.js'], {

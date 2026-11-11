@@ -365,5 +365,12 @@ export default function OnboardingOverlay() {
       <TourLayer steps={config.steps} step={step} onNext={next} onPrev={prev} onClose={close} reduced={reduced} />
     );
 
-  return createPortal(node, document.body);
+  // Rendered outside the studio's tree: keep the tours English and left to
+  // right, like the tools they explain, whatever the page language.
+  return createPortal(
+    <div lang="en" dir="ltr" style={{ display: 'contents' }}>
+      {node}
+    </div>,
+    document.body,
+  );
 }
