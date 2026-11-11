@@ -10,18 +10,25 @@ import { RETURN_TO_HEADER } from '@/lib/redirects';
 
 /**
  * Hebrew public pages live under /he (for search engines and shared links):
- * they are served from the same pages with the language set by this header,
- * which is always overwritten here, and the choice is remembered in a cookie.
- * Anything else under /he goes to its unprefixed address.
+ * src/app/he/* re-exports the same pages, and this header — always set here,
+ * never taken from the client — tells them to render in Hebrew; the choice is
+ * remembered in a cookie. Anything else under /he goes to its unprefixed
+ * address. (No URL rewrite: behind nginx a rewrite became an https proxy
+ * request to the app's own plain-http port.)
  */
 function localePrefix(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const rest = pathname === '/he' ? '/' : pathname.slice(3);
-  const url = request.nextUrl.clone();
-  url.pathname = rest;
-  const response = (PREFIXABLE_PATHS as readonly string[]).includes(rest)
-    ? NextResponse.rewrite(url, { request: { headers: withHeader(request, LOCALE_HEADER, 'he') } })
-    : NextResponse.redirect(url);
+  let response: NextResponse;
+  if ((PREFIXABLE_PATHS as readonly string[]).includes(rest)) {
+    const headers = withHeader(request, LOCALE_HEADER, 'he');
+    headers.delete(RETURN_TO_HEADER);
+    response = NextResponse.next({ request: { headers } });
+  } else {
+    const url = request.nextUrl.clone();
+    url.pathname = rest;
+    response = NextResponse.redirect(url);
+  }
   // Visiting a /he page remembers Hebrew; a server action posted from one
   // (e.g. the language switch choosing English) must not undo its own choice.
   if (request.method === 'GET') response.cookies.set(LOCALE_COOKIE, 'he', { path: '/', sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 });

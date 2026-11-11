@@ -26,7 +26,10 @@ async function linkFromOutbox(browser: Browser, address: string, subject: string
 }
 
 test.describe('Hebrew public pages', () => {
-  test.use({ storageState: signedOut, extraHTTPHeaders: { 'x-real-ip': '10.88.0.1' } });
+  // Forwarded headers as nginx sends them. (Behind the real nginx, /he once
+  // failed in a way these local runs could not reproduce; staging is checked
+  // directly after every deploy.)
+  test.use({ storageState: signedOut, extraHTTPHeaders: { 'x-real-ip': '10.88.0.1', 'x-forwarded-proto': 'https' } });
 
   test('/he is the landing page in Hebrew, right to left, with language alternates for search engines', async ({ page }) => {
     await page.goto('/he');

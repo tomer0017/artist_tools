@@ -1007,8 +1007,9 @@ auto-align).
 - **Translated (Phase 3a):** landing, plans (`/pricing` and the comparison),
   sign-in, sign-up, forgot/reset password, email-confirmed pages, sign-in
   errors, account emails (by `users.locale`; Hebrew emails are RTL). Public
-  pages also live under `/he` (`/he`, `/he/pricing`, `/he/sign-in`…) with
-  `hreflang` alternates. A language switch (English | עברית) sits on those
+  pages also live under `/he` (`/he`, `/he/pricing`, `/he/sign-in`…; the
+  routes in `src/app/he/` re-export the same pages and the proxy marks the
+  request Hebrew) with `hreflang` alternates. A language switch (English | עברית) sits on those
   pages; the account page's Language choice applies too.
 - **Not yet translated (Phase 3b):** the studio (Home, navigation, account
   page, tool introductions, the five tools) and the admin dashboard. They stay
