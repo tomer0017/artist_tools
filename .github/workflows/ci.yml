@@ -63,7 +63,16 @@ jobs:
           path: ~/.cache/mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install the browsers
-        run: npx playwright install --with-deps chromium webkit
+        # Usually about a minute; a stalled package mirror is retried instead
+        # of holding the job until its timeout.
+        timeout-minutes: 20
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 360 npx playwright install --with-deps chromium webkit; then exit 0; fi
+            echo "Browser install attempt $attempt did not finish; retrying"
+            sleep 15
+          done
+          exit 1
       - name: End-to-end tests (builds the app, starts it with an in-memory database)
         run: npx playwright test
       - name: Keep the failure screenshots and traces
