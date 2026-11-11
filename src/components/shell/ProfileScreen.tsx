@@ -31,9 +31,9 @@ const longDate = (iso: string) => new Intl.DateTimeFormat(undefined, { dateStyle
 function planSummary(account: StudioAccount): string {
   if (account.access === 'admin') return 'As an administrator you have every feature, whatever your plan.';
   if (account.plan.effective === 'pro') {
-    return account.plan.assigned === 'pro'
-      ? 'Pro was given to this account by an administrator. No payment is involved.'
-      : 'Pro, through your subscription.';
+    if (account.plan.assigned === 'pro') return 'Pro was given to this account by an administrator. No payment is involved.';
+    if (account.grant?.planId === 'pro') return `Pro, given by Studio Companion until ${longDate(account.grant.endsAt)}. No payment is involved; afterwards you are back on Free.`;
+    return 'Pro, through your subscription.';
   }
   return 'All five tools, with no time limit.';
 }

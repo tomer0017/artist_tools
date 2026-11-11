@@ -199,15 +199,24 @@ download.
   page and every Pro notice.
 
 ### Admin — routes `/admin`, `/admin/users/[id]`, `/admin/activity`, `/admin/mail` (`src/app/admin/`)
-- **Purpose:** Supporting accounts. `/admin`: search by email, headline counts
-  (accounts, admins, Pro), every account with its Google link (last four
-  characters of the provider id only), registration, last login, role, plan,
-  subscription, sign-ins and GIFs this month — cards on phones, a table on
-  wider screens — plus recent activity. `/admin/users/[id]`: one account
-  (sessions, access in force, usage, its audit trail) and the two changes an
-  admin can make, each behind a confirmation: **plan** Free ↔ Pro (testing
-  only, no billing) and **role** (make / remove admin). `/admin/activity`: the
-  latest 100 audit events. `/admin/mail` ("Test mail"): only while
+- **Purpose:** Supporting accounts. `/admin`: search by email plus filters
+  (role, assigned plan, status, email verified, sign-in method, test accounts,
+  registration dates; shareable URLs), headline counts (accounts, admins, Pro,
+  Pro given, suspended, test), every account with how it signs in (Google id's
+  last four characters only, password yes/no), registration, last login,
+  role, plan in force (and whether it was given), subscription, sign-ins and
+  GIFs this month — cards on phones, a table on wider screens — plus recent
+  activity. `/admin/users/[id]`: one account (sign-in methods, sessions,
+  access in force, usage, its audit trail) and what an admin can change, each
+  behind a confirmation: **plan** Free ↔ Pro (testing only, no billing),
+  **role** (make / remove admin), **status** (suspend with a reason — signs the
+  account out everywhere — or reactivate), **test account** (left out of
+  analytics), and **promotional access** (Pro for 7–365 days with a reason;
+  ends on its own, can be ended early; `src/server/grants.ts`). Role and
+  status changes need the admin to have signed in within 10 minutes,
+  otherwise "Confirm it is you" appears in place. `/admin/activity`: the
+  latest 200 audit events, filtered by kind, actor, account email and dates,
+  with **Export CSV** (up to 5,000 rows; the export itself is audited). `/admin/mail` ("Test mail"): only while
   `MAIL_TRANSPORT=outbox` (development/test/staging) — the account emails the
   app kept instead of sending, for 24 hours, with their links; 404 otherwise.
 - **Protection:** every page calls `requireAdmin()` (role re-read from the
@@ -290,8 +299,11 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   confirmed within 24 h and prunes idle rate-limit rows.
 - **Sessions:** random tokens in MongoDB, HttpOnly + SameSite=Lax cookies
   (`sc.session_token`, `__Secure-` prefixed over HTTPS), 30 days rolling, a
-  5-minute signed cookie cache, TTL cleanup. Suspended accounts cannot start
-  sessions and are treated as signed out.
+  5-minute signed cookie cache, TTL cleanup. `getSession()` also confirms the
+  session still exists in the database on every request, so a session that
+  was ended (another device signed out, suspension, deletion) stops working
+  at once. Suspended accounts cannot start sessions and are treated as signed
+  out.
 - **Three layers of protection:** `src/proxy.ts` redirects requests without a
   session cookie (speed only); `requireUser`/`requireAdmin`
   (`src/server/session.ts`) verify the session on the server in every studio
@@ -1005,3 +1017,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-10 | **Visitor journey: registration, plans, tool introductions, Pro notices; Compare iPhone long-press fix.** Registration is an explicit setting (`AUTH_SIGNUP_MODE` invite|open; invite stays the default and staging stays invite-only); both modes need a Google-verified address, new accounts are always user/Free with marketing off, and registration and logins are audited. Sign-in page explains that Google creates the free account automatically (or that it is invite-only for now). New landing page (five tools with artwork, Plans, Sign in). Plans comparison (`PlanComparison`) on public `/pricing` and studio `/app/plans`: Free available, Pro coming soon, no prices, no payment. First-visit introduction per tool (what it helps with, how it works in three steps, one Start button), remembered per account (`users.introsSeen`, `/api/me/intros`) and resettable from the account page; guided tours unchanged. Pro notices explain what the feature does, why it is Pro and that Pro cannot be bought yet, and link to the plans. Compare: the canvas surface opts out of iOS text selection, callout and tap highlight, and cancels touches that start on it (Pointer Events still place points, drag, pinch and pan); no global change. Same fix prepared, not deployed, for the GitHub Pages app on branch `fix/compare-ios-long-press`. Tests: 150 unit/integration, 71 e2e (Desktop Chrome + iPhone WebKit), 36/36 visual parity. | src/server/{env,auth,account}.ts, src/app/{page.tsx,pricing/,sign-in/page.tsx,api/me/intros/,app/plans/}, src/components/{auth/SignInCard.tsx,plans/PlanComparison.tsx,common/ProFeature.tsx}, src/components/shell/{ToolIntro,PlansScreen,ProfileScreen,account,Studio,tools,HomeScreen}, src/lib/{plans,account}.ts, src/features/compare-art/{CompareCanvas,CompareArt,CompareExportSheet}.tsx, src/onboarding/OnboardingHost.tsx, src/types/project.ts, scripts/{db,e2e-server}.ts, e2e/{journey.spec.ts (new),accounts.spec.ts}, playwright.config.ts, .env.example, deploy/README.md, PROJECT.md |
 | 2026-11-10 | **Phase 0 — audit and architecture for the commercial SaaS roadmap.** Current-state audit of code and staging server, gap analysis, proposed data model, migration/rollback strategy, risk register, phased backlog with acceptance criteria (`docs/roadmap/`), 11 ADRs (`docs/adr/`). Found and fixed on the server: the nightly MongoDB backup had never run (cron ignored the group-writable `/etc/cron.d/studio-mongo-backup`); now `0644`, cron reloaded it, a manual run succeeded. | docs/roadmap/*, docs/adr/*, deploy/README.md, PROJECT.md |
 | 2026-11-11 | **Phase 1 — authentication and account management.** Email + password through Better Auth behind `AUTH_EMAIL_PASSWORD` (mail transport required): verification before access, identical answers for new/registered/uninvited sign-ups (found and fixed in tests: the library's stand-in response had a different shape), scrypt, 12–128 character policy, single-use hashed reset tokens that sign out every device, explicit-only account linking. Provider-neutral mailer with a staging outbox (`/admin/mail`, refused in production). Per-IP limits in MongoDB plus per-address throttles. Sign-in with email, sign-up, forgot/reset password and email-confirmed pages. Account page: name/photo, language and currency preferences, marketing consent with history, sign-in methods (connect Google, add/change password, disconnect), signed-in devices, data download, account deletion with fresh-session confirmation, shared-device sign-out. Nightly maintenance command; releases back up the database before migrating. Tests: 186 unit/integration, 80 e2e (Desktop Chrome + iPhone WebKit, incl. the full password journey), 36/36 visual parity. Deployed to staging (9f16951) with `APP_ENV=staging`, `AUTH_EMAIL_PASSWORD=on`, `MAIL_TRANSPORT=outbox`, still invite-only; nightly maintenance cron installed. | src/server/{auth,env,account,account-management,background,maintenance}.ts, src/server/{mail,security}/*, src/server/db/{collections,migrate}.ts, src/app/{sign-up,forgot-password,reset-password,email-verified}/, src/app/admin/{mail/,AdminShell.tsx,format.ts}, src/app/app/profile/actions.ts, src/app/api/me/export/, src/app/page.tsx, src/components/auth/*, src/components/account/*, src/components/shell/{ProfileScreen,account}.tsx, src/lib/{locale,user-agent,device-data,account}.ts, scripts/{db,e2e-server}.ts, deploy/{release.sh,maintenance.sh,README.md}, e2e/{password.spec.ts (new),accounts.spec.ts}, playwright.config.ts, .env.example, docs/roadmap/*, PROJECT.md |
+| 2026-11-11 | **Phase 2a — admin user management.** Filters on `/admin` (role, plan, status, verified, sign-in method, test, dates) and new counts; suspend (reason enum; ends every session) / reactivate; test-account flag; time-limited promotional Pro (`access_grants`, best of assigned plan / subscription / grant in entitlements; shown on the person's account page); role and status changes require a sign-in within 10 minutes (in-place "Confirm it is you"); activity log filters and audited CSV export. `getSession()` now confirms the session in the database on every request, so ended sessions stop at once (found by the suspension e2e test: the 5-minute cookie cache kept a suspended person signed in). Account deletion also removes grants. Tests: 194 unit/integration, 86 e2e, 36/36 visual parity. | src/server/{admin,grants,entitlements,session,account,account-management}.ts, src/server/db/{collections,migrate}.ts, src/app/admin/{page.tsx,actions.ts,AdminControls.tsx,format.ts,users/[id]/page.tsx,activity/{page.tsx,query.ts,export/route.ts}}, src/components/{account/{parts,ProfileSections}.tsx,shell/ProfileScreen.tsx}, src/lib/account.ts, scripts/e2e-server.ts, e2e/admin.spec.ts (new), playwright.config.ts, PROJECT.md |

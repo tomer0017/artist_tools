@@ -212,12 +212,13 @@ describe('deleting the account', () => {
     await collections(db).usage.insertOne({ userId: me, feature: 'export.gif', period: '2026-11', quantity: 1, firstAt: new Date(), lastAt: new Date() });
     await collections(db).verifications.insertOne({ _id: new ObjectId(), identifier: 'hashed-reset', value: me.toHexString(), expiresAt: new Date(Date.now() + DAY) });
     await collections(db).analyticsEvents.insertOne({ name: 'login_succeeded', at: new Date(), userId: me, anonymousId: null, dedupeKey: null, campaign: null, props: {} });
+    await collections(db).accessGrants.insertOne({ userId: me, planId: 'pro', startsAt: new Date(), endsAt: new Date(Date.now() + DAY), reason: 'promotion', grantedBy: 'cli', createdAt: new Date(), revokedAt: null, revokedBy: null });
 
     const result = await deleteAccount(db, me);
     expect(result).toMatchObject({ status: 'deleted', name: 'Ada Artist' });
     const c = collections(db);
     expect(await c.users.countDocuments({ _id: me })).toBe(0);
-    for (const collection of [c.accounts, c.sessions, c.consentEvents, c.usage, c.analyticsEvents]) {
+    for (const collection of [c.accounts, c.sessions, c.consentEvents, c.usage, c.analyticsEvents, c.accessGrants]) {
       expect(await (collection as typeof c.sessions).countDocuments({ userId: me })).toBe(0);
     }
     expect(await c.verifications.countDocuments({ value: me.toHexString() })).toBe(0);

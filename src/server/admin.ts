@@ -1,16 +1,21 @@
 import 'server-only';
-import type { Db, ObjectId } from 'mongodb';
+import type { Db, Filter, ObjectId } from 'mongodb';
 import { isPlanId, type FeatureId, type PlanId } from '@/lib/plans';
 import { recordAudit } from '@/server/audit';
 import {
+  SUSPEND_REASONS,
   collections,
   toObjectId,
   type AccountStatus,
+  type AuditEventDoc,
   type AuditEventType,
   type AuditMetadata,
   type SubscriptionStatus,
+  type SuspendReason,
+  type UserDoc,
   type UserRole,
 } from '@/server/db/collections';
+import { activeGrant, listGrants } from '@/server/grants';
 import { assignedPlanOf, effectivePlan, getEntitlements, type Entitlements } from '@/server/entitlements';
 import { getUsage, usagePeriod } from '@/server/usage';
 
@@ -50,6 +55,11 @@ export interface AdminUserRow {
   effectivePlan: PlanId;
   subscriptionStatus: SubscriptionStatus | null;
   google: { linked: boolean; idHint: string | null };
+  /** Whether the account can sign in with a password. */
+  password: boolean;
+  testAccount: boolean;
+  /** A live time-limited grant, if any. */
+  grant: { planId: PlanId; endsAt: Date } | null;
   logins: number;
   /** GIFs exported this calendar month (UTC), as counted by the server. */
   gifsThisMonth: number;
@@ -66,9 +76,12 @@ interface RawUserRow {
   status?: AccountStatus;
   role?: UserRole;
   plan?: unknown;
+  testAccount?: boolean;
   subscription: { planId: PlanId; status: SubscriptionStatus; currentPeriodEnd: Date | null }[];
   usage: { total: number }[];
   google: { accountId: string }[];
+  password: { n: number }[];
+  grants: { planId: PlanId; endsAt: Date }[];
   logins: { n: number }[];
 }
 
@@ -77,13 +90,44 @@ export interface UserListQuery {
   pageSize?: number;
   /** Part of an email address. */
   search?: string;
+  role?: UserRole;
+  plan?: PlanId;
+  status?: AccountStatus;
+  verified?: boolean;
+  /** Accounts that can sign in this way. */
+  method?: 'google' | 'password';
+  test?: boolean;
+  /** Registered on or after / before these instants. */
+  createdFrom?: Date;
+  createdBefore?: Date;
+}
+
+/** The MongoDB filter for a user list query (filters combine with AND). */
+export async function userFilter(db: Db, query: UserListQuery): Promise<Filter<UserDoc>> {
+  const filter: Filter<UserDoc> = {};
+  const search = (query.search ?? '').trim().slice(0, 100);
+  if (search) filter.email = { $regex: escapeRegExp(search), $options: 'i' };
+  if (query.role) filter.role = query.role === 'admin' ? 'admin' : { $ne: 'admin' };
+  // A missing plan is Free; a missing status is active.
+  if (query.plan) filter.plan = query.plan === 'pro' ? 'pro' : { $ne: 'pro' };
+  if (query.status) filter.status = query.status === 'suspended' ? 'suspended' : { $ne: 'suspended' };
+  if (query.verified !== undefined) filter.emailVerified = query.verified ? true : { $ne: true };
+  if (query.test !== undefined) filter.testAccount = query.test ? true : { $ne: true };
+  if (query.createdFrom || query.createdBefore) {
+    filter.createdAt = { ...(query.createdFrom ? { $gte: query.createdFrom } : {}), ...(query.createdBefore ? { $lt: query.createdBefore } : {}) };
+  }
+  if (query.method) {
+    const ids = await collections(db).accounts.distinct('userId', { providerId: query.method === 'google' ? 'google' : 'credential' });
+    filter._id = { $in: ids };
+  }
+  return filter;
 }
 
 export async function listUsers(db: Db, query: UserListQuery = {}, now = new Date()) {
   const { users } = collections(db);
   const pageSize = Math.min(Math.max(1, Math.floor(query.pageSize ?? 50) || 50), 200);
   const search = (query.search ?? '').trim().slice(0, 100);
-  const filter = search ? { email: { $regex: escapeRegExp(search), $options: 'i' } } : {};
+  const filter = await userFilter(db, query);
   const total = await users.countDocuments(filter);
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(Math.max(1, Math.floor(query.page ?? 1) || 1), pages);
@@ -97,11 +141,18 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
       byUser('subscriptions', [], [{ $sort: { updatedAt: -1 } }, { $limit: 1 }, { $project: { _id: 0, planId: 1, status: 1, currentPeriodEnd: 1 } }], 'subscription'),
       byUser('usage', [{ $eq: ['$period', usagePeriod(now)] }, { $eq: ['$feature', 'export.gif'] }], [{ $group: { _id: null, total: { $sum: '$quantity' } } }]),
       byUser('accounts', [{ $eq: ['$providerId', 'google'] }], [{ $sort: { createdAt: 1 } }, { $limit: 1 }, { $project: { _id: 0, accountId: 1 } }], 'google'),
+      byUser('accounts', [{ $eq: ['$providerId', 'credential'] }], [{ $count: 'n' }], 'password'),
+      byUser(
+        'access_grants',
+        [{ $eq: ['$revokedAt', null] }, { $lte: ['$startsAt', now] }, { $gt: ['$endsAt', now] }],
+        [{ $sort: { endsAt: -1 } }, { $project: { _id: 0, planId: 1, endsAt: 1 } }],
+        'grants',
+      ),
       byUser('audit_events', [{ $eq: ['$type', 'user.login'] }], [{ $count: 'n' }], 'logins'),
       {
         $project: {
-          name: 1, email: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, status: 1, role: 1, plan: 1,
-          subscription: 1, usage: 1, google: 1, logins: 1,
+          name: 1, email: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, status: 1, role: 1, plan: 1, testAccount: 1,
+          subscription: 1, usage: 1, google: 1, password: 1, grants: 1, logins: 1,
         },
       },
     ])
@@ -109,6 +160,7 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
 
   const rows: AdminUserRow[] = raw.map((u) => {
     const subscription = u.subscription[0] ?? null;
+    const grant = u.grants.find((g) => g.planId === 'pro') ?? u.grants[0] ?? null;
     return {
       id: u._id.toHexString(),
       name: u.name,
@@ -120,9 +172,12 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
       status: u.status ?? 'active',
       role: u.role === 'admin' ? 'admin' : 'user',
       plan: assignedPlanOf(u),
-      effectivePlan: effectivePlan(u, subscription, now),
+      effectivePlan: effectivePlan(u, subscription, now, grant),
       subscriptionStatus: subscription?.status ?? null,
       google: { linked: u.google.length > 0, idHint: idHint(u.google[0]?.accountId) },
+      password: (u.password[0]?.n ?? 0) > 0,
+      testAccount: u.testAccount === true,
+      grant,
       logins: u.logins[0]?.n ?? 0,
       gifsThisMonth: u.usage[0]?.total ?? 0,
     };
@@ -131,14 +186,17 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
 }
 
 /** Headline counts for the dashboard. */
-export async function userStats(db: Db) {
-  const { users } = collections(db);
-  const [total, admins, pro] = await Promise.all([
+export async function userStats(db: Db, now = new Date()) {
+  const { users, accessGrants } = collections(db);
+  const [total, admins, pro, suspended, test, granted] = await Promise.all([
     users.countDocuments(),
     users.countDocuments({ role: 'admin' }),
     users.countDocuments({ plan: 'pro' }),
+    users.countDocuments({ status: 'suspended' }),
+    users.countDocuments({ testAccount: true }),
+    accessGrants.distinct('userId', { revokedAt: null, startsAt: { $lte: now }, endsAt: { $gt: now } }),
   ]);
-  return { total, admins, pro };
+  return { total, admins, pro, suspended, test, granted: granted.length };
 }
 
 export interface AdminAuditEvent {
@@ -152,11 +210,29 @@ export interface AdminAuditEvent {
   metadata: AuditMetadata;
 }
 
-/** Most recent audit events, overall or for one account, with the people involved resolved to emails. */
-export async function listAuditEvents(db: Db, query: { userId?: ObjectId; limit?: number } = {}): Promise<AdminAuditEvent[]> {
+export interface AuditQuery {
+  userId?: ObjectId;
+  types?: AuditEventType[];
+  actorKind?: AdminAuditEvent['actor']['kind'];
+  from?: Date;
+  before?: Date;
+  limit?: number;
+}
+
+function auditFilter(query: AuditQuery): Filter<AuditEventDoc> {
+  const filter: Filter<AuditEventDoc> = {};
+  if (query.userId) filter.userId = query.userId;
+  if (query.types?.length) filter.type = { $in: query.types };
+  if (query.actorKind) filter.actor = query.actorKind === 'cli' || query.actorKind === 'system' ? query.actorKind : { $regex: `^${query.actorKind}:` };
+  if (query.from || query.before) filter.at = { ...(query.from ? { $gte: query.from } : {}), ...(query.before ? { $lt: query.before } : {}) };
+  return filter;
+}
+
+/** Most recent audit events (filtered), with the people involved resolved to emails. */
+export async function listAuditEvents(db: Db, query: AuditQuery = {}): Promise<AdminAuditEvent[]> {
   const { auditEvents, users } = collections(db);
-  const limit = Math.min(Math.max(1, query.limit ?? 30), 200);
-  const events = await auditEvents.find(query.userId ? { userId: query.userId } : {}, { sort: { at: -1, _id: -1 }, limit }).toArray();
+  const limit = Math.min(Math.max(1, query.limit ?? 30), 5000);
+  const events = await auditEvents.find(auditFilter(query), { sort: { at: -1, _id: -1 }, limit }).toArray();
 
   const actorOf = (actor: string): AdminAuditEvent['actor'] => {
     const [kind, id] = actor.split(':');
@@ -201,7 +277,11 @@ export interface AdminUserDetail {
   role: UserRole;
   plan: PlanId;
   planUpdatedAt: Date | null;
+  testAccount: boolean;
+  suspension: { at: Date | null; reason: SuspendReason | null } | null;
   google: { linked: boolean; idHint: string | null; linkedAt: Date | null };
+  password: { setAt: Date } | null;
+  grants: { id: string; planId: PlanId; startsAt: Date; endsAt: Date; reason: string; grantedBy: string; revokedAt: Date | null; live: boolean }[];
   sessions: { active: number; lastActiveAt: Date | null };
   subscription: { status: SubscriptionStatus; planId: PlanId; currentPeriodEnd: Date | null } | null;
   entitlements: Entitlements;
@@ -214,8 +294,10 @@ export async function getUserDetail(db: Db, userId: ObjectId, now = new Date()):
   const { users, accounts, sessions, subscriptions, auditEvents } = collections(db);
   const user = await users.findOne({ _id: userId });
   if (!user) return null;
-  const [google, activeSessions, lastSession, subscription, entitlements, usageThisMonth, logins, events] = await Promise.all([
+  const [google, password, grants, activeSessions, lastSession, subscription, entitlements, usageThisMonth, logins, events] = await Promise.all([
     accounts.findOne({ userId, providerId: 'google' }, { sort: { createdAt: 1 }, projection: { accountId: 1, createdAt: 1 } }),
+    accounts.findOne({ userId, providerId: 'credential' }, { projection: { createdAt: 1 } }),
+    listGrants(db, userId),
     sessions.countDocuments({ userId, expiresAt: { $gt: now } }),
     sessions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { updatedAt: 1 } }),
     subscriptions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { status: 1, planId: 1, currentPeriodEnd: 1 } }),
@@ -236,7 +318,20 @@ export async function getUserDetail(db: Db, userId: ObjectId, now = new Date()):
     role: user.role === 'admin' ? 'admin' : 'user',
     plan: assignedPlanOf(user),
     planUpdatedAt: user.planUpdatedAt ?? null,
+    testAccount: user.testAccount === true,
+    suspension: user.status === 'suspended' ? { at: user.suspendedAt ?? null, reason: user.suspendReason ?? null } : null,
     google: { linked: google !== null, idHint: idHint(google?.accountId), linkedAt: google?.createdAt ?? null },
+    password: password ? { setAt: password.createdAt } : null,
+    grants: grants.map((g) => ({
+      id: g._id!.toHexString(),
+      planId: g.planId,
+      startsAt: g.startsAt,
+      endsAt: g.endsAt,
+      reason: g.reason,
+      grantedBy: g.grantedBy,
+      revokedAt: g.revokedAt,
+      live: g.revokedAt === null && g.startsAt <= now && g.endsAt > now,
+    })),
     sessions: { active: activeSessions, lastActiveAt: lastSession?.updatedAt ?? null },
     subscription: subscription ? { status: subscription.status, planId: subscription.planId, currentPeriodEnd: subscription.currentPeriodEnd } : null,
     entitlements,
@@ -309,3 +404,57 @@ export async function setUserRole(
   });
   return 'updated';
 }
+
+/**
+ * 'self': admins cannot suspend themselves; 'last_admin': the last active
+ * admin can never be suspended.
+ */
+export type StatusChange = 'updated' | 'unchanged' | 'not_found' | 'self' | 'last_admin' | 'invalid';
+
+/**
+ * Suspend or reactivate an account; audited. Suspending signs it out
+ * everywhere at once (its sessions are deleted, which getSession checks on
+ * every request) and blocks new sign-ins.
+ */
+export async function setUserStatus(
+  db: Db,
+  change: { userId: ObjectId; status: AccountStatus; reason?: SuspendReason; actor: string; actorUserId?: ObjectId | null },
+  now = new Date(),
+): Promise<StatusChange> {
+  const { users, sessions } = collections(db);
+  const target = await users.findOne({ _id: change.userId }, { projection: { status: 1, role: 1 } });
+  if (!target) return 'not_found';
+  const current: AccountStatus = target.status === 'suspended' ? 'suspended' : 'active';
+  if (current === change.status) return 'unchanged';
+  if (change.status === 'suspended') {
+    if (!change.reason || !SUSPEND_REASONS.includes(change.reason)) return 'invalid';
+    if (change.actorUserId?.equals(change.userId)) return 'self';
+    if (target.role === 'admin' && (await users.countDocuments({ _id: { $ne: change.userId }, role: 'admin', status: { $ne: 'suspended' } })) === 0) {
+      return 'last_admin';
+    }
+    await users.updateOne(
+      { _id: change.userId },
+      { $set: { status: 'suspended', suspendedAt: now, suspendedBy: change.actor, suspendReason: change.reason, updatedAt: now } },
+    );
+    const { deletedCount } = await sessions.deleteMany({ userId: change.userId });
+    await recordAudit(db, { type: 'admin.account_suspended', userId: change.userId, actor: change.actor, metadata: { reason: change.reason, sessionsEnded: deletedCount } });
+  } else {
+    await users.updateOne({ _id: change.userId }, { $set: { status: 'active', updatedAt: now }, $unset: { suspendedAt: '', suspendedBy: '', suspendReason: '' } });
+    await recordAudit(db, { type: 'admin.account_reactivated', userId: change.userId, actor: change.actor, metadata: {} });
+  }
+  return 'updated';
+}
+
+/** Mark or unmark a test account (left out of analytics and revenue); audited. */
+export async function setTestAccount(db: Db, change: { userId: ObjectId; test: boolean; actor: string }, now = new Date()): Promise<'updated' | 'unchanged' | 'not_found'> {
+  const { users } = collections(db);
+  const target = await users.findOne({ _id: change.userId }, { projection: { testAccount: 1 } });
+  if (!target) return 'not_found';
+  if ((target.testAccount === true) === change.test) return 'unchanged';
+  await users.updateOne({ _id: change.userId }, { $set: { testAccount: change.test, updatedAt: now } });
+  await recordAudit(db, { type: 'admin.test_flag_changed', userId: change.userId, actor: change.actor, metadata: { test: change.test } });
+  return 'updated';
+}
+
+/** Re-export for pages that show a single account's live grant. */
+export { activeGrant };

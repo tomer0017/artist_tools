@@ -412,7 +412,7 @@ export function DevicesCard() {
         </button>
       )}
       <StatusLine status={status} />
-      <p className="mt-3 text-xs text-muted-foreground">A device you sign out can take up to 5 minutes to notice.</p>
+      <p className="mt-3 text-xs text-muted-foreground">A device you sign out is signed out the next time it contacts Studio Companion.</p>
     </section>
   );
 }

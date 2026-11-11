@@ -45,7 +45,20 @@ export function Busy({ busy, label, busyLabel }: { busy: boolean; label: string;
  * password where the account has one, otherwise with Google (which comes back
  * to the account page). Calls `onConfirmed` once the new session exists.
  */
-export function ReauthPanel({ email, hasPassword, onConfirmed, onCancel }: { email: string; hasPassword: boolean; onConfirmed: () => void; onCancel: () => void }) {
+export function ReauthPanel({
+  email,
+  hasPassword,
+  onConfirmed,
+  onCancel,
+  returnTo = '/app/profile?confirmed=1',
+}: {
+  email: string;
+  hasPassword: boolean;
+  onConfirmed: () => void;
+  onCancel: () => void;
+  /** Where Google sign-in comes back to (an /app or /admin path). */
+  returnTo?: string;
+}) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +79,7 @@ export function ReauthPanel({ email, hasPassword, onConfirmed, onCancel }: { ema
 
   async function withGoogle() {
     setBusy(true);
-    const result = await authClient.signIn.social({ provider: 'google', callbackURL: '/app/profile?confirmed=1', errorCallbackURL: '/app/profile' });
+    const result = await authClient.signIn.social({ provider: 'google', callbackURL: returnTo, errorCallbackURL: returnTo.split('?')[0] });
     if (result.error) {
       setBusy(false);
       setError('Could not reach Google. Check your connection and try again.');

@@ -98,6 +98,11 @@ await seedSignedInUser(db, 'newbie-iphone-webkit', 'user', 'free', false, []);
 // Account-page specs: one that edits its profile, one signed in an hour ago (sensitive changes ask to confirm).
 await seedSignedInUser(db, 'editor', 'user');
 await seedSignedInUser(db, 'settled', 'user', 'free', false, ALL_TOOLS, 60);
+// Admin-dashboard specs: an admin signed in an hour ago (sensitive changes ask to confirm), and the accounts it changes.
+await seedSignedInUser(db, 'admin-settled', 'admin', 'free', false, ALL_TOOLS, 60);
+await seedSignedInUser(db, 'grantee', 'user');
+await seedSignedInUser(db, 'suspendee', 'user');
+await seedSignedInUser(db, 'candidate', 'user');
 await client.close();
 
 const server = spawn('node', ['.next/standalone/server.js'], {

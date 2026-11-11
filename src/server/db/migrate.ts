@@ -50,6 +50,9 @@ export const INDEXES: IndexPlan[] = [
   // Better Auth's per-IP counters: looked up by key, pruned by age (scripts/db.ts maintenance).
   { collection: 'rateLimits', key: { key: 1 }, options: { name: 'rate_limit_by_key' } },
   { collection: 'rateLimits', key: { lastRequest: 1 }, options: { name: 'rate_limit_by_age' } },
+  // Live grants of an account, newest end first.
+  { collection: 'access_grants', key: { userId: 1, endsAt: -1 }, options: { name: 'grants_by_user' } },
+  { collection: 'audit_events', key: { at: -1 }, options: { name: 'audit_by_time' } },
 ];
 
 /** Plans as the code defines them (src/lib/plans.ts). */

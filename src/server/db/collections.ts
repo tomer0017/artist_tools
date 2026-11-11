@@ -44,6 +44,33 @@ export interface UserDoc {
   /** Preferred interface language and display/billing currency (src/lib/locale.ts). */
   locale?: Locale;
   currency?: Currency;
+  /** Set by an administrator when an account was suspended (cleared on reactivation). */
+  suspendedAt?: Date | null;
+  suspendedBy?: string | null;
+  suspendReason?: SuspendReason | null;
+  /** Test accounts are left out of product analytics and revenue figures. */
+  testAccount?: boolean;
+}
+
+/** Why an account was suspended (an enum, never free text). */
+export type SuspendReason = 'abuse' | 'security' | 'payment' | 'request' | 'other';
+export const SUSPEND_REASONS: readonly SuspendReason[] = ['abuse', 'security', 'payment', 'request', 'other'];
+
+export type GrantReason = 'promotion' | 'trial' | 'support' | 'test';
+
+/** Time-limited access to a plan given by an administrator (src/server/grants.ts). */
+export interface AccessGrantDoc {
+  _id?: ObjectId;
+  userId: ObjectId;
+  planId: PlanId;
+  startsAt: Date;
+  endsAt: Date;
+  reason: GrantReason;
+  /** 'admin:<id>' or 'cli'. */
+  grantedBy: string;
+  createdAt: Date;
+  revokedAt: Date | null;
+  revokedBy: string | null;
 }
 
 /**
@@ -134,6 +161,12 @@ export type AuditEventType =
   | 'admin.role_granted'
   | 'admin.role_revoked'
   | 'admin.plan_changed'
+  | 'admin.account_suspended'
+  | 'admin.account_reactivated'
+  | 'admin.test_flag_changed'
+  | 'admin.grant_created'
+  | 'admin.grant_revoked'
+  | 'admin.audit_exported'
   | 'account.status_changed'
   | 'subscription.changed';
 
@@ -254,6 +287,7 @@ export function collections(db: Db) {
     authThrottles: db.collection<AuthThrottleDoc>('auth_throttles'),
     mailOutbox: db.collection<MailOutboxDoc>('mail_outbox'),
     rateLimits: db.collection<{ _id: ObjectId; key: string; count: number; lastRequest: number }>('rateLimits'),
+    accessGrants: db.collection<AccessGrantDoc>('access_grants'),
   };
 }
 

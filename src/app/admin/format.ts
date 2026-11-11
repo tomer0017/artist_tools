@@ -54,6 +54,18 @@ export function describeEvent(event: AdminAuditEvent): string {
       return 'Admin access removed';
     case 'admin.plan_changed':
       return `Plan changed: ${plan(m.from)} → ${plan(m.to)}`;
+    case 'admin.account_suspended':
+      return `Account suspended (${String(m.reason ?? 'no reason')})`;
+    case 'admin.account_reactivated':
+      return 'Account reactivated';
+    case 'admin.test_flag_changed':
+      return m.test ? 'Marked as a test account' : 'No longer a test account';
+    case 'admin.grant_created':
+      return `${plan(m.planId)} given for ${Number(m.days ?? 0)} days (${String(m.reason ?? '')})`;
+    case 'admin.grant_revoked':
+      return 'Given access ended early';
+    case 'admin.audit_exported':
+      return 'Exported the activity log';
     case 'account.status_changed':
       return `Account ${String(m.status ?? 'status changed')}`;
     case 'subscription.changed':
@@ -73,3 +85,32 @@ export function actorLabel(event: AdminAuditEvent, viewerId: string): string {
   if (actor.kind === 'user' && actor.id === event.subject?.id) return 'The user';
   return actor.email ?? (actor.kind === 'admin' ? 'An admin' : 'A user');
 }
+
+/** Groups of event types for the activity filter. */
+export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['type'][] }[] = [
+  { id: 'signins', label: 'Sign-ins', types: ['user.login', 'user.logout', 'auth.login_failed', 'auth.throttled'] },
+  { id: 'registrations', label: 'Registrations and deletions', types: ['user.registered', 'user.email_verified', 'account.deleted'] },
+  {
+    id: 'security',
+    label: 'Passwords, methods and devices',
+    types: ['user.password_changed', 'user.password_reset', 'account.linked', 'account.unlinked', 'user.session_revoked', 'user.sessions_revoked'],
+  },
+  { id: 'profile', label: 'Profile, consent and data', types: ['user.profile_updated', 'user.consent_changed', 'account.data_exported'] },
+  {
+    id: 'admin',
+    label: 'Admin changes',
+    types: [
+      'admin.role_granted',
+      'admin.role_revoked',
+      'admin.plan_changed',
+      'admin.account_suspended',
+      'admin.account_reactivated',
+      'admin.test_flag_changed',
+      'admin.grant_created',
+      'admin.grant_revoked',
+      'admin.audit_exported',
+      'account.status_changed',
+    ],
+  },
+  { id: 'billing', label: 'Billing', types: ['subscription.changed'] },
+];

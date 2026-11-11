@@ -11,6 +11,7 @@ import {
   type SubscriptionStatus,
   type UserRole,
 } from '@/server/db/collections';
+import { activeGrant } from '@/server/grants';
 import { getUsage, recordUsage } from '@/server/usage';
 
 // ─── Entitlements ──────────────────────────────────────────────────────────────
@@ -22,7 +23,9 @@ import { getUsage, recordUsage } from '@/server/usage';
 // protection.
 //
 // Role and plan are independent: admins get every feature whatever their plan
-// or subscription, and no plan ever grants the admin role.
+// or subscription, and no plan ever grants the admin role. The plan in force
+// is the best of three: the plan an admin assigned, an active subscription,
+// and a live time-limited grant (src/server/grants.ts).
 
 /** Days a subscription keeps its plan after its period ends while renewal or a failed payment resolves. */
 export const GRACE_DAYS = 3;
@@ -36,8 +39,10 @@ export interface Entitlements {
   role: UserRole;
   /** The plan an administrator assigned to the account. */
   assignedPlan: PlanId;
-  /** The plan in force: the better of the assigned plan and an active subscription. */
+  /** The plan in force: the best of the assigned plan, an active subscription and a live grant. */
   planId: PlanId;
+  /** A live time-limited grant, if one is in force. */
+  grant: { planId: PlanId; endsAt: Date } | null;
   subscriptionStatus: SubscriptionStatus | null;
   subscriptionActive: boolean;
   features: FeatureId[];
@@ -75,9 +80,15 @@ export function assignedPlanOf(user: { plan?: unknown } | null): PlanId {
   return isPlanId(plan) ? plan : 'free';
 }
 
-/** The plan in force for an account: the better of its assigned plan and what an active subscription grants. */
-export function effectivePlan(user: { plan?: unknown }, subscription: SubscriptionState | null, now: Date): PlanId {
-  return betterPlan(assignedPlanOf(user), subscriptionGrantsPlan(subscription, now) ? subscription!.planId : null);
+/** The plan in force: the best of the assigned plan, an active subscription's plan and a live grant's. */
+export function effectivePlan(
+  user: { plan?: unknown },
+  subscription: SubscriptionState | null,
+  now: Date,
+  grant: { planId: PlanId; endsAt: Date } | null = null,
+): PlanId {
+  const fromSubscription = betterPlan(assignedPlanOf(user), subscriptionGrantsPlan(subscription, now) ? subscription!.planId : null);
+  return betterPlan(fromSubscription, grant && grant.endsAt.getTime() > now.getTime() ? grant.planId : null);
 }
 
 export function computeEntitlements(input: {
@@ -86,7 +97,9 @@ export function computeEntitlements(input: {
   plans: Partial<Record<PlanId, PlanState>>;
   usage: Partial<Record<FeatureId, number>>;
   now: Date;
+  grant?: { planId: PlanId; endsAt: Date } | null;
 }): Entitlements {
+  const grant = input.grant && input.grant.endsAt.getTime() > input.now.getTime() ? input.grant : null;
   const role: UserRole = input.user?.role === 'admin' ? 'admin' : 'user';
   const none: Entitlements = {
     authenticated: input.user !== null,
@@ -97,6 +110,7 @@ export function computeEntitlements(input: {
     planId: 'free',
     subscriptionStatus: input.subscription?.status ?? null,
     subscriptionActive: false,
+    grant: null,
     features: [],
     limits: {},
     usage: input.usage,
@@ -104,15 +118,15 @@ export function computeEntitlements(input: {
   if (!input.user || input.user.status !== 'active') return none;
 
   const subscriptionActive = subscriptionGrantsPlan(input.subscription, input.now);
-  const wanted = effectivePlan(input.user, input.subscription, input.now);
+  const wanted = effectivePlan(input.user, input.subscription, input.now, grant);
   const planId: PlanId = input.plans[wanted]?.active ? wanted : 'free';
   const plan = input.plans[planId];
 
   // Administrators can use everything, on any plan, paid or not.
   if (role === 'admin') {
-    return { ...none, accountActive: true, access: 'admin', planId, subscriptionActive, features: [...FEATURES] };
+    return { ...none, accountActive: true, access: 'admin', planId, subscriptionActive, grant, features: [...FEATURES] };
   }
-  if (!plan?.active) return { ...none, accountActive: true, planId, subscriptionActive };
+  if (!plan?.active) return { ...none, accountActive: true, planId, subscriptionActive, grant };
 
   return {
     ...none,
@@ -120,6 +134,7 @@ export function computeEntitlements(input: {
     access: planId,
     planId,
     subscriptionActive,
+    grant,
     features: [...plan.features],
     limits: { ...plan.limits },
   };
@@ -159,11 +174,12 @@ export const clearPlanCache = () => {
 /** Entitlements of an account, read entirely from the database. */
 export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()): Promise<Entitlements> {
   const { users, subscriptions } = collections(db);
-  const [user, subscription, plans, usage] = await Promise.all([
+  const [user, subscription, plans, usage, grant] = await Promise.all([
     users.findOne({ _id: userId }, { projection: { status: 1, role: 1, plan: 1 } }),
     subscriptions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { planId: 1, status: 1, currentPeriodEnd: 1 } }),
     loadPlans(db, now.getTime()),
     getUsage(db, userId),
+    activeGrant(db, userId, now),
   ]);
   return computeEntitlements({
     user: user ? { status: user.status ?? 'active', role: user.role, plan: user.plan } : null,
@@ -171,6 +187,7 @@ export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()
     plans,
     usage,
     now,
+    grant,
   });
 }
 

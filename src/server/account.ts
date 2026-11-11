@@ -38,6 +38,7 @@ export async function getAccountSummary(
       createdAt: user.createdAt.toISOString(),
       lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
       plan: { assigned: entitlements.assignedPlan, effective: entitlements.planId },
+      grant: entitlements.grant ? { planId: entitlements.grant.planId, endsAt: entitlements.grant.endsAt.toISOString() } : null,
       access: entitlements.access,
       subscription: { status: entitlements.subscriptionStatus ?? 'none' },
       features: entitlements.features,
