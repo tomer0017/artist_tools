@@ -1,8 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useLocale, useTranslations } from 'use-intl';
 import ToolHeader from '@/components/shell/ToolHeader';
 import { useProject } from '@/hooks/useProjectStore';
 import { Pipette, Copy, Plus, ArrowRight, Flame, Snowflake, Droplet, Ban } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { dirOf } from '@/i18n/config';
+import type { colorEn } from '@/i18n/messages/tools/color';
+
+type ColorMessages = typeof colorEn;
+type ColorT = ReturnType<typeof useTranslations<'colorTool'>>;
 
 // ─── Color math ───────────────────────────────────────
 function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
@@ -134,9 +140,11 @@ function ColorWheel({
   const hy = Math.sin(hueRad) * ringR;
   const pureHueHex = hsvToHex(hue, 100, 100);
 
+  // Positioned by pointer coordinates: always left to right, in every language.
   return (
     <div
       ref={containerRef}
+      dir="ltr"
       className="relative w-64 h-64 mx-auto cursor-crosshair touch-none select-none"
       onPointerDown={onRingDown}
       onPointerMove={onRingMove}
@@ -187,8 +195,8 @@ function ColorWheel({
 }
 
 // ─── Swatch helpers ───────────────────────────────────
-function Swatch({ color, label, size = 'md', onClick }: {
-  color: string; label?: string; size?: 'sm' | 'md' | 'lg'; onClick?: () => void;
+function Swatch({ color, label, labelDir, size = 'md', onClick }: {
+  color: string; label?: string; labelDir?: 'ltr'; size?: 'sm' | 'md' | 'lg'; onClick?: () => void;
 }) {
   const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-9 h-9';
   return (
@@ -198,20 +206,22 @@ function Swatch({ color, label, size = 'md', onClick }: {
         style={{ backgroundColor: color }}
         title={color}
       />
-      {label && <span className="text-[10px] text-muted-foreground leading-none text-center max-w-[64px]">{label}</span>}
+      {label && <span dir={labelDir} className="text-[10px] text-muted-foreground leading-none text-center max-w-[64px]">{label}</span>}
     </div>
   );
 }
 
+// `ltr` marks a tag that is a value (−30°), kept left to right in every language;
+// a HEX label (no tag) is too.
 function HarmonyBlock({ label, colors, onSelect }: {
-  label: string; colors: { hex: string; tag?: string }[]; onSelect: (hex: string) => void;
+  label: string; colors: { hex: string; tag?: string; ltr?: boolean }[]; onSelect: (hex: string) => void;
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-3">
       <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">{label}</div>
       <div className="flex items-center gap-2 flex-wrap">
         {colors.map((c, i) => (
-          <Swatch key={i} color={c.hex} label={c.tag || c.hex.toUpperCase()} onClick={() => onSelect(c.hex)} />
+          <Swatch key={i} color={c.hex} label={c.tag || c.hex.toUpperCase()} labelDir={c.tag && !c.ltr ? undefined : 'ltr'} onClick={() => onSelect(c.hex)} />
         ))}
       </div>
     </div>
@@ -219,158 +229,165 @@ function HarmonyBlock({ label, colors, onSelect }: {
 }
 
 // ─── Recipe data ──────────────────────────────────────
-type Ingredient = { color: string; name: string; pct: number };
-type Recipe = { name: string; result: string; ingredients: Ingredient[]; note?: string };
+// Names, notes and group titles are messages (colorTool.recipes / .groups).
+// A paint is a plain colour word, translated (`paint`, colorTool.paints), or a
+// pigment name that matches the tube label and stays as written (`name`).
+type Paint = { paint: keyof ColorMessages['paints'] } | { name: string };
+type Ingredient = Paint & { color: string; pct: number };
+type Recipe = { id: keyof ColorMessages['recipes']; result: string; ingredients: Ingredient[] };
 
-const RECIPES: { group: string; items: Recipe[] }[] = [
+const paintName = (p: Paint, t: ColorT) => ('paint' in p ? t(`paints.${p.paint}`) : p.name);
+
+const RECIPES: { group: keyof ColorMessages['groups']; items: Recipe[] }[] = [
   {
-    group: 'Greens',
+    group: 'greens',
     items: [
-      { name: 'Grass Green', result: '#4A8C2A', ingredients: [
-        { color: '#F5C542', name: 'Yellow', pct: 60 },
-        { color: '#2A5FAA', name: 'Blue', pct: 35 },
-        { color: '#F5F0E8', name: 'White', pct: 5 },
-      ], note: 'Bright natural green. Add more yellow for spring grass.' },
-      { name: 'Olive Green', result: '#6B7038', ingredients: [
-        { color: '#F5C542', name: 'Yellow', pct: 50 },
-        { color: '#2A5FAA', name: 'Blue', pct: 25 },
+      { id: 'grassGreen', result: '#4A8C2A', ingredients: [
+        { color: '#F5C542', paint: 'yellow', pct: 60 },
+        { color: '#2A5FAA', paint: 'blue', pct: 35 },
+        { color: '#F5F0E8', paint: 'white', pct: 5 },
+      ] },
+      { id: 'oliveGreen', result: '#6B7038', ingredients: [
+        { color: '#F5C542', paint: 'yellow', pct: 50 },
+        { color: '#2A5FAA', paint: 'blue', pct: 25 },
         { color: '#5A3020', name: 'Burnt Umber', pct: 25 },
-      ], note: 'Natural foliage green. Add more yellow for sunlight.' },
-      { name: 'Forest Green', result: '#1F4A24', ingredients: [
-        { color: '#2A5FAA', name: 'Blue', pct: 40 },
-        { color: '#F5C542', name: 'Yellow', pct: 35 },
+      ] },
+      { id: 'forestGreen', result: '#1F4A24', ingredients: [
+        { color: '#2A5FAA', paint: 'blue', pct: 40 },
+        { color: '#F5C542', paint: 'yellow', pct: 35 },
         { color: '#5A3020', name: 'Burnt Umber', pct: 25 },
-      ], note: 'Deep shadow green. Strong and cool.' },
-      { name: 'Lime Green', result: '#9ECF3A', ingredients: [
-        { color: '#F5C542', name: 'Yellow', pct: 75 },
-        { color: '#2A5FAA', name: 'Blue', pct: 15 },
-        { color: '#F5F0E8', name: 'White', pct: 10 },
-      ], note: 'Bright, fresh. Keep the blue amount small.' },
-      { name: 'Turquoise', result: '#3FB8B0', ingredients: [
-        { color: '#2A5FAA', name: 'Blue', pct: 55 },
-        { color: '#F5F0E8', name: 'White', pct: 25 },
-        { color: '#F5C542', name: 'Yellow', pct: 20 },
-      ], note: 'Tropical blue-green. Start with blue, add white.' },
+      ] },
+      { id: 'limeGreen', result: '#9ECF3A', ingredients: [
+        { color: '#F5C542', paint: 'yellow', pct: 75 },
+        { color: '#2A5FAA', paint: 'blue', pct: 15 },
+        { color: '#F5F0E8', paint: 'white', pct: 10 },
+      ] },
+      { id: 'turquoise', result: '#3FB8B0', ingredients: [
+        { color: '#2A5FAA', paint: 'blue', pct: 55 },
+        { color: '#F5F0E8', paint: 'white', pct: 25 },
+        { color: '#F5C542', paint: 'yellow', pct: 20 },
+      ] },
     ],
   },
   {
-    group: 'Purples',
+    group: 'purples',
     items: [
-      { name: 'Basic Purple', result: '#6A3280', ingredients: [
-        { color: '#2A5FAA', name: 'Blue', pct: 55 },
-        { color: '#CD3232', name: 'Red', pct: 35 },
-        { color: '#F5F0E8', name: 'White', pct: 10 },
-      ], note: 'Standard purple. More blue for cooler, more red for warmer.' },
-      { name: 'Lavender', result: '#B89EC4', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 50 },
-        { color: '#2A5FAA', name: 'Blue', pct: 30 },
-        { color: '#CD3232', name: 'Red', pct: 20 },
-      ], note: 'Soft pastel purple. Heavy on the white.' },
-      { name: 'Deep Purple', result: '#3A1A5A', ingredients: [
-        { color: '#2A5FAA', name: 'Blue', pct: 60 },
-        { color: '#CD3232', name: 'Red', pct: 30 },
-        { color: '#1A1A1A', name: 'Black', pct: 10 },
-      ], note: 'Rich and dark. Use black sparingly.' },
-      { name: 'Magenta', result: '#C42A80', ingredients: [
-        { color: '#CD3232', name: 'Red', pct: 55 },
-        { color: '#2A5FAA', name: 'Blue', pct: 35 },
-        { color: '#F5F0E8', name: 'White', pct: 10 },
-      ], note: 'Vivid pink-purple. Leans red.' },
+      { id: 'basicPurple', result: '#6A3280', ingredients: [
+        { color: '#2A5FAA', paint: 'blue', pct: 55 },
+        { color: '#CD3232', paint: 'red', pct: 35 },
+        { color: '#F5F0E8', paint: 'white', pct: 10 },
+      ] },
+      { id: 'lavender', result: '#B89EC4', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 50 },
+        { color: '#2A5FAA', paint: 'blue', pct: 30 },
+        { color: '#CD3232', paint: 'red', pct: 20 },
+      ] },
+      { id: 'deepPurple', result: '#3A1A5A', ingredients: [
+        { color: '#2A5FAA', paint: 'blue', pct: 60 },
+        { color: '#CD3232', paint: 'red', pct: 30 },
+        { color: '#1A1A1A', paint: 'black', pct: 10 },
+      ] },
+      { id: 'magenta', result: '#C42A80', ingredients: [
+        { color: '#CD3232', paint: 'red', pct: 55 },
+        { color: '#2A5FAA', paint: 'blue', pct: 35 },
+        { color: '#F5F0E8', paint: 'white', pct: 10 },
+      ] },
     ],
   },
   {
-    group: 'Oranges',
+    group: 'oranges',
     items: [
-      { name: 'Orange', result: '#E8781A', ingredients: [
-        { color: '#F5C542', name: 'Yellow', pct: 55 },
-        { color: '#CD3232', name: 'Red', pct: 40 },
-        { color: '#F5F0E8', name: 'White', pct: 5 },
-      ], note: 'Bold basic orange. More red for rust, more yellow for golden.' },
-      { name: 'Peach', result: '#F2B890', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 55 },
-        { color: '#F5C542', name: 'Yellow', pct: 30 },
-        { color: '#CD3232', name: 'Red', pct: 15 },
-      ], note: 'Soft and warm. Great for skin highlights or fruit.' },
-      { name: 'Terracotta', result: '#B25A3E', ingredients: [
-        { color: '#CD3232', name: 'Red', pct: 50 },
-        { color: '#F5C542', name: 'Yellow', pct: 30 },
+      { id: 'orange', result: '#E8781A', ingredients: [
+        { color: '#F5C542', paint: 'yellow', pct: 55 },
+        { color: '#CD3232', paint: 'red', pct: 40 },
+        { color: '#F5F0E8', paint: 'white', pct: 5 },
+      ] },
+      { id: 'peach', result: '#F2B890', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 55 },
+        { color: '#F5C542', paint: 'yellow', pct: 30 },
+        { color: '#CD3232', paint: 'red', pct: 15 },
+      ] },
+      { id: 'terracotta', result: '#B25A3E', ingredients: [
+        { color: '#CD3232', paint: 'red', pct: 50 },
+        { color: '#F5C542', paint: 'yellow', pct: 30 },
         { color: '#5A3020', name: 'Burnt Umber', pct: 20 },
-      ], note: 'Warm clay tone. Earthy and grounded.' },
+      ] },
     ],
   },
   {
-    group: 'Pinks',
+    group: 'pinks',
     items: [
-      { name: 'Pink', result: '#F28CA4', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 60 },
-        { color: '#CD3232', name: 'Red', pct: 30 },
-        { color: '#2A5FAA', name: 'Blue', pct: 10 },
-      ], note: 'Classic pink. A touch of blue keeps it from going orange.' },
-      { name: 'Salmon', result: '#F28C78', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 50 },
-        { color: '#CD3232', name: 'Red', pct: 30 },
-        { color: '#F5C542', name: 'Yellow', pct: 20 },
-      ], note: 'Warm coral pink. More yellow moves it toward peach.' },
-      { name: 'Rose', result: '#D44A6A', ingredients: [
-        { color: '#CD3232', name: 'Red', pct: 55 },
-        { color: '#F5F0E8', name: 'White', pct: 30 },
-        { color: '#2A5FAA', name: 'Blue', pct: 15 },
-      ], note: 'Deeper pink. Less white, more red and blue.' },
+      { id: 'pink', result: '#F28CA4', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 60 },
+        { color: '#CD3232', paint: 'red', pct: 30 },
+        { color: '#2A5FAA', paint: 'blue', pct: 10 },
+      ] },
+      { id: 'salmon', result: '#F28C78', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 50 },
+        { color: '#CD3232', paint: 'red', pct: 30 },
+        { color: '#F5C542', paint: 'yellow', pct: 20 },
+      ] },
+      { id: 'rose', result: '#D44A6A', ingredients: [
+        { color: '#CD3232', paint: 'red', pct: 55 },
+        { color: '#F5F0E8', paint: 'white', pct: 30 },
+        { color: '#2A5FAA', paint: 'blue', pct: 15 },
+      ] },
     ],
   },
   {
-    group: 'Browns',
+    group: 'browns',
     items: [
-      { name: 'Basic Brown', result: '#7A5A3A', ingredients: [
+      { id: 'basicBrown', result: '#7A5A3A', ingredients: [
         { color: '#5A3020', name: 'Burnt Umber', pct: 50 },
-        { color: '#F5C542', name: 'Yellow', pct: 25 },
-        { color: '#CD3232', name: 'Red', pct: 25 },
-      ], note: 'All-purpose brown. Balanced warm mix.' },
-      { name: 'Warm Brown', result: '#8C5A2A', ingredients: [
+        { color: '#F5C542', paint: 'yellow', pct: 25 },
+        { color: '#CD3232', paint: 'red', pct: 25 },
+      ] },
+      { id: 'warmBrown', result: '#8C5A2A', ingredients: [
         { color: '#5A3020', name: 'Burnt Umber', pct: 50 },
-        { color: '#F5C542', name: 'Yellow', pct: 30 },
-        { color: '#CD3232', name: 'Red', pct: 20 },
-      ], note: 'Golden brown. More yellow for warmth.' },
-      { name: 'Dark Brown', result: '#3A2A1A', ingredients: [
+        { color: '#F5C542', paint: 'yellow', pct: 30 },
+        { color: '#CD3232', paint: 'red', pct: 20 },
+      ] },
+      { id: 'darkBrown', result: '#3A2A1A', ingredients: [
         { color: '#5A3020', name: 'Burnt Umber', pct: 60 },
-        { color: '#1A1A1A', name: 'Black', pct: 30 },
-        { color: '#2A5FAA', name: 'Blue', pct: 10 },
-      ], note: 'Near-black brown. Use blue instead of plain black for depth.' },
-      { name: 'Reddish Brown', result: '#7A3A2A', ingredients: [
+        { color: '#1A1A1A', paint: 'black', pct: 30 },
+        { color: '#2A5FAA', paint: 'blue', pct: 10 },
+      ] },
+      { id: 'reddishBrown', result: '#7A3A2A', ingredients: [
         { color: '#5A3020', name: 'Burnt Umber', pct: 50 },
-        { color: '#CD3232', name: 'Red', pct: 35 },
-        { color: '#F5C542', name: 'Yellow', pct: 15 },
-      ], note: 'Brick-like tone. Heavy on the red.' },
+        { color: '#CD3232', paint: 'red', pct: 35 },
+        { color: '#F5C542', paint: 'yellow', pct: 15 },
+      ] },
     ],
   },
   {
-    group: 'Neutrals',
+    group: 'neutrals',
     items: [
-      { name: 'Warm Gray', result: '#8C8276', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 55 },
+      { id: 'warmGray', result: '#8C8276', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 55 },
         { color: '#5A3020', name: 'Burnt Umber', pct: 30 },
-        { color: '#F5C542', name: 'Yellow', pct: 15 },
-      ], note: 'Soft golden gray. Warm and receding.' },
-      { name: 'Cool Gray', result: '#7A8290', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 55 },
-        { color: '#2A5FAA', name: 'Blue', pct: 30 },
+        { color: '#F5C542', paint: 'yellow', pct: 15 },
+      ] },
+      { id: 'coolGray', result: '#7A8290', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 55 },
+        { color: '#2A5FAA', paint: 'blue', pct: 30 },
         { color: '#5A3020', name: 'Burnt Umber', pct: 15 },
-      ], note: 'Atmospheric blue-gray. Good for distance.' },
-      { name: 'Cream', result: '#F2E6C8', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 75 },
-        { color: '#F5C542', name: 'Yellow', pct: 20 },
-        { color: '#CD3232', name: 'Red', pct: 5 },
-      ], note: 'Soft off-white. Great for warm highlights.' },
-      { name: 'Beige', result: '#D8C29A', ingredients: [
-        { color: '#F5F0E8', name: 'White', pct: 60 },
-        { color: '#F5C542', name: 'Yellow', pct: 25 },
+      ] },
+      { id: 'cream', result: '#F2E6C8', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 75 },
+        { color: '#F5C542', paint: 'yellow', pct: 20 },
+        { color: '#CD3232', paint: 'red', pct: 5 },
+      ] },
+      { id: 'beige', result: '#D8C29A', ingredients: [
+        { color: '#F5F0E8', paint: 'white', pct: 60 },
+        { color: '#F5C542', paint: 'yellow', pct: 25 },
         { color: '#5A3020', name: 'Burnt Umber', pct: 15 },
-      ], note: 'Classic warm neutral. Light and earthy.' },
+      ] },
     ],
   },
 ];
 
 function RecipeCard({ r, onPick }: { r: Recipe; onPick: (hex: string) => void }) {
+  const t = useTranslations('colorTool');
   return (
     <div className="bg-card border border-border rounded-lg p-3 space-y-2.5">
       <div className="flex items-center gap-3">
@@ -381,8 +398,8 @@ function RecipeCard({ r, onPick }: { r: Recipe; onPick: (hex: string) => void })
           title={r.result}
         />
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-foreground truncate">{r.name}</div>
-          <div className="text-[10px] text-muted-foreground font-mono">{r.result.toUpperCase()}</div>
+          <div className="text-sm font-semibold text-foreground truncate">{t(`recipes.${r.id}.name`)}</div>
+          <div className="text-[10px] text-muted-foreground font-mono"><span dir="ltr">{r.result.toUpperCase()}</span></div>
         </div>
       </div>
       <div className="space-y-1">
@@ -390,68 +407,70 @@ function RecipeCard({ r, onPick }: { r: Recipe; onPick: (hex: string) => void })
           <div key={i} className="flex items-center gap-2 text-xs">
             <div className="w-4 h-4 rounded-sm border border-border/60 shrink-0" style={{ backgroundColor: ing.color }} />
             <span className="text-muted-foreground tabular-nums w-9 shrink-0">{ing.pct}%</span>
-            <span className="text-foreground truncate">{ing.name}</span>
+            <span className="text-foreground truncate">{paintName(ing, t)}</span>
           </div>
         ))}
       </div>
-      {r.note && <p className="text-[11px] text-muted-foreground leading-snug">{r.note}</p>}
+      {/* Every recipe has a note. */}
+      <p className="text-[11px] text-muted-foreground leading-snug">{t(`recipes.${r.id}.note`)}</p>
     </div>
   );
 }
 
 // ─── Skin tones ───────────────────────────────────────
-type SkinMix = { label: string; result: string; ingredients: { color: string; name: string }[] };
-type SkinCard = { name: string; base: SkinMix; shadow: SkinMix; highlight: SkinMix };
+// Card names and mix labels are messages (colorTool.skin).
+type SkinMix = { label: keyof ColorMessages['skin']['mixes']; result: string; ingredients: (Paint & { color: string })[] };
+type SkinCard = { id: keyof ColorMessages['skin']['cards']; base: SkinMix; shadow: SkinMix; highlight: SkinMix };
 
 const SKIN_CARDS: SkinCard[] = [
   {
-    name: 'Light Skin',
+    id: 'light',
     base: {
-      label: 'Base', result: '#F2D2B0',
+      label: 'base', result: '#F2D2B0',
       ingredients: [
-        { color: '#F5F0E8', name: 'White' },
+        { color: '#F5F0E8', paint: 'white' },
         { color: '#C89A3A', name: 'Yellow Ochre' },
         { color: '#D03A28', name: 'Cadmium Red' },
       ],
     },
     shadow: {
-      label: 'Shadow', result: '#A06A48',
+      label: 'shadow', result: '#A06A48',
       ingredients: [{ color: '#9A4A24', name: 'Burnt Sienna' }],
     },
     highlight: {
-      label: 'Highlight', result: '#FCEEDB',
-      ingredients: [{ color: '#F5F0E8', name: 'White' }],
+      label: 'highlight', result: '#FCEEDB',
+      ingredients: [{ color: '#F5F0E8', paint: 'white' }],
     },
   },
   {
-    name: 'Medium Skin',
+    id: 'medium',
     base: {
-      label: 'Base', result: '#C6905E',
+      label: 'base', result: '#C6905E',
       ingredients: [
         { color: '#9A4A24', name: 'Burnt Sienna' },
         { color: '#C89A3A', name: 'Yellow Ochre' },
-        { color: '#F5F0E8', name: 'White' },
+        { color: '#F5F0E8', paint: 'white' },
       ],
     },
     shadow: {
-      label: 'Shadow', result: '#6E4226',
+      label: 'shadow', result: '#6E4226',
       ingredients: [
         { color: '#5A3020', name: 'Burnt Umber' },
         { color: '#9A4A24', name: 'Burnt Sienna' },
       ],
     },
     highlight: {
-      label: 'Highlight', result: '#E8C49A',
+      label: 'highlight', result: '#E8C49A',
       ingredients: [
-        { color: '#F5F0E8', name: 'White' },
+        { color: '#F5F0E8', paint: 'white' },
         { color: '#C89A3A', name: 'Yellow Ochre' },
       ],
     },
   },
   {
-    name: 'Dark Skin',
+    id: 'dark',
     base: {
-      label: 'Base', result: '#5A3A22',
+      label: 'base', result: '#5A3A22',
       ingredients: [
         { color: '#5A3020', name: 'Burnt Umber' },
         { color: '#9A4A24', name: 'Burnt Sienna' },
@@ -459,14 +478,14 @@ const SKIN_CARDS: SkinCard[] = [
       ],
     },
     shadow: {
-      label: 'Shadow', result: '#2E1A10',
+      label: 'shadow', result: '#2E1A10',
       ingredients: [
         { color: '#5A3020', name: 'Burnt Umber' },
         { color: '#2A5FAA', name: 'Ultramarine' },
       ],
     },
     highlight: {
-      label: 'Highlight', result: '#8B5A36',
+      label: 'highlight', result: '#8B5A36',
       ingredients: [
         { color: '#9A4A24', name: 'Burnt Sienna' },
         { color: '#C89A3A', name: 'Yellow Ochre' },
@@ -476,6 +495,7 @@ const SKIN_CARDS: SkinCard[] = [
 ];
 
 function SkinMixRow({ m, onPick }: { m: SkinMix; onPick: (hex: string) => void }) {
+  const t = useTranslations('colorTool');
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
@@ -486,17 +506,17 @@ function SkinMixRow({ m, onPick }: { m: SkinMix; onPick: (hex: string) => void }
           title={m.result}
         />
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{m.label}</div>
-          <div className="text-[10px] font-mono text-muted-foreground">{m.result.toUpperCase()}</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t(`skin.mixes.${m.label}`)}</div>
+          <div className="text-[10px] font-mono text-muted-foreground"><span dir="ltr">{m.result.toUpperCase()}</span></div>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 flex-wrap pl-1">
+      <div className="flex items-center gap-1.5 flex-wrap ps-1">
         {m.ingredients.map((ing, i) => (
           <div key={i} className="flex items-center gap-1.5">
             {i > 0 && <Plus className="w-2.5 h-2.5 text-muted-foreground" />}
             <div className="flex items-center gap-1">
               <div className="w-4 h-4 rounded-sm border border-border/60" style={{ backgroundColor: ing.color }} />
-              <span className="text-[11px] text-foreground">{ing.name}</span>
+              <span className="text-[11px] text-foreground">{paintName(ing, t)}</span>
             </div>
           </div>
         ))}
@@ -507,15 +527,16 @@ function SkinMixRow({ m, onPick }: { m: SkinMix; onPick: (hex: string) => void }
 
 // ─── Painter Cheat Sheet ─────────────────────────────
 function PainterCheatSheet() {
+  const t = useTranslations('colorTool.cheatSheet');
   const items = [
-    { icon: Flame, title: 'Warm a color', tip: 'Add Yellow Ochre', color: '#C89A3A' },
-    { icon: Snowflake, title: 'Cool a color', tip: 'Add Blue', color: '#2A5FAA' },
-    { icon: Droplet, title: 'Mute a color', tip: 'Add a touch of its complement', color: '#8C7A6B' },
-    { icon: Ban, title: 'Never darken with Black alone', tip: 'Use the complement or Burnt Umber', color: '#5A3020' },
+    { icon: Flame, title: t('warm.title'), tip: t('warm.tip'), color: '#C89A3A' },
+    { icon: Snowflake, title: t('cool.title'), tip: t('cool.tip'), color: '#2A5FAA' },
+    { icon: Droplet, title: t('mute.title'), tip: t('mute.tip'), color: '#8C7A6B' },
+    { icon: Ban, title: t('darken.title'), tip: t('darken.tip'), color: '#5A3020' },
   ];
   return (
     <section>
-      <h3 className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">Painter Cheat Sheet</h3>
+      <h3 className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">{t('title')}</h3>
       <div className="grid gap-2 sm:grid-cols-2">
         {items.map(({ icon: Icon, title, tip, color }) => (
           <div key={title} className="flex items-center gap-3 bg-card border border-border rounded-lg p-3">
@@ -534,17 +555,15 @@ function PainterCheatSheet() {
 }
 
 // ─── Sections ────────────────────────────────────────
-// Each section says what it is *for* — shown under the tool title.
+// Each section says what it is *for* — shown under the tool title. Their tab
+// names and purposes are messages (colorTool.sections.<id>).
 type ColorSection = 'wheel' | 'harmony' | 'recipes' | 'skin';
-const COLOR_SECTIONS: { id: ColorSection; label: string; purpose: string }[] = [
-  { id: 'wheel', label: 'Color Wheel', purpose: 'Pick a color by hue and shade, or sample it from your photo' },
-  { id: 'harmony', label: 'Harmonies', purpose: 'Colors that work with your selected color' },
-  { id: 'recipes', label: 'Mixing', purpose: 'Step-by-step paint recipes for common colors' },
-  { id: 'skin', label: 'Skin Tones', purpose: 'Base, shadow and highlight mixes for skin' },
-];
+const COLOR_SECTIONS: ColorSection[] = ['wheel', 'harmony', 'recipes', 'skin'];
 
 // ─── Main ────────────────────────────────────────────
 export default function ColorTab() {
+  const t = useTranslations('colorTool');
+  const locale = useLocale();
   const { image } = useProject();
   const [hue, setHue] = useState(() => hexToHsv('#D4827A')[0]);
   const [sat, setSat] = useState(() => hexToHsv('#D4827A')[1]);
@@ -631,25 +650,26 @@ export default function ColorTab() {
     <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5">
       <div className="h-10 w-10 shrink-0 rounded-lg border border-border" style={{ backgroundColor: selectedHex }} />
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Selected color</div>
-        <div className="font-mono text-sm uppercase text-foreground">{selectedHex}</div>
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t('selected.color')}</div>
+        <div className="font-mono text-sm uppercase text-foreground"><span dir="ltr">{selectedHex}</span></div>
       </div>
       <button onClick={() => setSection('wheel')} className="min-h-[40px] rounded-lg px-3 text-xs font-semibold text-primary hover:bg-secondary">
-        Change
+        {t('selected.change')}
       </button>
     </div>
   );
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
-    <ToolHeader tool="color" task={COLOR_SECTIONS.find((c) => c.id === section)?.purpose} />
+    <ToolHeader tool="color" task={t(`sections.${section}.purpose`)} />
     <div className="flex-1 min-h-0 overflow-y-auto canvas-area">
       <div className="max-w-4xl mx-auto p-3 md:p-4 space-y-5">
-        <Tabs value={section} onValueChange={(v) => setSection(v as ColorSection)} className="w-full">
+        {/* Radix Tabs sets `dir` on its root (left to right unless told): the page's direction. */}
+        <Tabs dir={dirOf(locale)} value={section} onValueChange={(v) => setSection(v as ColorSection)} className="w-full">
           <TabsList data-onboarding="color-tabs" className="grid h-auto w-full grid-cols-4 p-1">
             {COLOR_SECTIONS.map((c) => (
-              <TabsTrigger key={c.id} value={c.id} className="min-h-[40px] whitespace-normal px-1 text-xs leading-tight md:text-sm">
-                {c.label}
+              <TabsTrigger key={c} value={c} className="min-h-[40px] whitespace-normal px-1 text-xs leading-tight md:text-sm">
+                {t(`sections.${c}.label`)}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -668,11 +688,12 @@ export default function ColorTab() {
                   style={{ backgroundColor: selectedHex }}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Selected</div>
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t('selected.label')}</div>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      aria-label="Selected color (HEX)"
+                      dir="ltr"
+                      aria-label={t('selected.hex')}
                       value={hexInput}
                       onChange={(e) => {
                         setHexInput(e.target.value);
@@ -681,7 +702,7 @@ export default function ColorTab() {
                       onBlur={() => { if (!isValidHex(hexInput)) setHexInput(selectedHex); }}
                       className="flex-1 px-2 py-1.5 text-sm font-mono bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary uppercase"
                     />
-                    <button onClick={() => copyHex(selectedHex)} className="btn-tool p-1.5" title="Copy HEX">
+                    <button onClick={() => copyHex(selectedHex)} className="btn-tool p-1.5" title={t('selected.copy')}>
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -698,15 +719,16 @@ export default function ColorTab() {
                   }`}
                 >
                   <Pipette className="w-3.5 h-3.5" />
-                  {picking ? 'Tap on image below ↓' : 'Pick from image'}
+                  {picking ? t('pick.active') : t('pick.start')}
                 </button>
               )}
+              {/* Sampled by pointer coordinates: left to right in every language. */}
               {image && picking && (
-                <div className="mt-3">
+                <div className="mt-3" dir="ltr">
                   <img
                     ref={pickImgRef}
                     src={image}
-                    alt="Pick color"
+                    alt={t('pick.alt')}
                     className="max-w-full max-h-[40vh] object-contain rounded cursor-crosshair border border-border mx-auto"
                     onClick={handlePickClick}
                   />
@@ -716,7 +738,7 @@ export default function ColorTab() {
 
             <button onClick={() => setSection('harmony')}
               className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-sm font-semibold text-primary hover:bg-primary/15">
-              See harmonies for this color →
+              {t('seeHarmonies')}
             </button>
           </TabsContent>
 
@@ -726,45 +748,45 @@ export default function ColorTab() {
             {/* Harmonies */}
             <div data-onboarding="color-harmony" className="grid gap-3 sm:grid-cols-2">
               <HarmonyBlock
-                label="Complementary"
-                colors={[{ hex: selectedHex, tag: 'Base' }, { hex: compHex, tag: 'Comp' }]}
+                label={t('harmonies.complementary')}
+                colors={[{ hex: selectedHex, tag: t('tags.base') }, { hex: compHex, tag: t('tags.comp') }]}
                 onSelect={applyHex}
               />
               <HarmonyBlock
-                label="Split Complementary"
+                label={t('harmonies.splitComplementary')}
                 colors={[
-                  { hex: selectedHex, tag: 'Base' },
-                  { hex: split1, tag: 'Split A' },
-                  { hex: split2, tag: 'Split B' },
+                  { hex: selectedHex, tag: t('tags.base') },
+                  { hex: split1, tag: t('tags.splitA') },
+                  { hex: split2, tag: t('tags.splitB') },
                 ]}
                 onSelect={applyHex}
               />
               <HarmonyBlock
-                label="Analogous"
+                label={t('harmonies.analogous')}
                 colors={[
-                  { hex: ana1, tag: '−30°' },
-                  { hex: selectedHex, tag: 'Base' },
-                  { hex: ana2, tag: '+30°' },
+                  { hex: ana1, tag: '−30°', ltr: true },
+                  { hex: selectedHex, tag: t('tags.base') },
+                  { hex: ana2, tag: '+30°', ltr: true },
                 ]}
                 onSelect={applyHex}
               />
               <HarmonyBlock
-                label="Triadic"
+                label={t('harmonies.triadic')}
                 colors={[
-                  { hex: selectedHex, tag: 'Base' },
-                  { hex: tri1, tag: 'Tri A' },
-                  { hex: tri2, tag: 'Tri B' },
+                  { hex: selectedHex, tag: t('tags.base') },
+                  { hex: tri1, tag: t('tags.triA') },
+                  { hex: tri2, tag: t('tags.triB') },
                 ]}
                 onSelect={applyHex}
               />
               <HarmonyBlock
-                label="Warm Version"
-                colors={[{ hex: selectedHex, tag: 'Base' }, { hex: warmHex, tag: 'Warmer' }]}
+                label={t('harmonies.warm')}
+                colors={[{ hex: selectedHex, tag: t('tags.base') }, { hex: warmHex, tag: t('tags.warmer') }]}
                 onSelect={applyHex}
               />
               <HarmonyBlock
-                label="Cool Version"
-                colors={[{ hex: selectedHex, tag: 'Base' }, { hex: coolHex, tag: 'Cooler' }]}
+                label={t('harmonies.cool')}
+                colors={[{ hex: selectedHex, tag: t('tags.base') }, { hex: coolHex, tag: t('tags.cooler') }]}
                 onSelect={applyHex}
               />
             </div>
@@ -776,10 +798,10 @@ export default function ColorTab() {
           <TabsContent value="recipes" className="space-y-5 mt-4">
             {RECIPES.map((group) => (
               <section key={group.group}>
-                <h3 className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">{group.group}</h3>
+                <h3 className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">{t(`groups.${group.group}`)}</h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {group.items.map((r) => (
-                    <RecipeCard key={r.name} r={r} onPick={applyHex} />
+                    <RecipeCard key={r.id} r={r} onPick={applyHex} />
                   ))}
                 </div>
               </section>
@@ -791,14 +813,14 @@ export default function ColorTab() {
           <TabsContent value="skin" className="space-y-4 mt-4">
             <div className="grid gap-3 md:grid-cols-3">
               {SKIN_CARDS.map((card) => (
-                <div key={card.name} className="bg-card border border-border rounded-lg p-4 space-y-3">
+                <div key={card.id} className="bg-card border border-border rounded-lg p-4 space-y-3">
                   <div className="flex items-center gap-3 pb-2 border-b border-border">
                     <div
                       className="w-10 h-10 rounded-md border border-border/60 cursor-pointer hover:scale-105 transition-transform"
                       style={{ backgroundColor: card.base.result }}
                       onClick={() => applyHex(card.base.result)}
                     />
-                    <h4 className="text-sm font-semibold text-foreground">{card.name}</h4>
+                    <h4 className="text-sm font-semibold text-foreground">{t(`skin.cards.${card.id}`)}</h4>
                   </div>
                   <SkinMixRow m={card.base} onPick={applyHex} />
                   <SkinMixRow m={card.shadow} onPick={applyHex} />
