@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
@@ -8,8 +9,12 @@ import ToolEmptyState from '@/components/shell/ToolEmptyState';
 import type { GridSettings } from '@/types/project';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { canvasToBlob } from '@/lib/saveMedia';
+import type { gridEn } from '@/i18n/messages/tools/grid';
 
+// Numbers go into messages as the strings they always were (no locale
+// formatting), so the English text stays exactly as before.
 export default function GridTab() {
+  const t = useTranslations('gridTool');
   const { image, gridImage, setGridImage, initGridImageFromReference, gridSettings, setGridSettings } = useProject();
   const { save } = useSaveMedia();
   // Mobile panel: the common presets first, every setting one tap away.
@@ -264,7 +269,7 @@ export default function GridTab() {
         drawGridOnCtx(ctx, exportW, exportH);
         const filename = `grid-${gs.columns}x${gs.rows}-${gs.canvasWidth}x${gs.canvasHeight}${gs.unit}.png`;
         canvasToBlob(canvas, 'image/png')
-          .then((blob) => save({ blob, filename, mime: 'image/png', title: 'Save grid' }))
+          .then((blob) => save({ blob, filename, mime: 'image/png', title: t('saveTitle') }))
           .catch((error) => console.error('[GridTab] Failed to export grid PNG:', error));
       } catch (error) {
         console.error('[GridTab] Failed to export grid PNG:', error);
@@ -301,7 +306,7 @@ export default function GridTab() {
     } else {
       doExport();
     }
-  }, [activeImage, aspect, getFitScale, gs, save]);
+  }, [activeImage, aspect, getFitScale, gs, save, t]);
 
   const drawGridOnCtx = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
     ctx.strokeStyle = gs.lineColor;
@@ -331,11 +336,11 @@ export default function GridTab() {
 
   const fitButtons = activeImage && (
     <SegmentedRow
-      label="Image fit"
+      label={t('fit.label')}
       options={[
-        { label: 'Fit', onClick: fitImage },
-        { label: 'Fill', onClick: fillCanvas },
-        { label: 'Center', onClick: resetImagePosition },
+        { label: t('fit.fit'), onClick: fitImage },
+        { label: t('fit.fill'), onClick: fillCanvas },
+        { label: t('fit.center'), onClick: resetImagePosition },
       ]}
     />
   );
@@ -344,18 +349,24 @@ export default function GridTab() {
     <ImageUploader
       onImageLoad={setGridImage}
       compact
-      label={isMobile ? undefined : 'Replace image'}
+      label={isMobile ? undefined : t('replaceImage')}
       icon={<RefreshCw className="w-4 h-4" />}
     />
   );
+
+  const sizes = {
+    columns: `${gs.columns}`,
+    rows: `${gs.rows}`,
+    width: `${gs.canvasWidth}`,
+    height: `${gs.canvasHeight}`,
+    unit: gs.unit,
+  };
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
       <ToolHeader
         tool="grid"
-        task={activeImage
-          ? `${gs.columns}×${gs.rows} grid on a ${gs.canvasWidth}×${gs.canvasHeight} ${gs.unit} canvas — draw the same grid on yours`
-          : 'Transfer a reference to canvas square by square'}
+        task={activeImage ? t('task.withImage', sizes) : t('task.empty')}
         actions={activeImage ? replaceButton : undefined}
       />
       {/* No image yet: explain the method instead of showing an empty grid.
@@ -363,21 +374,19 @@ export default function GridTab() {
       {!activeImage && (
         <ToolEmptyState
           tool="grid"
-          heading="Copy your reference square by square"
-          steps={[
-            'Upload your reference photo.',
-            'Pick a grid (4×4 is a good start) and your canvas size.',
-            'Save it, then draw the same grid lightly on your canvas.',
-          ]}
+          heading={t('empty.heading')}
+          steps={[t('empty.step1'), t('empty.step2'), t('empty.step3')]}
         >
-          <ImageUploader primary label="Upload reference photo" onImageLoad={setGridImage} />
+          <ImageUploader primary label={t('empty.upload')} onImageLoad={setGridImage} />
         </ToolEmptyState>
       )}
+      {/* The gridded preview (canvas, drag and pinch) stays left to right in every language. */}
       {isMobile ? (
         <>
           <div
             ref={containerRef}
             data-onboarding="grid-canvas"
+            dir="ltr"
             className={`relative flex-1 canvas-area flex items-center justify-center p-2 min-h-0 ${activeImage ? '' : 'hidden'}`}
           >
             <canvas
@@ -398,11 +407,11 @@ export default function GridTab() {
           {activeImage && (
             <div className="shrink-0 border-t border-border bg-card px-3 pb-3 pt-2 space-y-2.5">
               <SegmentedTabs<'preset' | 'customize'> value={panel} onChange={setPanel}
-                options={[{ value: 'preset', label: 'Preset' }, { value: 'customize', label: 'Customize' }]} />
+                options={[{ value: 'preset', label: t('panel.preset') }, { value: 'customize', label: t('panel.customize') }]} />
               {panel === 'preset' ? (
                 <GridPresets gs={gs} update={update} />
               ) : (
-                <div className="max-h-[36vh] overflow-y-auto space-y-3 pr-1">
+                <div className="max-h-[36vh] overflow-y-auto space-y-3 pe-1">
                   <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
                 </div>
               )}
@@ -412,7 +421,7 @@ export default function GridTab() {
                 data-onboarding="grid-export"
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground active:opacity-90"
               >
-                <Download className="h-5 w-5" /> Save grid image
+                <Download className="h-5 w-5" /> {t('saveImage')}
               </button>
             </div>
           )}
@@ -420,15 +429,15 @@ export default function GridTab() {
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Desktop sidebar */}
-          <div className={`w-64 panel-surface border-r border-border p-3 space-y-4 overflow-y-auto shrink-0 ${activeImage ? '' : 'hidden'}`}>
+          <div className={`w-64 panel-surface border-e border-border p-3 space-y-4 overflow-y-auto shrink-0 ${activeImage ? '' : 'hidden'}`}>
             <div>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1.5">Grid</p>
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1.5">{t('sidebar.grid')}</p>
               <GridPresets gs={gs} update={update} />
             </div>
             {fitButtons}
             <details className="group">
               <summary className="flex min-h-[40px] cursor-pointer list-none items-center justify-between text-sm font-medium text-foreground">
-                Customize grid &amp; canvas
+                {t('sidebar.customize')}
                 <span className="text-muted-foreground transition-transform group-open:rotate-180">▾</span>
               </summary>
               <div className="space-y-4 pt-2">
@@ -441,6 +450,7 @@ export default function GridTab() {
           <div
             ref={containerRef}
             data-onboarding="grid-canvas"
+            dir="ltr"
             className={`relative flex-1 canvas-area flex items-center justify-center p-4 min-h-0 ${activeImage ? '' : 'hidden'}`}
           >
             <canvas
@@ -466,7 +476,7 @@ export default function GridTab() {
         <div className="flex items-center justify-between px-3 py-2 toolbar-surface border-t border-border shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-muted-foreground">
-              {gs.canvasWidth}×{gs.canvasHeight} {gs.unit} · {gs.columns}×{gs.rows} grid
+              {t('summary', sizes)}
             </span>
           </div>
           <button
@@ -475,7 +485,7 @@ export default function GridTab() {
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:opacity-90 active:scale-95 transition-transform"
           >
             <Download className="w-4 h-4" />
-            Save grid image
+            {t('saveImage')}
           </button>
         </div>
       )}
@@ -486,19 +496,22 @@ export default function GridTab() {
 }
 
 // ─── Presets ──────────────────────────────────────────
-const GRID_PRESETS = [
-  { n: 3, note: 'Simple' },
-  { n: 4, note: 'Recommended' },
-  { n: 8, note: 'Detailed' },
+// Each note is a message key (gridTool.presets.notes).
+const GRID_PRESETS: { n: number; note: keyof typeof gridEn.presets.notes }[] = [
+  { n: 3, note: 'simple' },
+  { n: 4, note: 'recommended' },
+  { n: 8, note: 'detailed' },
 ];
 
 function GridPresets({ gs, update }: { gs: GridSettings; update: (p: Partial<GridSettings>) => void }) {
+  const t = useTranslations('gridTool.presets');
   return (
-    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Grid preset">
-      {GRID_PRESETS.map(({ n, note }) => {
+    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('label')}>
+      {GRID_PRESETS.map(({ n, note: noteKey }) => {
         const active = gs.columns === n && gs.rows === n;
+        const note = t(`notes.${noteKey}`);
         return (
-          <button key={n} role="radio" aria-checked={active} aria-label={`${n} by ${n} grid (${note})`}
+          <button key={n} role="radio" aria-checked={active} aria-label={t('option', { n: `${n}`, note })}
             onClick={() => update({ columns: n, rows: n })}
             className={`flex flex-col items-center gap-1 rounded-xl border py-2 transition-colors ${
               active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
@@ -563,34 +576,38 @@ function GridControls({
   activeImage: string | null;
   colors: string[];
 }) {
+  const t = useTranslations('gridTool.controls');
+  // Number fields and sliders stay left to right in every language.
   return (
     <>
       {/* Canvas dimensions */}
       <div data-onboarding="grid-size">
         <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
-          Canvas Size
+          {t('canvasSize')}
         </label>
         <div className="flex items-center gap-2">
           <div className="flex-1">
             <input
               type="number"
               inputMode="decimal"
+              dir="ltr"
               value={gs.canvasWidth}
               onChange={(e) => update({ canvasWidth: Math.max(1, Number(e.target.value)) })}
               className="w-full px-2 py-1.5 text-sm bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             />
-            <span className="text-[10px] text-muted-foreground">Width</span>
+            <span className="text-[10px] text-muted-foreground">{t('width')}</span>
           </div>
           <span className="text-muted-foreground text-sm mt-[-14px]">×</span>
           <div className="flex-1">
             <input
               type="number"
               inputMode="decimal"
+              dir="ltr"
               value={gs.canvasHeight}
               onChange={(e) => update({ canvasHeight: Math.max(1, Number(e.target.value)) })}
               className="w-full px-2 py-1.5 text-sm bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             />
-            <span className="text-[10px] text-muted-foreground">Height</span>
+            <span className="text-[10px] text-muted-foreground">{t('height')}</span>
           </div>
           <select
             value={gs.unit}
@@ -605,7 +622,7 @@ function GridControls({
 
       {/* Common presets */}
       <div>
-        <label className="text-xs text-muted-foreground font-medium block mb-1.5">Quick Ratios</label>
+        <label className="text-xs text-muted-foreground font-medium block mb-1.5">{t('quickRatios')}</label>
         <div className="flex flex-wrap gap-1.5">
           {[
             { label: '1:1', w: 50, h: 50 },
@@ -632,13 +649,14 @@ function GridControls({
       {/* Grid divisions */}
       <div data-onboarding="grid-divisions">
         <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
-          Grid Divisions
+          {t('divisions')}
         </label>
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <label className="text-[10px] text-muted-foreground">Cols: {gs.columns}</label>
+            <label className="text-[10px] text-muted-foreground">{t('columns', { count: `${gs.columns}` })}</label>
             <input
               type="range"
+              dir="ltr"
               min={1}
               max={16}
               value={gs.columns}
@@ -647,9 +665,10 @@ function GridControls({
             />
           </div>
           <div className="flex-1">
-            <label className="text-[10px] text-muted-foreground">Rows: {gs.rows}</label>
+            <label className="text-[10px] text-muted-foreground">{t('rows', { count: `${gs.rows}` })}</label>
             <input
               type="range"
+              dir="ltr"
               min={1}
               max={16}
               value={gs.rows}
@@ -663,7 +682,7 @@ function GridControls({
       {/* Line appearance */}
       <div>
         <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
-          Line Style
+          {t('lineStyle')}
         </label>
         <div className="flex items-center gap-1.5 mb-2">
           {colors.map(c => (
@@ -679,9 +698,10 @@ function GridControls({
         </div>
         <div className="space-y-1.5">
           <div>
-            <label className="text-[10px] text-muted-foreground">Opacity: {Math.round(gs.lineOpacity * 100)}%</label>
+            <label className="text-[10px] text-muted-foreground">{t('opacity', { value: `${Math.round(gs.lineOpacity * 100)}` })}</label>
             <input
               type="range"
+              dir="ltr"
               min={10}
               max={100}
               value={Math.round(gs.lineOpacity * 100)}
@@ -690,9 +710,10 @@ function GridControls({
             />
           </div>
           <div>
-            <label className="text-[10px] text-muted-foreground">Thickness: {gs.lineWidth}px</label>
+            <label className="text-[10px] text-muted-foreground">{t('thickness', { value: `${gs.lineWidth}` })}</label>
             <input
               type="range"
+              dir="ltr"
               min={1}
               max={5}
               value={gs.lineWidth}
@@ -707,9 +728,10 @@ function GridControls({
       {activeImage && (
         <div>
           <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
-            Image Scale
+            {t('imageScale')}
           </label>
-          <div className="flex items-center gap-2">
+          {/* Slider and its readout, as one left-to-right control. */}
+          <div className="flex items-center gap-2" dir="ltr">
             <input
               type="range"
               min={25}
@@ -718,13 +740,13 @@ function GridControls({
               onChange={(e) => update({ imageScale: Number(e.target.value) / 100 })}
               className="flex-1 accent-primary"
             />
-            <span className="text-xs text-muted-foreground w-10 text-right">{Math.round(gs.imageScale * 100)}%</span>
+            <span className="text-xs text-muted-foreground w-10 text-end">{Math.round(gs.imageScale * 100)}%</span>
           </div>
           <button
             onClick={() => update({ imageOffsetX: 0, imageOffsetY: 0 })}
             className="text-[10px] text-muted-foreground hover:text-foreground mt-1"
           >
-            Center image
+            {t('centerImage')}
           </button>
         </div>
       )}
