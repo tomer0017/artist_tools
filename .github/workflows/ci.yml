@@ -50,6 +50,13 @@ jobs:
     needs: checks
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    # Playwright's own image: the browsers and their system libraries are
+    # already installed (installing them on the runner sometimes stalled for
+    # over 20 minutes). Same Playwright version as package-lock.json, pinned
+    # by digest; update both together.
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948
+      options: --user 1001
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -62,17 +69,6 @@ jobs:
         with:
           path: ~/.cache/mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - name: Install the browsers
-        # Usually about a minute; a stalled package mirror is retried instead
-        # of holding the job until its timeout.
-        timeout-minutes: 20
-        run: |
-          for attempt in 1 2 3; do
-            if timeout 360 npx playwright install --with-deps chromium webkit; then exit 0; fi
-            echo "Browser install attempt $attempt did not finish; retrying"
-            sleep 15
-          done
-          exit 1
       - name: End-to-end tests (builds the app, starts it with an in-memory database)
         run: npx playwright test
       - name: Keep the failure screenshots and traces
