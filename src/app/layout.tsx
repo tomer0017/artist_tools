@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { ErrorReporter } from '@/components/common/ErrorReporter';
 import { I18nProvider } from '@/i18n/client';
 import { dirOf } from '@/i18n/config';
 import { getRequestLocale, getT, messagesFor } from '@/i18n/server';
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} dir={dirOf(locale)}>
       <body>
+        <ErrorReporter />
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
           {children}
         </I18nProvider>

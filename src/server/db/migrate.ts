@@ -78,6 +78,7 @@ export const INDEXES: IndexPlan[] = [
   { collection: 'reconciliation_runs', key: { startedAt: -1 }, options: { name: 'reconciliation_by_time' } },
   { collection: 'admin_mfa_sessions', key: { expiresAt: 1 }, options: { name: 'admin_mfa_session_ttl', expireAfterSeconds: 0 } },
   { collection: 'admin_mfa_sessions', key: { userId: 1 }, options: { name: 'admin_mfa_sessions_by_user' } },
+  { collection: 'error_reports', key: { lastSeen: 1 }, options: { name: 'error_reports_ttl', expireAfterSeconds: 30 * 24 * 60 * 60 } },
 ];
 
 export interface MigrationReport {

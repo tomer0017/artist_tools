@@ -258,6 +258,23 @@ export interface AdminMfaSessionDoc {
   expiresAt: Date;
 }
 
+/** One group of errors seen in browsers or on the server (src/server/error-reports.ts); no personal data. */
+export interface ErrorReportDoc {
+  /** Fingerprint of the source, message and top stack line. */
+  _id: string;
+  source: 'client' | 'server';
+  message: string;
+  /** The first stack seen for this group (scrubbed). */
+  stack: string;
+  count: number;
+  firstSeen: Date;
+  lastSeen: Date;
+  /** Up to ten of each: page paths (ids folded), releases (commits), browsers ("Safari on iPhone"). */
+  paths: string[];
+  releases: string[];
+  browsers: string[];
+}
+
 export interface ReconciliationRunDoc {
   _id?: ObjectId;
   provider: string;
@@ -455,6 +472,7 @@ export function collections(db: Db) {
     reconciliationRuns: db.collection<ReconciliationRunDoc>('reconciliation_runs'),
     adminMfa: db.collection<AdminMfaDoc>('admin_mfa'),
     adminMfaSessions: db.collection<AdminMfaSessionDoc>('admin_mfa_sessions'),
+    errorReports: db.collection<ErrorReportDoc>('error_reports'),
     couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
   };
 }
