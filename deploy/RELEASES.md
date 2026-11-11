@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-11 10:27–10:57 (built 10:26:40) | `3782e2c` | Everything since `56b9629`: CSP with nonces and body limits (`2785aa9`), billing core and `/admin/billing` (`9e046a2`), Hebrew studio frame (`56d5f3c`), accessibility fixes (`a58baa9`), retention in nightly maintenance (`c41c978`), docs | New empty billing collections and indexes (additive) | By the release script, which switches only after the dump, migration and health check succeed. Its log was not read: the VPS was unreachable over SSH afterwards. |
 | 2026-11-11 01:28 | `56b9629` | Fix: `/he` pages served from real routes (a proxy rewrite returned 500 behind nginx) | none | yes (release step) |
 | 2026-11-11 01:20 | `6616888` | Phase 3a: English/Hebrew public pages, sign-in, emails, RTL, `/he` | none | yes (release step) |
 | 2026-11-11 00:48 | `40cbe24` | Phase 2b: versioned plans/prices, quotas, coupons, analytics (includes `ff080c8`) | `config_versions` seeded with today's plans (v1) and no prices; plans unchanged; new indexes | yes (release step) |
@@ -32,28 +33,28 @@ so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
 
+## Verification of `3782e2c` (2026-11-11)
+
+- **Verified over HTTPS** (`deploy/smoke.sh`, 18/18, from the Mac at
+  ~10:58Z):
+  - `/api/health` reports `3782e2c`;
+  - English and Hebrew public pages answer, `/he` included;
+  - signed-out visitors are sent to sign-in from `/app` and `/admin`;
+  - exactly one Content-Security-Policy (nginx adds none), with a new nonce
+    on every request;
+  - oversized bodies get 413.
+- **Not verified yet** (SSH timed out from the Mac after the release):
+  - the release log (dump file name, migration output);
+  - the new indexes in MongoDB;
+  - the owner account (role admin, active) and that existing sessions
+    survived;
+  - signing in as the owner and as a returning user. The owner can confirm
+    on the iPhone; the auth secret and session store did not change.
+  - Commands for the next SSH session:
+    `journalctl -u studio-release-3782e2c-b`, then the checks in
+    `deploy/README.md`.
+
 ## Awaiting deployment
 
-Commits after `56b9629` that are tested locally but not yet on staging (kept
-up to date while the VPS is unreachable):
-
-| Commit | What | Data changes | Pushed to GitHub |
-|---|---|---|---|
-| `2785aa9` | Security: per-request CSP nonce (`'strict-dynamic'`), request body caps (413), `version.commit` in `/api/health`, absolute hreflang | none | yes |
-| `9e046a2` | Phase 4a: provider-neutral billing core (no provider connected), read-only `/admin/billing`, revenue per currency in `/admin/analytics` | new empty collections `billing_customers`, `payments`, `checkout_sessions`, `reconciliation_runs`; new indexes only | yes |
-| `677c3a4` | Docs: this list | none | yes |
-| `56d5f3c` | Phase 3b-1: the studio's frame (Home, navigation, introductions, account page) in English and Hebrew; tools stay English inside | none (Hebrew test accounts exist only in e2e) | yes |
-| `a58baa9` | Accessibility: automated WCAG checks; contrast, names, zoom outside the studio, labels | none | yes |
-| `c41c978` | Privacy inventory, legal drafts (docs only); nightly maintenance deletes analytics after 13 months and audit events after 24 | none at release; the nightly job starts pruning (nothing is old enough until 2027-12) | yes |
-
-Next release: `c41c978`. A release unit was ready to start twice on
-2026-11-11; both times the Mac could not reach the VPS (ports 22 and 443
-silent while GitHub answered), so nothing ran on the server.
-
-Checks for the next staging release, beyond the usual ones:
-- The CSP is new. After the switch, open the landing page, `/he`, sign-in
-  and (as the owner) a tool, and look for CSP errors in the browser console.
-  Also confirm nginx adds no second `Content-Security-Policy` header, because
-  two policies would both apply.
-- `GET /api/health` must report `version.commit` equal to the released
-  commit. This is the first release that reports it.
+Nothing: `3782e2c` is live. `9cf33ec` (the smoke script and docs) changes no
+running code.
