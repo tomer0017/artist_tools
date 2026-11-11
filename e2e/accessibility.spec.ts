@@ -31,11 +31,12 @@ interface Finding {
 }
 
 /** Known, documented exceptions (docs/accessibility/README.md): kept visible in the report, never silently. */
-const KNOWN: { rule: string; paths: RegExp; why: string }[] = [
+const KNOWN: { rule: string; paths: RegExp; projects: string[]; why: string }[] = [
   {
     rule: 'meta-viewport',
     paths: /^\/app(\/|$)/,
-    why: 'the studio limits page zoom: its canvas tools handle pinch themselves, and iOS would zoom into small inputs and stay zoomed',
+    projects: ['iphone-webkit'],
+    why: 'on iPhone and iPad only, the studio adds maximum-scale=1 so Safari does not zoom into small fields and stay zoomed; Safari still lets people pinch-zoom',
   },
 ];
 
@@ -52,7 +53,7 @@ async function scan(page: Page, path: string, ready: (page: Page) => Promise<voi
     help: v.help,
     nodes: v.nodes.slice(0, 5).map((n) => n.target.join(' ')),
     details: v.nodes.slice(0, 5).map((n) => ({ html: n.html.slice(0, 200), data: n.any[0]?.data ?? null })),
-    known: KNOWN.find((k) => k.rule === v.id && k.paths.test(path))?.why ?? null,
+    known: KNOWN.find((k) => k.rule === v.id && k.paths.test(path) && k.projects.includes(test.info().project.name))?.why ?? null,
   }));
   findings.push(...found);
   return found.filter((f) => !f.known);
@@ -105,6 +106,14 @@ test.describe('admin', () => {
 
 test.describe('mobile', () => {
   test.use(phone);
+
+  test('mobile: the studio leaves page zoom free, except iOS zooming into small fields', async ({ page }) => {
+    await page.goto('/app');
+    await expect(page.locator('h1, h2').first()).toBeVisible();
+    const content = await page.locator('meta[name="viewport"]').getAttribute('content');
+    if (test.info().project.name === 'iphone-webkit') await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /maximum-scale=1/);
+    else expect(content).not.toContain('maximum-scale');
+  });
 
   test('the studio and the account page on a phone have no automatically detectable WCAG A/AA problems', async ({ page }) => {
     for (const path of ['/app', '/app/profile', '/app/measure', '/app/compare']) {

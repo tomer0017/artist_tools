@@ -13,5 +13,28 @@ import type { StudioAccount } from './account';
 export default function StudioClient({ account }: { account: StudioAccount }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  useIosNoInputZoom();
   return mounted ? <Studio account={account} /> : null;
+}
+
+const isIos = () =>
+  /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+/**
+ * On iPhone and iPad only, `maximum-scale=1` while the studio is open: Safari
+ * then no longer zooms into small text fields (a scale length) and stays
+ * zoomed, while people can still pinch-zoom the page (Safari ignores the
+ * limit for that). Elsewhere page zoom stays free (WCAG 1.4.4); the tools'
+ * canvases handle their own pinch (touch-action: none).
+ */
+function useIosNoInputZoom() {
+  useEffect(() => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (!meta || !isIos()) return;
+    const original = meta.content;
+    meta.content = `${original}, maximum-scale=1`;
+    return () => {
+      meta.content = original;
+    };
+  }, []);
 }

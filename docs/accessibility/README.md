@@ -40,20 +40,20 @@ scanned page except the known exception.
 |---|---|---|
 | Secondary text contrast 3.8–4.3:1 (`color-contrast`, 1.4.3) | Every page | `--muted-foreground` raised from 50% to 60% lightness (`#797986` → `#94949e`): at least 4.6:1 on every dark surface. The change is subtle; it was checked against screenshots, and visual parity still passes. |
 | Visible text missing from the accessible name (`label-content-name-mismatch`, 2.5.3) | Home tool cards; account button; admin brand link | The cards are named by their own text, and their pictures are decorative. The account button and the brand link use visually hidden text instead of `aria-label`. |
-| Zoom disabled (`meta-viewport`, 1.4.4) | Public pages, admin | `maximum-scale` removed. The studio keeps it; see the exception below. |
+| Zoom disabled (`meta-viewport`, 1.4.4) | Public pages, admin, and the studio on Android and desktop | `maximum-scale` removed everywhere. Only iOS keeps it in the studio, where Safari ignores it for pinch-zoom; see the exception below. |
 | Unlabelled input (`label`, 1.3.1 / 4.1.2) | Color tool, HEX field | `aria-label` added. Nothing changes visually. |
 | Scrollable area unreachable by keyboard (`scrollable-region-focusable`, 2.1.1) | In-studio plans page | The area is focusable, as a named region with a visible focus ring. |
 | Link distinguished by colour only (`link-in-text-block`, 1.4.1) | Admin activity log | Account links are underlined. |
 
-## Known exception
+## Known exception (narrowed on 2026-11-11)
 
-| Rule | Where | Why, and the plan |
+| Rule | Where | Why |
 |---|---|---|
-| `meta-viewport` (1.4.4 Resize text) | The studio (`/app…`) | The studio keeps `maximum-scale=1`, for two reasons. Its canvas tools handle pinch and pan themselves. And iOS would otherwise zoom into small text fields (such as a scale length) and stay zoomed, which breaks the canvas layout. On iOS, Safari still lets people pinch to zoom; on Android, page zoom is blocked. **Plan:** make the tools' text fields 16 px on phones (part of the tools' translation, 3b-2), then remove the limit. |
+| `meta-viewport` (1.4.4 Resize text) | The studio, **on iPhone and iPad only** | The studio adds `maximum-scale=1` after loading, on iOS only (`useIosNoInputZoom` in `StudioClient.tsx`). Safari would otherwise zoom into small text fields, such as a scale length, and stay zoomed, which breaks the canvas layout. **Safari ignores the limit for pinch-zoom**, so people can still zoom. Everywhere else, Android included, page zoom is free: the tools' canvases handle their own pinch (`touch-action: none`), and a pinch elsewhere zooms the page. `e2e/accessibility.spec.ts` checks both cases. |
 
 ## Still to do before any conformance claim
 
-1. **Manual keyboard pass.** Check every page and tool state with the
+1. **Manual keyboard pass** (partly automated now: see `e2e/accessibility.spec.ts`). Check every page and tool state with the
    keyboard alone: focus order, visible focus, no keyboard traps, Escape
    closes dialogs.
 2. **Screen-reader pass:**
@@ -101,7 +101,7 @@ IS 5568. [Conformance level: to be stated only after the manual audit.]
 
 *Known limitations:*
 
-- Inside the studio, page zoom is limited (see above).
+- On iPhone and iPad, the studio stops Safari zooming into small text fields; pinch-zoom still works.
 - The tools work on images on a canvas. What the canvas shows (the artwork,
   measurement lines, grids) is not described to screen readers.
 - [Results of the manual audit.]
