@@ -39,6 +39,7 @@ export async function getAccountSummary(
       lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
       plan: { assigned: entitlements.assignedPlan, effective: entitlements.planId },
       grant: entitlements.grant ? { planId: entitlements.grant.planId, endsAt: entitlements.grant.endsAt.toISOString() } : null,
+      quotas: entitlements.access === 'admin' ? [] : quotasOf(entitlements),
       access: entitlements.access,
       subscription: { status: entitlements.subscriptionStatus ?? 'none' },
       features: entitlements.features,
@@ -50,6 +51,18 @@ export async function getAccountSummary(
       emailPasswordEnabled: options.emailPasswordEnabled === true,
     },
   };
+}
+
+/** Each capped feature with its tightest cap and what is left of it. */
+function quotasOf(e: Entitlements): AccountSummary['quotas'] {
+  const out: AccountSummary['quotas'] = [];
+  for (const feature of e.features) {
+    const monthly = e.limits[feature];
+    const daily = e.dailyLimits[feature];
+    if (daily !== undefined) out.push({ feature, limit: daily, period: 'day', left: Math.max(0, daily - (e.dailyUsage[feature] ?? 0)) });
+    if (monthly !== undefined) out.push({ feature, limit: monthly, period: 'month', left: Math.max(0, monthly - (e.usage[feature] ?? 0)) });
+  }
+  return out;
 }
 
 /** Remember that the person dismissed a tool's first-visit introduction (their own account only). */

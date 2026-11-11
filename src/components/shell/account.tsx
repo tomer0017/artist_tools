@@ -73,7 +73,9 @@ export function AccountProvider({ initial, children }: { initial: StudioAccount;
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ tool }),
       credentials: 'same-origin',
-    }).catch(() => {});
+    })
+      .then((response) => response.text())
+      .catch(() => {});
   }, [initial.id]);
 
   const resetIntros = useCallback(async () => {

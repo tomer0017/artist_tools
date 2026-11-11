@@ -68,6 +68,7 @@ export function useCompareGif(): QuickGifState {
           setError('Your plan does not include this GIF.');
           void account?.refresh();
         }
+        if (access === 'limit') setError('You have used all the GIFs your plan includes for now. See your account page for when more are available.');
         return;
       }
       try {

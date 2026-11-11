@@ -114,3 +114,7 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
   },
   { id: 'billing', label: 'Billing', types: ['subscription.changed'] },
 ];
+
+/** Who published a configuration version, as the reading admin sees it. */
+export const publishedByLabel = (actor: string | null, viewerId: string) =>
+  actor === `admin:${viewerId}` ? 'you' : actor?.startsWith('admin:') ? 'an admin' : actor === 'system' ? 'the system (defaults)' : (actor ?? '—');

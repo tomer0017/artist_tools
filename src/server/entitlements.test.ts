@@ -164,7 +164,7 @@ describe('getEntitlements (from the database only)', () => {
   it('authorizes a feature use on the server and counts it, refusing what the plan lacks', async () => {
     const free = await newUser({ plan: 'free' });
     expect(await authorizeFeatureUse(mongo.db, free, ['export.gif'], NOW)).toEqual({ status: 'recorded' });
-    expect(await authorizeFeatureUse(mongo.db, free, ['export.gif', 'export.gif_large'], NOW)).toEqual({ status: 'denied', missing: ['export.gif_large'] });
+    expect(await authorizeFeatureUse(mongo.db, free, ['export.gif', 'export.gif_large'], NOW)).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.gif_large'] });
     expect(await getUsage(mongo.db, free, '2026-11')).toEqual({ 'export.gif': 1 });
 
     const admin = await newUser({ role: 'admin', plan: 'free' });

@@ -25,12 +25,14 @@ export async function trackEvent(
     dedupeKey?: string | null;
     campaign?: AnalyticsEventDoc['campaign'];
     props?: AnalyticsEventDoc['props'];
+    /** When it happened (now unless given). */
+    at?: Date;
   },
 ): Promise<'recorded' | 'duplicate'> {
   try {
     await collections(db).analyticsEvents.insertOne({
       name: event.name,
-      at: new Date(),
+      at: event.at ?? new Date(),
       userId: toObjectId(event.userId ?? null),
       anonymousId: event.anonymousId ?? null,
       dedupeKey: event.dedupeKey ?? null,
@@ -43,3 +45,13 @@ export async function trackEvent(
     throw error;
   }
 }
+
+const utcDay = (now: Date) => now.toISOString().slice(0, 10);
+
+/** The account used the studio today (counted once per UTC day): active users. */
+export const recordActiveDay = (db: Db, userId: string | ObjectId, now = new Date()) =>
+  trackEvent(db, { name: 'active_day', userId, at: now, dedupeKey: `active_day:${String(userId)}:${utcDay(now)}`, props: { day: utcDay(now) } });
+
+/** The account opened a tool today (counted once per tool per UTC day): usage by tool. */
+export const recordToolOpen = (db: Db, userId: string | ObjectId, tool: string, now = new Date()) =>
+  trackEvent(db, { name: 'tool_open', userId, at: now, dedupeKey: `tool_open:${String(userId)}:${tool}:${utcDay(now)}`, props: { tool, day: utcDay(now) } });

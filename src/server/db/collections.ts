@@ -108,7 +108,56 @@ export interface PlanDoc {
   features: FeatureId[];
   /** Usage caps per calendar month (UTC); a missing feature is unlimited. */
   limits: Partial<Record<FeatureId, number>>;
+  /** Usage caps per day (UTC), from the published catalog. */
+  dailyLimits?: Partial<Record<FeatureId, number>>;
   updatedAt: Date;
+}
+
+export type ConfigKind = 'catalog' | 'pricing';
+
+/** One version of admin-managed configuration (src/server/config/versions.ts). */
+export interface ConfigVersionDoc<T = unknown> {
+  _id?: ObjectId;
+  kind: ConfigKind;
+  version: number;
+  status: 'draft' | 'published' | 'archived';
+  document: T;
+  note: string | null;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+  publishedBy: string | null;
+  publishedAt: Date | null;
+}
+
+/** A discount code (src/server/coupons.ts). Redemptions are counted from `coupon_redemptions`. */
+export interface CouponDoc {
+  _id?: ObjectId;
+  /** Upper case letters, digits and dashes; unique. */
+  code: string;
+  kind: 'percent' | 'fixed';
+  percentOff: number | null;
+  amountOffMinor: number | null;
+  currency: Currency | null;
+  /** Which prices it applies to, as 'pro:month' / 'pro:year'; empty means every paid price. */
+  appliesTo: string[];
+  startsAt: Date;
+  endsAt: Date | null;
+  maxRedemptions: number | null;
+  maxPerUser: number;
+  status: 'active' | 'disabled';
+  note: string | null;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CouponRedemptionDoc {
+  _id?: ObjectId;
+  couponId: ObjectId;
+  userId: ObjectId;
+  subscriptionId: string | null;
+  at: Date;
 }
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'expired';
@@ -167,6 +216,11 @@ export type AuditEventType =
   | 'admin.grant_created'
   | 'admin.grant_revoked'
   | 'admin.audit_exported'
+  | 'admin.config_saved'
+  | 'admin.config_discarded'
+  | 'admin.config_published'
+  | 'admin.coupon_created'
+  | 'admin.coupon_status_changed'
   | 'account.status_changed'
   | 'subscription.changed';
 
@@ -205,6 +259,10 @@ export const ANALYTICS_EVENTS = [
   'tool_use',
   'first_export',
   'subscription_converted',
+  // One per account and UTC day the studio is used (active-user counts).
+  'active_day',
+  // One per account, tool and UTC day a tool is opened (usage by tool).
+  'tool_open',
 ] as const;
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 
@@ -288,6 +346,9 @@ export function collections(db: Db) {
     mailOutbox: db.collection<MailOutboxDoc>('mail_outbox'),
     rateLimits: db.collection<{ _id: ObjectId; key: string; count: number; lastRequest: number }>('rateLimits'),
     accessGrants: db.collection<AccessGrantDoc>('access_grants'),
+    configVersions: db.collection<ConfigVersionDoc>('config_versions'),
+    coupons: db.collection<CouponDoc>('coupons'),
+    couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
   };
 }
 

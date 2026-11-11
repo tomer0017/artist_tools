@@ -86,20 +86,23 @@ Code keeps the defaults (today's matrix); the first migration publishes them as
 version 1, so behaviour does not change until an admin publishes a new
 version. Rollback = publish a previous version. Every save/publish is audited.
 
-`catalog` document shape:
+`catalog` document shape (as built in Phase 2, `src/server/config/catalog.ts`):
 ```ts
-features: { id: FeatureId; name: string; tool: ToolId | null; status: 'available' | 'hidden' | 'beta' }[]
-plans: { id: PlanId; name: string; features: FeatureId[];
-         quotas: Partial<Record<FeatureId, { limit: number; period: 'day' | 'month' }>> }[]
+plans: { free: PlanEntry; pro: PlanEntry }
+// PlanEntry = { features: FeatureId[];
+//               quotas: Partial<Record<FeatureId, { limit: number; period: 'day' | 'month' }>> }
+disabled: FeatureId[]   // switched off for everyone except admins
 ```
+Feature names and their tools stay in code (`FEATURE_LABELS`), since a feature
+needs code that checks it.
 
-`pricing` document shape:
+`pricing` document shape (`src/server/config/pricing.ts`; the plan is the product):
 ```ts
-products: { id: string; planId: PlanId; name: string }[]
-prices: { id: string; productId: string; interval: 'month' | 'year';
-          currency: 'USD' | 'ILS' | string; amountMinor: number; trialDays: number | null;
+prices: { id: string; planId: 'pro'; interval: 'month' | 'year';
+          currency: 'USD' | 'ILS'; amountMinor: number; trialDays: number | null;
           active: boolean; providerRefs: Record<string, string> }[]
 ```
+At most one active price per plan, interval and currency.
 
 ### `access_grants` (P2) — promotional and trial access
 `userId`, `planId`, `startsAt`, `endsAt`, `reason` (`promotion`, `trial`,

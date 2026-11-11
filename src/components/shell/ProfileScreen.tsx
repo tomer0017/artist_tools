@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { BadgeCheck, Check, Crown, Lock, LogOut, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import { DataCard, DevicesCard, NameEditor, PreferencesCard, SignInMethodsCard } from '@/components/account/ProfileSections';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { FEATURE_MATRIX, PLAN_NAMES } from '@/lib/plans';
+import { FEATURE_LABELS, FEATURE_MATRIX, PLAN_NAMES } from '@/lib/plans';
 import { AccountAvatar, useAccount, useSignOut, type StudioAccount } from './account';
 import { BrandMark } from './BrandMark';
 import { pathForView } from './tools';
@@ -134,6 +134,18 @@ export default function ProfileScreen() {
           <dl className="mt-3 text-sm">
             <Detail label="Subscription" value={subscription === 'none' ? 'None (billing is not live yet)' : SUBSCRIPTION_LABELS[subscription]} />
           </dl>
+          {account.quotas.length > 0 && (
+            <ul aria-label="Usage limits" className="mt-3 space-y-1 text-sm">
+              {account.quotas.map((q) => (
+                <li key={`${q.feature}-${q.period}`} className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">{FEATURE_LABELS[q.feature]}</span>
+                  <span className="font-medium text-foreground">
+                    {q.left} of {q.limit} left {q.period === 'day' ? 'today' : 'this month'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <ul aria-label="What your plan includes" className="mt-4 divide-y divide-border border-t border-border">
             {FEATURE_MATRIX.map((row) => {

@@ -204,6 +204,7 @@ export default function CompareExportSheet() {
         setProNotice(needed.find((f) => f !== 'export.gif') ?? 'refused');
         void account?.refresh();
       }
+      if (access === 'limit') setError('You have used all the GIFs your plan includes for now. See your account page for when more are available.');
       return;
     }
     setProgress({ phase: 'frames', current: 0, total: gifFrames });

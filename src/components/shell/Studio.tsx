@@ -18,6 +18,7 @@ import HomeScreen from '@/components/shell/HomeScreen';
 import ProfileScreen from '@/components/shell/ProfileScreen';
 import PlansScreen from '@/components/shell/PlansScreen';
 import { ToolIntroHost } from '@/components/shell/ToolIntro';
+import { ToolOpenTracker } from '@/components/shell/ToolOpenTracker';
 import { BottomNav, TopNav } from '@/components/shell/AppNav';
 import { pathForView, viewFromPathname } from '@/components/shell/tools';
 import { OnboardingProvider, OnboardingHost } from '@/onboarding';
@@ -144,6 +145,7 @@ function Workspace() {
     >
       <OnboardingHost />
       <ToolIntroHost />
+      <ToolOpenTracker />
       {!isMobile && <TopNav />}
       {/* min-w-0 on every tool root: a flex item otherwise grows to its
           content (e.g. a full-resolution image) and pushes controls offscreen. */}

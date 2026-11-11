@@ -8,6 +8,10 @@ import { authConfig } from '@/server/env';
 
 const TABS = [
   { id: 'users', href: '/admin', label: 'Users' },
+  { id: 'analytics', href: '/admin/analytics', label: 'Analytics' },
+  { id: 'plans', href: '/admin/plans', label: 'Plans' },
+  { id: 'pricing', href: '/admin/pricing', label: 'Pricing' },
+  { id: 'coupons', href: '/admin/coupons', label: 'Coupons' },
   { id: 'activity', href: '/admin/activity', label: 'Activity' },
   // Only where test emails are kept instead of sent (staging, development).
   { id: 'mail', href: '/admin/mail', label: 'Test mail' },
@@ -29,7 +33,7 @@ export function AdminShell({ active, children }: { active: (typeof TABS)[number]
           <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Admin</span>
         </header>
 
-        <nav aria-label="Admin sections" className="mt-5 flex items-center gap-1 rounded-xl border border-border bg-card p-1 text-sm">
+        <nav aria-label="Admin sections" className="mt-5 flex items-center gap-1 overflow-x-auto whitespace-nowrap rounded-xl border border-border bg-card p-1 text-sm">
           {tabs.map((tab) => (
             <Link
               key={tab.id}

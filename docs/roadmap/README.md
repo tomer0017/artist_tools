@@ -20,7 +20,7 @@ security checks and the owner's authorisation.
 |---|---|---|
 | 0 | Audit and architecture | Done 2026-11-10 |
 | 1 | Authentication and account management | Built and tested 2026-11-11; on staging with the mail outbox (real email needs a domain + provider) |
-| 2 | Commercial admin dashboard | Planned |
+| 2 | Commercial admin dashboard | Built and tested 2026-11-11 (users, grants, suspension, audit export, versioned plans/pricing, coupons, analytics) |
 | 3 | Internationalisation (English, Hebrew) | Planned |
 | 4 | Billing infrastructure (research, provider-neutral core, mock provider) | Planned |
 | 5 | Security, privacy, accessibility, operations, legal drafts | Planned |

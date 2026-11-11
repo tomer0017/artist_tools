@@ -1,8 +1,10 @@
 import 'server-only';
 import type { Db, IndexSpecification, CreateIndexesOptions } from 'mongodb';
 import { DEFAULT_CURRENCY, DEFAULT_LOCALE } from '@/lib/locale';
-import { PLAN_FEATURES, PLAN_IDS, PLAN_NAMES } from '@/lib/plans';
-import { collections, type PlanDoc } from './collections';
+import { catalogSpec, syncPlans } from '@/server/config/catalog';
+import { pricingSpec } from '@/server/config/pricing';
+import { publishedDocument, seedDefaults } from '@/server/config/versions';
+import { collections } from './collections';
 
 // Idempotent schema setup: safe to run on every deploy (`npm run db:migrate`).
 // Better Auth creates its own basic indexes (unique email and session token,
@@ -53,17 +55,23 @@ export const INDEXES: IndexPlan[] = [
   // Live grants of an account, newest end first.
   { collection: 'access_grants', key: { userId: 1, endsAt: -1 }, options: { name: 'grants_by_user' } },
   { collection: 'audit_events', key: { at: -1 }, options: { name: 'audit_by_time' } },
+  // Versioned configuration: numbered per kind, one published and one draft at most.
+  { collection: 'config_versions', key: { kind: 1, version: 1 }, options: { name: 'config_version_unique', unique: true } },
+  {
+    collection: 'config_versions',
+    key: { kind: 1 },
+    options: { name: 'config_one_published', unique: true, partialFilterExpression: { status: 'published' } },
+  },
+  { collection: 'config_versions', key: { kind: 1, status: 1 }, options: { name: 'config_one_draft', unique: true, partialFilterExpression: { status: 'draft' } } },
+  { collection: 'coupons', key: { code: 1 }, options: { name: 'coupon_code_unique', unique: true } },
+  { collection: 'coupon_redemptions', key: { couponId: 1, userId: 1 }, options: { name: 'redemption_by_coupon_user' } },
+  { collection: 'analytics_events', key: { userId: 1, name: 1, at: -1 }, options: { name: 'analytics_by_user' } },
 ];
-
-/** Plans as the code defines them (src/lib/plans.ts). */
-export function planDefinitions(now = new Date()): PlanDoc[] {
-  return PLAN_IDS.map((id) => ({ _id: id, name: PLAN_NAMES[id], active: true, features: [...PLAN_FEATURES[id]], limits: {}, updatedAt: now }));
-}
-
-const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((item, i) => item === b[i]);
 
 export interface MigrationReport {
   indexes: number;
+  /** Configuration kinds published for the first time (with the code's defaults). */
+  configSeeded: number;
   plansInserted: number;
   plansUpdated: number;
   usersBackfilled: number;
@@ -75,27 +83,14 @@ export async function migrate(db: Db): Promise<MigrationReport> {
     await db.collection(index.collection).createIndex(index.key, index.options);
   }
 
-  // The code owns plan definitions: missing plans are inserted, and a plan
-  // whose stored features, limits or name differ is brought back in step.
-  const { plans, users } = collections(db);
-  let plansInserted = 0;
-  let plansUpdated = 0;
-  for (const plan of planDefinitions()) {
-    const stored = await plans.findOne({ _id: plan._id });
-    if (!stored) {
-      await plans.insertOne(plan);
-      plansInserted += 1;
-    } else if (
-      stored.name !== plan.name ||
-      stored.active !== plan.active ||
-      !sameList(stored.features ?? [], plan.features) ||
-      JSON.stringify(stored.limits ?? {}) !== JSON.stringify(plan.limits)
-    ) {
-      const { _id, ...definition } = plan;
-      await plans.updateOne({ _id }, { $set: definition });
-      plansUpdated += 1;
-    }
-  }
+  // Configuration starts as the code's defaults (version 1), so a deploy never
+  // changes behaviour; after that, admins own it (docs/adr/0006).
+  const configSeeded = Number(await seedDefaults(db, catalogSpec)) + Number(await seedDefaults(db, pricingSpec));
+
+  // `plans` follows the published catalog: missing plans are inserted, and a
+  // plan whose stored features, quotas or name differ is brought back in step.
+  const { users } = collections(db);
+  const { inserted: plansInserted, updated: plansUpdated } = await syncPlans(db, await publishedDocument(db, catalogSpec));
 
   // Accounts created before plans existed are on Free.
   const { modifiedCount: usersBackfilled } = await users.updateMany({ plan: { $exists: false } }, { $set: { plan: 'free' } });
@@ -106,6 +101,7 @@ export async function migrate(db: Db): Promise<MigrationReport> {
 
   return {
     indexes: INDEXES.length,
+    configSeeded,
     plansInserted,
     plansUpdated,
     usersBackfilled,

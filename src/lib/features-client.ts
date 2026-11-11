@@ -1,7 +1,7 @@
 import type { FeatureId } from './plans';
 import { signInPath } from './redirects';
 
-export type FeatureAccess = 'ok' | 'locked' | 'signed_out' | 'unavailable';
+export type FeatureAccess = 'ok' | 'locked' | 'limit' | 'signed_out' | 'unavailable';
 
 /**
  * Ask the server, right before using them, whether this account may use
@@ -24,6 +24,8 @@ export async function authorizeFeatures(features: FeatureId[]): Promise<FeatureA
       return 'signed_out';
     }
     if (response.status === 403) return 'locked';
+    // The plan includes it, but its daily or monthly quota is used up.
+    if (response.status === 429) return 'limit';
     return 'unavailable';
   } catch {
     return 'unavailable';

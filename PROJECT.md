@@ -198,7 +198,7 @@ download.
   landing page, the sign-in page, Home ("Plans" under the tools), the account
   page and every Pro notice.
 
-### Admin — routes `/admin`, `/admin/users/[id]`, `/admin/activity`, `/admin/mail` (`src/app/admin/`)
+### Admin — routes `/admin`, `/admin/users/[id]`, `/admin/analytics`, `/admin/plans`, `/admin/pricing`, `/admin/coupons`, `/admin/activity`, `/admin/mail` (`src/app/admin/`)
 - **Purpose:** Supporting accounts. `/admin`: search by email plus filters
   (role, assigned plan, status, email verified, sign-in method, test accounts,
   registration dates; shareable URLs), headline counts (accounts, admins, Pro,
@@ -216,7 +216,9 @@ download.
   status changes need the admin to have signed in within 10 minutes,
   otherwise "Confirm it is you" appears in place. `/admin/activity`: the
   latest 200 audit events, filtered by kind, actor, account email and dates,
-  with **Export CSV** (up to 5,000 rows; the export itself is audited). `/admin/mail` ("Test mail"): only while
+  with **Export CSV** (up to 5,000 rows; the export itself is audited).
+  `/admin/analytics`, `/admin/plans`, `/admin/pricing`, `/admin/coupons`: see
+  "Configuration and coupons" and "Analytics" below. `/admin/mail` ("Test mail"): only while
   `MAIL_TRANSPORT=outbox` (development/test/staging) — the account emails the
   app kept instead of sending, for 24 hours, with their links; 404 otherwise.
 - **Protection:** every page calls `requireAdmin()` (role re-read from the
@@ -326,7 +328,9 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   assigned plan, server-written subscription, plans, usage). **Admins get every
   feature whatever their plan or subscription; no plan ever grants the admin
   role.** Client-supplied plan or payment claims are never inputs (tested).
-- **Free / Pro feature matrix** (defined in `src/lib/plans.ts`; the migration
+- **Free / Pro feature matrix** (the published **plan catalog**, versioned and
+  edited by admins at `/admin/plans` — `src/server/config/catalog.ts`; version 1
+  is the code default from `src/lib/plans.ts`; the migration
   writes it to `plans`):
 
   | Capability | Free | Pro | Admin |
@@ -337,7 +341,10 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   | Large GIFs (L, up to 800 px) | locked | ✓ | ✓ |
   | Compare + Difference GIF animation | locked | ✓ | ✓ |
 
-  No monthly limits are set. Locked options stay visible with a lock; choosing
+  No quotas are set in version 1. Admins can add per-plan quotas (per UTC day or
+  calendar month), enforced atomically by `authorizeFeatureUse` (a used-up
+  quota answers 429 `limit_reached`; the studio says so), and can switch a
+  feature off for everyone but admins. Locked options stay visible with a lock; choosing
   one explains it is part of Pro and that paid plans are coming soon.
 - **Registration** (`AUTH_SIGNUP_MODE`, `src/server/env.ts`): `invite` (the
   default; only Google-verified addresses on `AUTH_SIGNUP_ALLOWLIST`) or `open`
@@ -365,9 +372,22 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   not Google-verified, or not linked to exactly one Google identity) — never
   from configuration or an email address. Every change is audited.
 - **Analytics:** first-party, allow-listed events without personal data;
-  one-off events are de-duplicated. Registration and login are recorded on the
-  server; the browser-side events (landing, first tool use, first export) are
-  defined but not wired yet. Marketing consent is a separate, default-off field.
+  one-off events are de-duplicated. Recorded: registration, login, one
+  `active_day` per account and UTC day (studio load and `/api/me`), one
+  `tool_open` per account, tool and day (`POST /api/events`, tool id only).
+  `/admin/analytics` (`src/server/analytics-report.ts`) shows new and active
+  accounts, tools used, counted features, weekly returning-account cohorts,
+  Pro counts and (zero until billing) revenue; test accounts are left out.
+  Landing and first-export events are defined but not wired yet. Marketing
+  consent is a separate, default-off field.
+- **Configuration and coupons** (docs/adr/0006, 0007): `config_versions`
+  holds the plan catalog and Pro prices as drafts → published versions (one
+  live per kind; earlier versions restorable as a new draft); publishing needs
+  a sign-in from the last 10 minutes and is audited. Prices are integer minor
+  units per interval and currency and are not shown anywhere until paid plans
+  launch. Coupons (`/admin/coupons`, `src/server/coupons.ts`): percent or fixed
+  amount, target prices, dates, total and per-person limits; switched off,
+  never deleted; validated for checkout by `checkCoupon` (Phase 4).
 - **Limits to know:** tools run in the browser. The server decides who may
   use a Pro option and counts it, but the work itself happens on the device,
   so a modified browser could make a Large GIF without asking; only features
@@ -1018,3 +1038,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-10 | **Phase 0 — audit and architecture for the commercial SaaS roadmap.** Current-state audit of code and staging server, gap analysis, proposed data model, migration/rollback strategy, risk register, phased backlog with acceptance criteria (`docs/roadmap/`), 11 ADRs (`docs/adr/`). Found and fixed on the server: the nightly MongoDB backup had never run (cron ignored the group-writable `/etc/cron.d/studio-mongo-backup`); now `0644`, cron reloaded it, a manual run succeeded. | docs/roadmap/*, docs/adr/*, deploy/README.md, PROJECT.md |
 | 2026-11-11 | **Phase 1 — authentication and account management.** Email + password through Better Auth behind `AUTH_EMAIL_PASSWORD` (mail transport required): verification before access, identical answers for new/registered/uninvited sign-ups (found and fixed in tests: the library's stand-in response had a different shape), scrypt, 12–128 character policy, single-use hashed reset tokens that sign out every device, explicit-only account linking. Provider-neutral mailer with a staging outbox (`/admin/mail`, refused in production). Per-IP limits in MongoDB plus per-address throttles. Sign-in with email, sign-up, forgot/reset password and email-confirmed pages. Account page: name/photo, language and currency preferences, marketing consent with history, sign-in methods (connect Google, add/change password, disconnect), signed-in devices, data download, account deletion with fresh-session confirmation, shared-device sign-out. Nightly maintenance command; releases back up the database before migrating. Tests: 186 unit/integration, 80 e2e (Desktop Chrome + iPhone WebKit, incl. the full password journey), 36/36 visual parity. Deployed to staging (9f16951) with `APP_ENV=staging`, `AUTH_EMAIL_PASSWORD=on`, `MAIL_TRANSPORT=outbox`, still invite-only; nightly maintenance cron installed. | src/server/{auth,env,account,account-management,background,maintenance}.ts, src/server/{mail,security}/*, src/server/db/{collections,migrate}.ts, src/app/{sign-up,forgot-password,reset-password,email-verified}/, src/app/admin/{mail/,AdminShell.tsx,format.ts}, src/app/app/profile/actions.ts, src/app/api/me/export/, src/app/page.tsx, src/components/auth/*, src/components/account/*, src/components/shell/{ProfileScreen,account}.tsx, src/lib/{locale,user-agent,device-data,account}.ts, scripts/{db,e2e-server}.ts, deploy/{release.sh,maintenance.sh,README.md}, e2e/{password.spec.ts (new),accounts.spec.ts}, playwright.config.ts, .env.example, docs/roadmap/*, PROJECT.md |
 | 2026-11-11 | **Phase 2a — admin user management.** Filters on `/admin` (role, plan, status, verified, sign-in method, test, dates) and new counts; suspend (reason enum; ends every session) / reactivate; test-account flag; time-limited promotional Pro (`access_grants`, best of assigned plan / subscription / grant in entitlements; shown on the person's account page); role and status changes require a sign-in within 10 minutes (in-place "Confirm it is you"); activity log filters and audited CSV export. `getSession()` now confirms the session in the database on every request, so ended sessions stop at once (found by the suspension e2e test: the 5-minute cookie cache kept a suspended person signed in). Account deletion also removes grants. Tests: 194 unit/integration, 86 e2e, 36/36 visual parity. | src/server/{admin,grants,entitlements,session,account,account-management}.ts, src/server/db/{collections,migrate}.ts, src/app/admin/{page.tsx,actions.ts,AdminControls.tsx,format.ts,users/[id]/page.tsx,activity/{page.tsx,query.ts,export/route.ts}}, src/components/{account/{parts,ProfileSections}.tsx,shell/ProfileScreen.tsx}, src/lib/account.ts, scripts/e2e-server.ts, e2e/admin.spec.ts (new), playwright.config.ts, PROJECT.md |
+| 2026-11-11 | **Phase 2b — commercial configuration and analytics.** Versioned admin configuration (`config_versions`: draft → review → publish, one live per kind, restore earlier versions; publishing needs a recent sign-in; audited). Plan catalog at `/admin/plans`: features per plan, quotas per UTC day or month, features switched off for everyone but admins; version 1 = today's matrix, synced to `plans`, never reverted by deploys. Atomic quota enforcement (no overshoot under concurrency; 429 `limit_reached`; remaining uses on the account page). Pro prices at `/admin/pricing` in integer minor units per interval/currency (not shown publicly). Coupons at `/admin/coupons` with checkout validation for Phase 4. `/admin/analytics`: new/active accounts, tools used, counted features, weekly retention, Pro counts, revenue (zero until billing); `active_day` and `tool_open` events (`POST /api/events`, ids only). Fixed: analytics events ignored the time passed in; fire-and-forget requests now read their replies (an unread response kept the request open, which stalled the parity harness). Tests: 203 unit/integration, 92 e2e (Desktop Chrome + iPhone WebKit), 36/36 visual parity. | src/server/config/*, src/server/{coupons,analytics,analytics-report,entitlements,usage,account}.ts, src/server/db/{collections,migrate}.ts, src/app/admin/{analytics,plans,pricing,coupons}/, src/app/admin/{ConfigControls.tsx,config-actions.ts,AdminShell.tsx,format.ts}, src/app/api/{events/,usage/,me/}, src/app/app/layout.tsx, src/components/shell/{ToolOpenTracker,Studio,ProfileScreen}.tsx, src/lib/{money,features-client,account}.ts, src/features/compare-art/{CompareExportSheet.tsx,useCompareGif.ts}, e2e/admin.spec.ts, PROJECT.md, docs/roadmap/* |

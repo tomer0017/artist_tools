@@ -96,6 +96,75 @@ test.describe('as an admin', () => {
   });
 });
 
+test.describe('configuration, coupons and analytics', () => {
+  test.use(as('admin'));
+
+  test('publishes a plan change as a new version and restores the previous one', async ({ page }) => {
+    await page.goto('/admin/plans');
+    await expect(page.getByRole('heading', { name: 'Plans and features' })).toBeVisible();
+    await page.getByRole('button', { name: 'Start a draft' }).click();
+    const quota = page.getByLabel('Free quota for Saved images', { exact: true });
+    await expect(quota).toBeEnabled();
+    await quota.fill('500');
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'saved. Nothing changes until you publish it.' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Changes in this draft' })).toContainText('Free: Saved images unlimited → 500 per month');
+
+    await page.getByRole('button', { name: /^Publish version \d+$/ }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Publish' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'is live.' })).toBeVisible();
+    const history = page.getByRole('region', { name: 'Version history' });
+    await expect(history).toContainText('live');
+
+    // Going back: restore version 1 as a draft and publish it.
+    await history.getByRole('listitem').filter({ hasText: 'Version 1 ' }).getByRole('button', { name: 'Restore as draft' }).click();
+    await expect(page.getByRole('list', { name: 'Changes in this draft' })).toContainText('Free: Saved images 500 per month → unlimited');
+    await page.getByRole('button', { name: /^Publish version \d+$/ }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Publish' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'is live.' })).toBeVisible();
+    await expect(page.getByLabel('Free quota for Saved images', { exact: true })).toHaveValue('');
+  });
+
+  test('keeps prices as exact amounts, never shown on the public plans page', async ({ page }) => {
+    await page.goto('/admin/pricing');
+    await page.getByRole('button', { name: 'Start a draft' }).click();
+    await page.getByRole('button', { name: 'Add a price' }).click();
+    await page.getByLabel('Amount').last().fill('9.90');
+    await page.getByLabel('Offered').last().check();
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByRole('list', { name: 'Changes in this draft' })).toContainText('Adds Monthly USD $9.90');
+    await page.getByRole('button', { name: /^Publish version \d+$/ }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Publish' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'is live.' })).toBeVisible();
+
+    await page.goto('/pricing');
+    expect(await page.locator('main').innerText()).not.toContain('9.90');
+  });
+
+  test('creates a coupon and switches it off', async ({ page }) => {
+    await page.goto('/admin/coupons');
+    const form = page.getByRole('form', { name: 'New coupon' });
+    await form.getByLabel('Code').fill('e2e-spring');
+    await form.getByLabel('Percent off').fill('25');
+    await form.getByRole('button', { name: 'Create coupon' }).click();
+    await expect(form.getByRole('status')).toContainText('Coupon created.');
+    const row = page.getByRole('region', { name: 'All coupons' }).getByRole('listitem').filter({ hasText: 'E2E-SPRING' });
+    await expect(row).toContainText('25% off');
+    await expect(row).toContainText('Active');
+    await row.getByRole('button', { name: 'Switch off E2E-SPRING' }).click();
+    await expect(row).toContainText('Off');
+  });
+
+  test('shows product analytics without test accounts', async ({ page }) => {
+    await page.goto('/admin/analytics');
+    for (const name of ['New accounts', 'Active accounts']) await expect(page.getByRole('figure').filter({ hasText: name })).toBeVisible();
+    for (const name of ['Tools used, last 30 days', 'Returning accounts by sign-up week', 'Revenue']) {
+      await expect(page.getByRole('heading', { name })).toBeVisible();
+    }
+    await expect(page.getByRole('region', { name: 'Headline figures' })).toContainText('Accounts');
+  });
+});
+
 test.describe('an admin signed in an hour ago', () => {
   test.use(as('admin-settled'));
 
@@ -115,6 +184,15 @@ test.describe('an admin signed in an hour ago', () => {
 
 test.describe('mobile', () => {
   test.use({ ...phone, ...as('admin') });
+
+  test('analytics and plans fit a phone', async ({ page }) => {
+    for (const path of ['/admin/analytics', '/admin/plans', '/admin/coupons']) {
+      await page.goto(path);
+      await expect(page.locator('h1')).toBeVisible();
+      expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: test.info().outputPath(`admin${path.replace(/\//g, '-')}.png`), fullPage: true });
+    }
+  });
 
   test('the admin dashboard and an account fit a phone', async ({ page }) => {
     await page.goto('/admin');

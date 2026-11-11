@@ -22,7 +22,7 @@ afterAll(async () => {
 describe('migration', () => {
   it('creates every index and seeds Free and Pro from the plan definitions', async () => {
     const report = await migrate(mongo.db);
-    expect(report).toEqual({ indexes: INDEXES.length, plansInserted: 2, plansUpdated: 0, usersBackfilled: 0, preferencesBackfilled: 0 });
+    expect(report).toEqual({ indexes: INDEXES.length, configSeeded: 2, plansInserted: 2, plansUpdated: 0, usersBackfilled: 0, preferencesBackfilled: 0 });
 
     for (const index of INDEXES) {
       const names = (await mongo.db.collection(index.collection).listIndexes().toArray()).map((i) => i.name);
@@ -112,11 +112,13 @@ describe('unique constraints', () => {
 });
 
 describe('usage', () => {
-  it('counts concurrent uses exactly, in a single document per month', async () => {
+  it('counts concurrent uses exactly, in one document per month and one per day', async () => {
     const userId = new ObjectId();
-    await Promise.all(Array.from({ length: 25 }, () => recordUsage(mongo.db, userId, 'export.gif')));
+    const now = new Date();
+    await Promise.all(Array.from({ length: 25 }, () => recordUsage(mongo.db, userId, 'export.gif', 1, now)));
     expect(await getUsage(mongo.db, userId)).toEqual({ 'export.gif': 25 });
-    expect(await collections(mongo.db).usage.countDocuments({ userId })).toBe(1);
+    expect(await getUsage(mongo.db, userId, now.toISOString().slice(0, 10))).toEqual({ 'export.gif': 25 });
+    expect(await collections(mongo.db).usage.countDocuments({ userId })).toBe(2);
   });
 
   it('starts a new count each calendar month (UTC)', async () => {

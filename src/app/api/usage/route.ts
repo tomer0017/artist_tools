@@ -28,7 +28,11 @@ export async function POST(request: Request) {
     if (!body.success) return json({ error: 'invalid_request' }, 400);
 
     const result = await authorizeFeatureUse(getDb(), userId, body.data.features);
-    if (result.status === 'denied') return json({ error: 'not_included', features: result.missing }, 403);
+    if (result.status === 'denied') {
+      return result.reason === 'limit_reached'
+        ? json({ error: 'limit_reached', features: result.missing }, 429)
+        : json({ error: 'not_included', features: result.missing }, 403);
+    }
     return json({ ok: true });
   } catch (error) {
     log.error('api.usage_failed', { error });

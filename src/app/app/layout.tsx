@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import StudioClient from '@/components/shell/StudioClient';
 import { RETURN_TO_HEADER, signInPath } from '@/lib/redirects';
 import { getAccountSummary } from '@/server/account';
+import { recordActiveDay } from '@/server/analytics';
 import { emailPasswordAvailable } from '@/server/auth';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
@@ -21,6 +22,7 @@ export default async function StudioLayout({ children }: { children: React.React
   const user = await requireUser(returnTo);
   const summary = await getAccountSummary(getDb(), toObjectId(user.id)!, { emailPasswordEnabled: emailPasswordAvailable() });
   if (!summary) redirect(signInPath(returnTo));
+  await recordActiveDay(getDb(), user.id).catch(() => undefined);
   return (
     <>
       <StudioClient account={summary.account} />

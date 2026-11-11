@@ -12,7 +12,7 @@ import {
   type UserRole,
 } from '@/server/db/collections';
 import { activeGrant } from '@/server/grants';
-import { getUsage, recordUsage } from '@/server/usage';
+import { countUsage, getUsage, giveBackUsage, takeUsage, usageDay, usagePeriod } from '@/server/usage';
 
 // ─── Entitlements ──────────────────────────────────────────────────────────────
 // The single place that decides what an account may use. Inputs come only from
@@ -49,10 +49,13 @@ export interface Entitlements {
   /** Monthly caps; a feature not listed is unlimited. */
   limits: Partial<Record<FeatureId, number>>;
   usage: Partial<Record<FeatureId, number>>;
+  /** Daily caps (UTC day) and today's use. */
+  dailyLimits: Partial<Record<FeatureId, number>>;
+  dailyUsage: Partial<Record<FeatureId, number>>;
 }
 
 type SubscriptionState = Pick<SubscriptionDoc, 'planId' | 'status' | 'currentPeriodEnd'>;
-type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits'>;
+type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits' | 'dailyLimits'>;
 type UserState = { status: AccountStatus; role?: unknown; plan?: unknown };
 
 /** Whether a subscription currently grants its plan. */
@@ -96,6 +99,7 @@ export function computeEntitlements(input: {
   subscription: SubscriptionState | null;
   plans: Partial<Record<PlanId, PlanState>>;
   usage: Partial<Record<FeatureId, number>>;
+  dailyUsage?: Partial<Record<FeatureId, number>>;
   now: Date;
   grant?: { planId: PlanId; endsAt: Date } | null;
 }): Entitlements {
@@ -114,6 +118,8 @@ export function computeEntitlements(input: {
     features: [],
     limits: {},
     usage: input.usage,
+    dailyLimits: {},
+    dailyUsage: input.dailyUsage ?? {},
   };
   if (!input.user || input.user.status !== 'active') return none;
 
@@ -137,21 +143,26 @@ export function computeEntitlements(input: {
     grant,
     features: [...plan.features],
     limits: { ...plan.limits },
+    dailyLimits: { ...(plan.dailyLimits ?? {}) },
   };
 }
 
-/** Whether the account may use a feature right now (included and under its cap). */
+/** Whether the plan includes a feature at all (ignoring quotas). */
+export const includes = (entitlements: Entitlements, feature: FeatureId): boolean => entitlements.accountActive && entitlements.features.includes(feature);
+
+/** Whether the account may use a feature right now (included and under its monthly and daily caps). */
 export function canUse(entitlements: Entitlements, feature: FeatureId): boolean {
-  if (!entitlements.accountActive || !entitlements.features.includes(feature)) return false;
-  const limit = entitlements.limits[feature];
-  return limit === undefined || (entitlements.usage[feature] ?? 0) < limit;
+  return includes(entitlements, feature) && remaining(entitlements, feature) !== 0;
 }
 
-/** Uses left this month; null means unlimited, 0 means none. */
+/** Uses left right now (the tighter of the monthly and daily caps); null means unlimited, 0 means none. */
 export function remaining(entitlements: Entitlements, feature: FeatureId): number | null {
-  if (!canUse(entitlements, feature)) return 0;
-  const limit = entitlements.limits[feature];
-  return limit === undefined ? null : Math.max(0, limit - (entitlements.usage[feature] ?? 0));
+  if (!includes(entitlements, feature)) return 0;
+  const left = [
+    entitlements.limits[feature] === undefined ? null : entitlements.limits[feature]! - (entitlements.usage[feature] ?? 0),
+    entitlements.dailyLimits[feature] === undefined ? null : entitlements.dailyLimits[feature]! - (entitlements.dailyUsage[feature] ?? 0),
+  ].filter((n): n is number => n !== null);
+  return left.length === 0 ? null : Math.max(0, Math.min(...left));
 }
 
 // Plans change rarely; keep them for a minute instead of reading them on every request.
@@ -160,7 +171,7 @@ const PLAN_CACHE_MS = 60_000;
 
 async function loadPlans(db: Db, now: number): Promise<Partial<Record<PlanId, PlanState>>> {
   if (planCache && now - planCache.at < PLAN_CACHE_MS) return planCache.plans;
-  const docs = await collections(db).plans.find({}, { projection: { active: 1, features: 1, limits: 1 } }).toArray();
+  const docs = await collections(db).plans.find({}, { projection: { active: 1, features: 1, limits: 1, dailyLimits: 1 } }).toArray();
   const plans = Object.fromEntries(docs.map((p) => [p._id, p])) as Partial<Record<PlanId, PlanState>>;
   planCache = { at: now, plans };
   return plans;
@@ -174,11 +185,12 @@ export const clearPlanCache = () => {
 /** Entitlements of an account, read entirely from the database. */
 export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()): Promise<Entitlements> {
   const { users, subscriptions } = collections(db);
-  const [user, subscription, plans, usage, grant] = await Promise.all([
+  const [user, subscription, plans, usage, dailyUsage, grant] = await Promise.all([
     users.findOne({ _id: userId }, { projection: { status: 1, role: 1, plan: 1 } }),
     subscriptions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { planId: 1, status: 1, currentPeriodEnd: 1 } }),
     loadPlans(db, now.getTime()),
-    getUsage(db, userId),
+    getUsage(db, userId, usagePeriod(now)),
+    getUsage(db, userId, usageDay(now)),
     activeGrant(db, userId, now),
   ]);
   return computeEntitlements({
@@ -186,23 +198,50 @@ export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()
     subscription,
     plans,
     usage,
+    dailyUsage,
     now,
     grant,
   });
 }
 
-export type FeatureUseResult = { status: 'recorded' } | { status: 'denied'; missing: FeatureId[] };
+export type FeatureUseResult = { status: 'recorded' } | { status: 'denied'; reason: 'not_included' | 'limit_reached'; missing: FeatureId[] };
 
 /**
  * Authorize one use of `features` right now and count it (a large GIF needs
- * 'export.gif' and 'export.gif_large'). Decided from the database only. Caps
- * are checked and then counted, so two simultaneous requests could each take
- * the last unit of a cap; no plan has caps today.
+ * 'export.gif' and 'export.gif_large'). Decided from the database only.
+ * Capped features are taken atomically (check and count in one update) and
+ * handed back if another feature of the same request is refused, so a cap
+ * can never be exceeded, even by simultaneous requests.
  */
 export async function authorizeFeatureUse(db: Db, userId: ObjectId, features: FeatureId[], now = new Date()): Promise<FeatureUseResult> {
   const entitlements = await getEntitlements(db, userId, now);
-  const missing = features.filter((feature) => !canUse(entitlements, feature));
-  if (missing.length > 0) return { status: 'denied', missing };
-  for (const feature of new Set(features)) await recordUsage(db, userId, feature, 1, now);
+  const wanted = [...new Set(features)];
+  const notIncluded = wanted.filter((feature) => !includes(entitlements, feature));
+  if (notIncluded.length > 0) return { status: 'denied', reason: 'not_included', missing: notIncluded };
+
+  const taken: { feature: FeatureId; period: string }[] = [];
+  const giveBack = () => Promise.all(taken.map((t) => giveBackUsage(db, userId, t.feature, t.period)));
+  for (const feature of wanted) {
+    const caps: [string, number | undefined][] = [
+      [usageDay(now), entitlements.dailyLimits[feature]],
+      [usagePeriod(now), entitlements.limits[feature]],
+    ];
+    for (const [period, limit] of caps) {
+      if (limit === undefined || entitlements.access === 'admin') continue;
+      if (!(await takeUsage(db, userId, feature, period, limit, now))) {
+        await giveBack();
+        return { status: 'denied', reason: 'limit_reached', missing: [feature] };
+      }
+      taken.push({ feature, period });
+    }
+  }
+  // Uncapped periods are simply counted (admins included: they are never capped).
+  for (const feature of wanted) {
+    for (const period of [usageDay(now), usagePeriod(now)]) {
+      if (!taken.some((t) => t.feature === feature && t.period === period)) {
+        await countUsage(db, userId, feature, period, 1, now);
+      }
+    }
+  }
   return { status: 'recorded' };
 }

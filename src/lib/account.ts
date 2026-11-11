@@ -23,6 +23,8 @@ export interface AccountSummary {
   plan: { assigned: PlanId; effective: PlanId };
   /** Time-limited access given by Studio Companion (a promotion, trial or support), while it lasts. */
   grant: { planId: PlanId; endsAt: string } | null;
+  /** Features with a usage quota on this plan, and what is left of it now. */
+  quotas: { feature: FeatureId; limit: number; period: 'day' | 'month'; left: number }[];
   /** What decides the features: the admin role, the plan in force, or nothing. */
   access: 'admin' | PlanId | 'none';
   subscription: { status: 'none' | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'expired' };
