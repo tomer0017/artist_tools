@@ -1,3 +1,4 @@
+import { useTranslations } from 'use-intl';
 import { HelpCircle } from 'lucide-react';
 import { requestCompareIntroReplay } from './useCompareIntro';
 
@@ -7,12 +8,13 @@ import { requestCompareIntroReplay } from './useCompareIntro';
  * Help button that re-opens the visual intro. Styled to match HelpButton.
  */
 export default function CompareHelpButton({ className = '' }: { className?: string }) {
+  const t = useTranslations('compareTool');
   return (
     <button
       onClick={requestCompareIntroReplay}
       className={`flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground ${className}`}
-      aria-label="Show tutorial"
-      title="Show tutorial"
+      aria-label={t('help.showTutorial')}
+      title={t('help.showTutorial')}
     >
       <HelpCircle className="h-4 w-4" />
     </button>

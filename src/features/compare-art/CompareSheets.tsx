@@ -3,7 +3,11 @@
 // Each is a small, touch-first panel rendered inside CompareBottomSheet. They
 // read/write the isolated Compare store. Alignment status and the "align first"
 // guidance live here so they are prominent but non-blocking.
+//
+// Sliders and the precision pad act on the images in screen directions, so
+// they stay left to right in every language; the rest follows the page.
 
+import { useLocale, useTranslations } from 'use-intl';
 import {
   ArrowDown,
   ArrowLeft,
@@ -74,58 +78,59 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ── Mode sheet ────────────────────────────────────────────────────────────────
 export function ModeSheet() {
+  const t = useTranslations('compareTool');
   const store = useCompare();
   const { session } = store;
   const modes: { value: CompareMode; label: string }[] = [
-    { value: 'overlay', label: 'Overlay' },
-    { value: 'blink', label: 'Blink' },
-    { value: 'split', label: 'Split' },
-    { value: 'difference', label: 'Difference' },
+    { value: 'overlay', label: t('modes.overlay') },
+    { value: 'blink', label: t('modes.blink') },
+    { value: 'split', label: t('modes.split') },
+    { value: 'difference', label: t('modes.difference') },
   ];
 
   return (
     <div className="space-y-4">
-      <Field label="Comparison mode">
-        <Seg value={session.mode} options={modes} onChange={store.setMode} ariaLabel="Comparison mode" />
+      <Field label={t('view.mode')}>
+        <Seg value={session.mode} options={modes} onChange={store.setMode} ariaLabel={t('view.mode')} />
       </Field>
 
       <label className="flex items-center justify-between rounded-lg bg-secondary/40 px-3 py-2.5">
-        <span className="text-sm text-foreground">Grayscale (compare values)</span>
+        <span className="text-sm text-foreground">{t('view.grayscale')}</span>
         <input
           type="checkbox"
           className="h-5 w-5 accent-primary"
           checked={session.grayscale}
           onChange={(e) => store.setGrayscale(e.target.checked)}
-          aria-label="Grayscale comparison"
+          aria-label={t('view.grayscaleLabel')}
         />
       </label>
 
       {session.mode === 'blink' && (
-        <Field label="Blink speed">
+        <Field label={t('view.blinkSpeed')}>
           <Seg<BlinkSpeed>
             value={session.blinkSpeed}
             options={[
-              { value: 'slow', label: 'Slow' },
-              { value: 'normal', label: 'Normal' },
-              { value: 'fast', label: 'Fast' },
+              { value: 'slow', label: t('view.slow') },
+              { value: 'normal', label: t('view.normal') },
+              { value: 'fast', label: t('view.fast') },
             ]}
             onChange={store.setBlinkSpeed}
-            ariaLabel="Blink speed"
+            ariaLabel={t('view.blinkSpeed')}
           />
-          <p className="text-[11px] text-muted-foreground">Tip: press and hold the canvas to reveal the reference.</p>
+          <p className="text-[11px] text-muted-foreground">{t('view.blinkTip')}</p>
         </Field>
       )}
 
       {session.mode === 'split' && (
-        <Field label="Split orientation">
+        <Field label={t('view.splitOrientation')}>
           <Seg<SplitOrientation>
             value={session.splitOrientation}
             options={[
-              { value: 'horizontal', label: 'Vertical bar' },
-              { value: 'vertical', label: 'Horizontal bar' },
+              { value: 'horizontal', label: t('view.verticalBar') },
+              { value: 'vertical', label: t('view.horizontalBar') },
             ]}
             onChange={store.setSplitOrientation}
-            ariaLabel="Split orientation"
+            ariaLabel={t('view.splitOrientation')}
           />
         </Field>
       )}
@@ -136,69 +141,74 @@ export function ModeSheet() {
 }
 
 function DifferenceControls() {
+  const t = useTranslations('compareTool');
+  const locale = useLocale();
   const store = useCompare();
   const { difference } = store.session;
   return (
     <div className="space-y-3 rounded-lg border border-border bg-secondary/20 p-3">
-      <Field label="Difference metric">
+      <Field label={t('view.metric')}>
         <Seg<DifferenceMetric>
           value={difference.metric}
           options={[
-            { value: 'value', label: 'Value' },
-            { value: 'color', label: 'Color' },
+            { value: 'value', label: t('view.value') },
+            { value: 'color', label: t('view.color') },
           ]}
           onChange={(v) => store.setDifference({ metric: v })}
-          ariaLabel="Difference metric"
+          ariaLabel={t('view.metric')}
         />
       </Field>
-      <Field label="Sensitivity">
+      <Field label={t('view.sensitivity')}>
         <Seg<Sensitivity>
           value={difference.sensitivity}
           options={[
-            { value: 'subtle', label: 'Subtle' },
-            { value: 'balanced', label: 'Balanced' },
-            { value: 'strong', label: 'Strong' },
+            { value: 'subtle', label: t('view.subtle') },
+            { value: 'balanced', label: t('view.balanced') },
+            { value: 'strong', label: t('view.strong') },
           ]}
           onChange={(v) => store.setDifference({ sensitivity: v })}
-          ariaLabel="Sensitivity"
+          ariaLabel={t('view.sensitivity')}
         />
       </Field>
       <label className="flex items-center justify-between">
-        <span className="text-sm text-foreground">Monochrome map</span>
+        <span className="text-sm text-foreground">{t('view.monochrome')}</span>
         <input
           type="checkbox"
           className="h-5 w-5 accent-primary"
           checked={difference.monochrome}
           onChange={(e) => store.setDifference({ monochrome: e.target.checked })}
-          aria-label="Monochrome difference map"
+          aria-label={t('view.monochromeLabel')}
         />
       </label>
 
       {!difference.monochrome && (
         <div className="space-y-1 text-[11px]">
-          <p className="font-medium text-muted-foreground">Legend</p>
+          <p className="font-medium text-muted-foreground">{t('view.legend')}</p>
           {difference.metric === 'value' ? (
             <div className="flex flex-wrap gap-3">
-              <LegendItem color="#f59e0b" label="Artwork lighter" />
-              <LegendItem color="#3b82f6" label="Artwork darker" />
-              <LegendItem color="transparent" label="Close match" />
+              <LegendItem color="#f59e0b" label={t('view.artworkLighter')} />
+              <LegendItem color="#3b82f6" label={t('view.artworkDarker')} />
+              <LegendItem color="transparent" label={t('view.closeMatch')} />
             </div>
           ) : (
             <div className="flex flex-wrap gap-3">
-              <LegendItem color="#ef4444" label="Too warm" />
-              <LegendItem color="#38bdf8" label="Too cool" />
-              <LegendItem color="#f59e0b" label="Too light" />
-              <LegendItem color="#3b82f6" label="Too dark" />
+              <LegendItem color="#ef4444" label={t('view.tooWarm')} />
+              <LegendItem color="#38bdf8" label={t('view.tooCool')} />
+              <LegendItem color="#f59e0b" label={t('view.tooLight')} />
+              <LegendItem color="#3b82f6" label={t('view.tooDark')} />
             </div>
           )}
         </div>
       )}
       <p className="text-[11px] text-muted-foreground">
-        Color comparison depends on the lighting and white balance of the artwork photo.
+        {t('view.colorNote')}
       </p>
-      <p className="text-[11px] text-muted-foreground" dir="rtl">
-        השוואת הצבע מושפעת מהתאורה ומאיזון הלבן בתצלום הציור.
-      </p>
+      {/* The Hebrew line under the English one; Hebrew pages already say it above. */}
+      {locale === 'en' && (
+        <p className="text-[11px] text-muted-foreground" dir="rtl">
+          השוואת הצבע מושפעת מהתאורה ומאיזון הלבן בתצלום הציור.
+        </p>
+      )}
     </div>
   );
 }
@@ -217,23 +227,26 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 
 // ── Opacity sheet ─────────────────────────────────────────────────────────────
 export function OpacitySheet() {
+  const t = useTranslations('compareTool');
   const store = useCompare();
   const { session } = store;
   const pct = Math.round(session.opacity * 100);
   return (
     <div className="space-y-4">
-      <Field label={`Reference opacity — ${pct}%`}>
+      <Field label={t('overlay.opacityValue', { value: String(pct) })}>
         <input
           type="range"
+          dir="ltr"
           min={0}
           max={100}
           value={pct}
           onChange={(e) => store.setOpacity(Number(e.target.value) / 100)}
           onPointerUp={(e) => store.commitOpacity(Number((e.target as HTMLInputElement).value) / 100)}
           className="w-full accent-primary"
-          aria-label="Reference opacity"
+          aria-label={t('overlay.opacityLabel')}
         />
-        <div className="flex gap-2">
+        {/* Laid out like the slider above: 0% on the left. */}
+        <div className="flex gap-2" dir="ltr">
           {[0, 25, 50, 75, 100].map((v) => (
             <button
               key={v}
@@ -252,7 +265,7 @@ export function OpacitySheet() {
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95"
       >
         {session.referenceHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-        {session.referenceHidden ? 'Show reference' : 'Hide reference'}
+        {session.referenceHidden ? t('overlay.show') : t('overlay.hide')}
       </button>
     </div>
   );
@@ -278,6 +291,7 @@ export function AlignSheet({
   onToggleCrop,
   onRecrop,
 }: AlignProps) {
+  const t = useTranslations('compareTool');
   const store = useCompare();
   const { session } = store;
   const nudge = (a: NudgeAction) => store.nudgeReference(nudgeStep, a);
@@ -288,25 +302,25 @@ export function AlignSheet({
           is purely the MANUAL toolkit (nudge, layer, fit, mirror, crop). */}
 
       {/* Re-crop each source image (region to compare) */}
-      <Field label="Re-crop source image">
+      <Field label={t('align.sheet.recrop')}>
         <div className="flex gap-2">
           <button
             onClick={() => onRecrop('artwork')}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95"
           >
-            <Crop className="h-3.5 w-3.5" /> Artwork
+            <Crop className="h-3.5 w-3.5" /> {t('align.sheet.artwork')}
           </button>
           <button
             onClick={() => onRecrop('reference')}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-foreground active:scale-95"
           >
-            <Crop className="h-3.5 w-3.5" /> Reference
+            <Crop className="h-3.5 w-3.5" /> {t('align.sheet.reference')}
           </button>
         </div>
       </Field>
 
       {/* Layer selector */}
-      <Field label="Adjust layer">
+      <Field label={t('align.sheet.layer')}>
         <div className="flex gap-2">
           <button
             onClick={() => setSelectedLayer('reference')}
@@ -315,7 +329,7 @@ export function AlignSheet({
               selectedLayer === 'reference' ? 'bg-blue-500 text-white' : 'bg-secondary text-muted-foreground'
             }`}
           >
-            Reference
+            {t('align.sheet.reference')}
           </button>
           <button
             onClick={() => {
@@ -328,63 +342,64 @@ export function AlignSheet({
               selectedLayer === 'artwork' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
             } ${session.artworkLocked ? 'opacity-50' : ''}`}
           >
-            Artwork
+            {t('align.sheet.artwork')}
           </button>
           <button
             onClick={store.toggleArtworkLock}
             className="flex items-center justify-center rounded-lg bg-secondary px-3 py-2 text-muted-foreground active:scale-95"
-            aria-label={session.artworkLocked ? 'Unlock artwork' : 'Lock artwork'}
-            title={session.artworkLocked ? 'Unlock artwork' : 'Lock artwork'}
+            aria-label={session.artworkLocked ? t('align.sheet.unlock') : t('align.sheet.lock')}
+            title={session.artworkLocked ? t('align.sheet.unlock') : t('align.sheet.lock')}
           >
             {session.artworkLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
           </button>
         </div>
         {session.artworkLocked && (
-          <p className="text-[11px] text-muted-foreground">Artwork is locked (fixed base). Unlock to move it.</p>
+          <p className="text-[11px] text-muted-foreground">{t('align.sheet.locked')}</p>
         )}
       </Field>
 
       {/* Precision step */}
-      <Field label="Nudge amount">
+      <Field label={t('align.sheet.nudge')}>
         <Seg<NudgeStep>
           value={nudgeStep}
           options={[
-            { value: 'fine', label: 'Fine' },
-            { value: 'normal', label: 'Normal' },
+            { value: 'fine', label: t('align.sheet.fine') },
+            { value: 'normal', label: t('align.sheet.normal') },
           ]}
           onChange={setNudgeStep}
-          ariaLabel="Nudge amount"
+          ariaLabel={t('align.sheet.nudge')}
         />
       </Field>
 
-      {/* Precision pad */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Precision pad: its arrows move the image in screen directions, so it
+          keeps this layout in every language. */}
+      <div className="grid grid-cols-2 gap-3" dir="ltr">
         <div className="grid grid-cols-3 grid-rows-3 gap-1.5">
           <span />
-          <PadBtn onClick={() => nudge('up')} label="Move up"><ArrowUp className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('up')} label={t('align.sheet.moveUp')}><ArrowUp className="h-4 w-4" /></PadBtn>
           <span />
-          <PadBtn onClick={() => nudge('left')} label="Move left"><ArrowLeft className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('left')} label={t('align.sheet.moveLeft')}><ArrowLeft className="h-4 w-4" /></PadBtn>
           <span />
-          <PadBtn onClick={() => nudge('right')} label="Move right"><ArrowRight className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('right')} label={t('align.sheet.moveRight')}><ArrowRight className="h-4 w-4" /></PadBtn>
           <span />
-          <PadBtn onClick={() => nudge('down')} label="Move down"><ArrowDown className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('down')} label={t('align.sheet.moveDown')}><ArrowDown className="h-4 w-4" /></PadBtn>
           <span />
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <PadBtn onClick={() => nudge('scaleUp')} label="Scale up"><ZoomIn className="h-4 w-4" /></PadBtn>
-          <PadBtn onClick={() => nudge('scaleDown')} label="Scale down"><ZoomOut className="h-4 w-4" /></PadBtn>
-          <PadBtn onClick={() => nudge('rotateCcw')} label="Rotate counter-clockwise"><RotateCcw className="h-4 w-4" /></PadBtn>
-          <PadBtn onClick={() => nudge('rotateCw')} label="Rotate clockwise"><RotateCw className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('scaleUp')} label={t('align.sheet.scaleUp')}><ZoomIn className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('scaleDown')} label={t('align.sheet.scaleDown')}><ZoomOut className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('rotateCcw')} label={t('align.sheet.rotateCcw')}><RotateCcw className="h-4 w-4" /></PadBtn>
+          <PadBtn onClick={() => nudge('rotateCw')} label={t('align.sheet.rotateCw')}><RotateCw className="h-4 w-4" /></PadBtn>
         </div>
       </div>
 
       {/* Presets */}
-      <Field label="Fit presets">
+      <Field label={t('align.sheet.presets')}>
         <div className="grid grid-cols-4 gap-2">
-          <MiniBtn onClick={store.fitReference}>Fit</MiniBtn>
-          <MiniBtn onClick={store.fillReference}>Fill</MiniBtn>
-          <MiniBtn onClick={store.matchArtworkBounds}>Match</MiniBtn>
-          <MiniBtn onClick={store.resetReferenceTransform}>Reset</MiniBtn>
+          <MiniBtn onClick={store.fitReference}>{t('align.sheet.fit')}</MiniBtn>
+          <MiniBtn onClick={store.fillReference}>{t('align.sheet.fill')}</MiniBtn>
+          <MiniBtn onClick={store.matchArtworkBounds}>{t('align.sheet.match')}</MiniBtn>
+          <MiniBtn onClick={store.resetReferenceTransform}>{t('align.sheet.reset')}</MiniBtn>
         </div>
       </Field>
 
@@ -394,7 +409,7 @@ export function AlignSheet({
         onClick={store.flipReference}
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95"
       >
-        <FlipHorizontal2 className="h-4 w-4" /> Flip reference
+        <FlipHorizontal2 className="h-4 w-4" /> {t('align.sheet.flip')}
       </button>
 
       <button
@@ -403,23 +418,23 @@ export function AlignSheet({
           cropActive ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'
         }`}
       >
-        <Crop className="h-4 w-4" /> {cropActive ? 'Done cropping' : 'Crop region'}
+        <Crop className="h-4 w-4" /> {cropActive ? t('align.sheet.cropDone') : t('align.sheet.cropRegion')}
       </button>
       {cropActive && (
         <div className="space-y-2 rounded-lg border border-border bg-secondary/20 p-3">
           <p className="text-[11px] text-muted-foreground">
-            Trim away easel / wall around the painting. The source images stay unchanged.
+            {t('align.sheet.cropHint')}
           </p>
-          <CropSlider label="Left" value={session.crop.x} max={1 - session.crop.w}
+          <CropSlider label={t('align.sheet.cropLeft')} value={session.crop.x} max={1 - session.crop.w}
             onChange={(x) => store.setCropLive({ ...session.crop, x })} onCommit={() => store.setCrop(session.crop)} />
-          <CropSlider label="Top" value={session.crop.y} max={1 - session.crop.h}
+          <CropSlider label={t('align.sheet.cropTop')} value={session.crop.y} max={1 - session.crop.h}
             onChange={(y) => store.setCropLive({ ...session.crop, y })} onCommit={() => store.setCrop(session.crop)} />
-          <CropSlider label="Width" value={session.crop.w} min={0.1} max={1 - session.crop.x}
+          <CropSlider label={t('align.sheet.cropWidth')} value={session.crop.w} min={0.1} max={1 - session.crop.x}
             onChange={(w) => store.setCropLive({ ...session.crop, w })} onCommit={() => store.setCrop(session.crop)} />
-          <CropSlider label="Height" value={session.crop.h} min={0.1} max={1 - session.crop.y}
+          <CropSlider label={t('align.sheet.cropHeight')} value={session.crop.h} min={0.1} max={1 - session.crop.y}
             onChange={(h) => store.setCropLive({ ...session.crop, h })} onCommit={() => store.setCrop(session.crop)} />
           <button onClick={store.resetCrop} className="w-full text-center text-[11px] text-muted-foreground">
-            Reset crop
+            {t('align.sheet.cropReset')}
           </button>
         </div>
       )}
@@ -454,20 +469,22 @@ function CropSlider({
   onChange: (v: number) => void;
   onCommit: () => void;
 }) {
+  const t = useTranslations('compareTool');
   return (
     <div>
       <label className="text-[11px] text-muted-foreground">
-        {label}: {Math.round(value * 100)}%
+        {t('align.sheet.cropValue', { label, value: String(Math.round(value * 100)) })}
       </label>
       <input
         type="range"
+        dir="ltr"
         min={Math.round(min * 100)}
         max={Math.round(Math.max(min, max) * 100)}
         value={Math.round(value * 100)}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
         onPointerUp={onCommit}
         className="w-full accent-primary"
-        aria-label={`Crop ${label}`}
+        aria-label={t('align.sheet.cropSlider', { label })}
       />
     </div>
   );
@@ -486,6 +503,7 @@ function MiniBtn({ onClick, children }: { onClick: () => void; children: React.R
 
 // ── Grid sheet ────────────────────────────────────────────────────────────────
 export function GridSheet() {
+  const t = useTranslations('compareTool');
   const store = useCompare();
   const { grid } = store.session;
   const presets = [
@@ -499,17 +517,17 @@ export function GridSheet() {
   return (
     <div className="space-y-4">
       <label className="flex items-center justify-between rounded-lg bg-secondary/40 px-3 py-2.5">
-        <span className="text-sm font-medium text-foreground">Show grid</span>
+        <span className="text-sm font-medium text-foreground">{t('grid.show')}</span>
         <input
           type="checkbox"
           className="h-5 w-5 accent-primary"
           checked={grid.enabled}
           onChange={(e) => store.setGrid({ enabled: e.target.checked })}
-          aria-label="Show grid"
+          aria-label={t('grid.show')}
         />
       </label>
 
-      <Field label="Presets">
+      <Field label={t('grid.presets')}>
         <div className="grid grid-cols-4 gap-2">
           {presets.map((p) => (
             <button
@@ -528,25 +546,25 @@ export function GridSheet() {
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`Columns: ${grid.columns}`}>
-          <input type="range" min={1} max={16} value={grid.columns}
+        <Field label={t('grid.columns', { value: String(grid.columns) })}>
+          <input type="range" dir="ltr" min={1} max={16} value={grid.columns}
             onChange={(e) => store.setGrid({ columns: Number(e.target.value) })}
-            className="w-full accent-primary" aria-label="Grid columns" />
+            className="w-full accent-primary" aria-label={t('grid.columnsLabel')} />
         </Field>
-        <Field label={`Rows: ${grid.rows}`}>
-          <input type="range" min={1} max={16} value={grid.rows}
+        <Field label={t('grid.rows', { value: String(grid.rows) })}>
+          <input type="range" dir="ltr" min={1} max={16} value={grid.rows}
             onChange={(e) => store.setGrid({ rows: Number(e.target.value) })}
-            className="w-full accent-primary" aria-label="Grid rows" />
+            className="w-full accent-primary" aria-label={t('grid.rowsLabel')} />
         </Field>
       </div>
 
-      <Field label="Line color">
+      <Field label={t('grid.lineColor')}>
         <div className="flex gap-2">
           {colors.map((c) => (
             <button
               key={c}
               onClick={() => store.setGrid({ lineColor: c })}
-              aria-label={`Grid color ${c}`}
+              aria-label={t('grid.colorLabel', { color: c })}
               className={`h-7 w-7 rounded-sm border ${grid.lineColor === c ? 'border-foreground scale-110' : 'border-transparent'}`}
               style={{ backgroundColor: c }}
             />
@@ -555,32 +573,32 @@ export function GridSheet() {
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`Opacity: ${Math.round(grid.opacity * 100)}%`}>
-          <input type="range" min={10} max={100} value={Math.round(grid.opacity * 100)}
+        <Field label={t('grid.opacity', { value: String(Math.round(grid.opacity * 100)) })}>
+          <input type="range" dir="ltr" min={10} max={100} value={Math.round(grid.opacity * 100)}
             onChange={(e) => store.setGrid({ opacity: Number(e.target.value) / 100 })}
-            className="w-full accent-primary" aria-label="Grid opacity" />
+            className="w-full accent-primary" aria-label={t('grid.opacityLabel')} />
         </Field>
-        <Field label={`Thickness: ${grid.lineWidth}px`}>
-          <input type="range" min={1} max={5} value={grid.lineWidth}
+        <Field label={t('grid.thickness', { value: String(grid.lineWidth) })}>
+          <input type="range" dir="ltr" min={1} max={5} value={grid.lineWidth}
             onChange={(e) => store.setGrid({ lineWidth: Number(e.target.value) })}
-            className="w-full accent-primary" aria-label="Grid thickness" />
+            className="w-full accent-primary" aria-label={t('grid.thicknessLabel')} />
         </Field>
       </div>
 
       <label className="flex items-center justify-between">
-        <span className="text-sm text-foreground">Emphasize center lines</span>
+        <span className="text-sm text-foreground">{t('grid.emphasizeCenter')}</span>
         <input type="checkbox" className="h-5 w-5 accent-primary" checked={grid.emphasizeCenter}
-          onChange={(e) => store.setGrid({ emphasizeCenter: e.target.checked })} aria-label="Emphasize center lines" />
+          onChange={(e) => store.setGrid({ emphasizeCenter: e.target.checked })} aria-label={t('grid.emphasizeCenter')} />
       </label>
       <label className="flex items-center justify-between">
-        <span className="text-sm text-foreground">Square cells</span>
+        <span className="text-sm text-foreground">{t('grid.square')}</span>
         <input type="checkbox" className="h-5 w-5 accent-primary" checked={grid.square}
-          onChange={(e) => store.setGrid({ square: e.target.checked })} aria-label="Square grid cells" />
+          onChange={(e) => store.setGrid({ square: e.target.checked })} aria-label={t('grid.squareLabel')} />
       </label>
       <label className="flex items-center justify-between">
-        <span className="text-sm text-foreground">Include grid in export</span>
+        <span className="text-sm text-foreground">{t('grid.includeInExport')}</span>
         <input type="checkbox" className="h-5 w-5 accent-primary" checked={grid.includeInExport}
-          onChange={(e) => store.setGrid({ includeInExport: e.target.checked })} aria-label="Include grid in export" />
+          onChange={(e) => store.setGrid({ includeInExport: e.target.checked })} aria-label={t('grid.includeInExport')} />
       </label>
     </div>
   );

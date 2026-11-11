@@ -6,22 +6,29 @@
 
 import { ImageMeta } from './compareArtTypes';
 
-export class ImagePickError extends Error {}
+/** What went wrong, so the upload step can say it in the page's language (compareTool.upload.errors). */
+export type ImagePickFailure = 'unsupported' | 'unreadable' | 'undecodable' | 'failed';
+
+export class ImagePickError extends Error {
+  constructor(message: string, readonly reason: ImagePickFailure) {
+    super(message);
+  }
+}
 
 /** Read a File into a data URL. */
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
-      reject(new ImagePickError('Unsupported file type. Please choose an image.'));
+      reject(new ImagePickError('Unsupported file type. Please choose an image.', 'unsupported'));
       return;
     }
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result;
       if (typeof result === 'string') resolve(result);
-      else reject(new ImagePickError('Failed to read image file.'));
+      else reject(new ImagePickError('Failed to read image file.', 'unreadable'));
     };
-    reader.onerror = () => reject(new ImagePickError('Failed to read image file.'));
+    reader.onerror = () => reject(new ImagePickError('Failed to read image file.', 'unreadable'));
     reader.readAsDataURL(file);
   });
 }
@@ -32,7 +39,7 @@ export function loadImageMeta(dataUrl: string, name?: string): Promise<ImageMeta
     const img = new Image();
     img.onload = () =>
       resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height, name });
-    img.onerror = () => reject(new ImagePickError('Failed to decode image.'));
+    img.onerror = () => reject(new ImagePickError('Failed to decode image.', 'undecodable'));
     img.src = dataUrl;
   });
 }
@@ -74,7 +81,7 @@ export function openImagePicker(capture = false): Promise<{ dataUrl: string; met
       if (settled) return;
       settled = true;
       teardown();
-      reject(err instanceof Error ? err : new ImagePickError('Failed to load image.'));
+      reject(err instanceof Error ? err : new ImagePickError('Failed to load image.', 'failed'));
     };
 
     const onFocus = () => {

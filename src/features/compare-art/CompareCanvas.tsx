@@ -781,10 +781,13 @@ export default function CompareCanvas({ selectedLayer, anchor, onAnchorPoint, on
     [anchor, onAnchorPoint, store, selectedLayer, session, requestDraw, viewLocked, onGestureEnd],
   );
 
+  // The canvas, its magnifier and every gesture work in screen coordinates:
+  // left to right in every language.
   return (
     <div
       ref={containerRef}
       data-onboarding="compare-canvas"
+      dir="ltr"
       className="relative flex-1 min-h-0 overflow-hidden"
       style={NO_NATIVE_TOUCH}
     >

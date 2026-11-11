@@ -14,7 +14,9 @@
 //    still pinch-zoom the image.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocale, useTranslations } from 'use-intl';
 import { Check, RotateCcw, X } from 'lucide-react';
+import { dirOf } from '@/i18n/config';
 import { CropPreset, ImageCrop, ImageMeta } from './compareArtTypes';
 import { CROP_PRESETS, decodeImageElement, presetAspect, renderCrop } from './compareArtCrop';
 
@@ -41,10 +43,18 @@ interface Rect {
 // formats added there appear here automatically.
 const PRESETS = CROP_PRESETS;
 
+// Presets named in words are translated (compareTool.crop.presets); ratios
+// (4:3) and paper sizes (A4) read the same in every language.
+const NAMED_PRESETS = ['free', 'square', 'circle', 'original'] as const;
+type NamedPreset = (typeof NAMED_PRESETS)[number];
+const isNamedPreset = (id: CropPreset): id is NamedPreset => (NAMED_PRESETS as readonly string[]).includes(id);
+
 const HANDLE_HIT = 28;
 const MIN_FRAME = 48;
 
 export default function CompareCropScreen({ role, image, initialCrop, onConfirm, onCancel }: Props) {
+  const t = useTranslations('compareTool');
+  const locale = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -420,7 +430,7 @@ export default function CompareCropScreen({ role, image, initialCrop, onConfirm,
     requestDraw();
   }, [centeredFrame, fitImageToViewport, requestDraw]);
 
-  const titleEn = role === 'artwork' ? 'Crop artwork' : 'Crop reference';
+  const title = role === 'artwork' ? t('crop.artworkTitle') : t('crop.referenceTitle');
   const titleHe = role === 'artwork' ? 'חיתוך הציור' : 'חיתוך הרפרנס';
 
   return (
@@ -429,26 +439,28 @@ export default function CompareCropScreen({ role, image, initialCrop, onConfirm,
         <button
           onClick={onCancel}
           className="flex h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-muted-foreground active:scale-95"
-          aria-label="Cancel crop"
+          aria-label={t('crop.cancelLabel')}
         >
-          <X className="h-4 w-4" /> Cancel
+          <X className="h-4 w-4" /> {t('crop.cancel')}
         </button>
         <div className="text-center">
-          <p className="text-sm font-semibold text-foreground">{titleEn}</p>
-          <p className="text-[11px] text-muted-foreground" dir="rtl">{titleHe}</p>
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          {locale === 'en' && <p className="text-[11px] text-muted-foreground" dir="rtl">{titleHe}</p>}
         </div>
         <button
           onClick={handleConfirm}
           disabled={!ready || busy}
           className="flex h-10 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground active:scale-95 disabled:opacity-50"
-          aria-label="Confirm crop"
+          aria-label={t('crop.confirmLabel')}
         >
-          <Check className="h-4 w-4" /> Done
+          <Check className="h-4 w-4" /> {t('crop.done')}
         </button>
       </div>
 
+      {/* The crop surface (image, frame, gestures) stays left to right in every language. */}
       <div
         ref={containerRef}
+        dir="ltr"
         className="relative flex-1 min-h-0 overflow-hidden"
         style={{ touchAction: 'none' }}
       >
@@ -462,8 +474,8 @@ export default function CompareCropScreen({ role, image, initialCrop, onConfirm,
           onPointerCancel={onPointerUp}
         />
         {!ready && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-            Loading image…
+          <div dir={dirOf(locale)} className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+            {t('crop.loading')}
           </div>
         )}
       </div>
@@ -479,21 +491,21 @@ export default function CompareCropScreen({ role, image, initialCrop, onConfirm,
                 preset === p.id ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
               }`}
             >
-              {p.label}
+              {isNamedPreset(p.id) ? t(`crop.presets.${p.id}`) : p.label}
             </button>
           ))}
           <button
             onClick={resetCrop}
-            className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground active:scale-95"
-            aria-label="Reset crop"
+            className="ms-auto flex shrink-0 items-center gap-1 rounded-full bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground active:scale-95"
+            aria-label={t('crop.resetLabel')}
           >
-            <RotateCcw className="h-3.5 w-3.5" /> Reset
+            <RotateCcw className="h-3.5 w-3.5" /> {t('crop.reset')}
           </button>
         </div>
         <p className="px-1 pt-0.5 text-[11px] text-muted-foreground">
           {preset === 'free'
-            ? 'Drag the corners to resize · drag inside to move · pinch to zoom the image.'
-            : 'Drag to pan · pinch to zoom the image inside the frame.'}
+            ? t('crop.hintFree')
+            : t('crop.hintFixed')}
         </p>
       </div>
     </div>

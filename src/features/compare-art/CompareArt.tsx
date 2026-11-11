@@ -8,6 +8,7 @@
 // Fully self-contained: it touches no other workspace's state.
 
 import { useState } from 'react';
+import { useTranslations } from 'use-intl';
 import {
   ArrowRight,
   Camera,
@@ -41,27 +42,25 @@ import { Vec2 } from './compareArtGeometry';
 
 type Sheet = 'mode' | 'align' | 'grid' | 'export' | null;
 type Phase = 'images' | 'align' | 'compare' | 'save';
+// The step names are compareTool.steps.<phase>.
 const PHASES: Phase[] = ['images', 'align', 'compare', 'save'];
-const PHASE_LABELS = ['Images', 'Align', 'Compare', 'Save'];
-
-const MODE_LABELS: Record<string, string> = {
-  overlay: 'Overlay',
-  blink: 'Blink',
-  split: 'Split',
-  difference: 'Difference',
-};
 
 // Smart Align asks for the same two features on each image, alternating so
 // the painter compares like with like. Colour = which image (amber artwork,
-// blue reference — matching the upload slots and the canvas dots).
-const ANCHOR_STEPS: { image: 'Artwork' | 'Reference'; text: string }[] = [
-  { image: 'Artwork', text: 'Tap a clear feature — e.g. the left eye.' },
-  { image: 'Reference', text: 'Tap the SAME feature here.' },
-  { image: 'Artwork', text: 'Tap a second feature — e.g. the right eye.' },
-  { image: 'Reference', text: 'Tap that SAME second feature here.' },
+// blue reference — matching the upload slots and the canvas dots). `text` is
+// the instruction's message (compareTool.align.smart.<text>).
+const ANCHOR_STEPS: {
+  image: 'Artwork' | 'Reference';
+  text: 'artworkFirst' | 'referenceFirst' | 'artworkSecond' | 'referenceSecond';
+}[] = [
+  { image: 'Artwork', text: 'artworkFirst' },
+  { image: 'Reference', text: 'referenceFirst' },
+  { image: 'Artwork', text: 'artworkSecond' },
+  { image: 'Reference', text: 'referenceSecond' },
 ];
 
 function Workspace() {
+  const t = useTranslations('compareTool');
   const store = useCompare();
   const { session } = store;
 
@@ -103,7 +102,7 @@ function Workspace() {
 
   const newComparison = () => {
     setMoreMenu(false);
-    if (confirm('Start a new comparison? This clears both images and alignment.')) {
+    if (confirm(t('menu.confirmNew'))) {
       store.resetComparison();
       setSheet(null);
       setAnchor(null);
@@ -153,26 +152,26 @@ function Workspace() {
         tool="compare"
         actions={!showUpload && (
           <>
-            <HeaderIconButton label="Undo" onClick={() => store.undo()} disabled={!store.canUndo}>
+            <HeaderIconButton label={t('menu.undo')} onClick={() => store.undo()} disabled={!store.canUndo}>
               <Undo2 className="h-5 w-5" />
             </HeaderIconButton>
             <div className="relative">
-              <HeaderIconButton label="More" onClick={() => setMoreMenu((v) => !v)}>
+              <HeaderIconButton label={t('menu.more')} onClick={() => setMoreMenu((v) => !v)}>
                 <MoreVertical className="h-5 w-5" />
               </HeaderIconButton>
               {moreMenu && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setMoreMenu(false)} />
-                  <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-60 overflow-hidden rounded-xl border border-border bg-card shadow-xl">
-                    <MenuItem icon={<Redo2 className="h-4 w-4" />} label="Redo" disabled={!store.canRedo} onClick={() => { setMoreMenu(false); store.redo(); }} />
+                  <div role="menu" className="absolute end-0 top-full z-40 mt-1 w-60 overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+                    <MenuItem icon={<Redo2 className="h-4 w-4" />} label={t('menu.redo')} disabled={!store.canRedo} onClick={() => { setMoreMenu(false); store.redo(); }} />
                     <div className="my-1 h-px bg-border" />
                     <p className="px-3 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Update artwork (keeps alignment)
+                      {t('menu.updateArtwork')}
                     </p>
-                    <MenuItem icon={<Camera className="h-4 w-4" />} label="Take a new photo" disabled={updatingArt} onClick={() => updateArtwork(true)} />
-                    <MenuItem icon={<ImagePlus className="h-4 w-4" />} label="Choose from library" disabled={updatingArt} onClick={() => updateArtwork(false)} />
+                    <MenuItem icon={<Camera className="h-4 w-4" />} label={t('menu.takePhoto')} disabled={updatingArt} onClick={() => updateArtwork(true)} />
+                    <MenuItem icon={<ImagePlus className="h-4 w-4" />} label={t('menu.chooseFromLibrary')} disabled={updatingArt} onClick={() => updateArtwork(false)} />
                     <div className="my-1 h-px bg-border" />
-                    <MenuItem icon={<X className="h-4 w-4" />} label="New comparison" danger onClick={newComparison} />
+                    <MenuItem icon={<X className="h-4 w-4" />} label={t('menu.newComparison')} danger onClick={newComparison} />
                   </div>
                 </>
               )}
@@ -181,7 +180,7 @@ function Workspace() {
         )}
       />
       <StepIndicator
-        steps={PHASE_LABELS}
+        steps={PHASES.map((p) => t(`steps.${p}`))}
         current={phaseIndex}
         canSelect={(i) => i === 0 || store.bothLoaded}
         onSelect={(i) => goTo(PHASES[i])}
@@ -273,7 +272,7 @@ function Workspace() {
 
         {/* Which image is on screen while Smart Align collects points. */}
         {anchor && (
-          <div className="pointer-events-none absolute left-2 top-2 z-20">
+          <div className="pointer-events-none absolute start-2 top-2 z-20">
             <ImageBadge image={ANCHOR_STEPS[anchor.step]?.image ?? 'Artwork'} />
           </div>
         )}
@@ -283,11 +282,11 @@ function Workspace() {
           <button
             onClick={() => setViewLocked((v) => !v)}
             aria-pressed={viewLocked}
-            className={`absolute right-2 top-2 z-20 flex min-h-[40px] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold shadow-lg backdrop-blur-sm ${
+            className={`absolute end-2 top-2 z-20 flex min-h-[40px] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold shadow-lg backdrop-blur-sm ${
               viewLocked ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card/90 text-foreground'
             }`}
           >
-            <Lock className="h-4 w-4" /> {viewLocked ? 'Locked — pinch to zoom' : 'Lock & Zoom'}
+            <Lock className="h-4 w-4" /> {viewLocked ? t('compare.locked') : t('compare.lockZoom')}
           </button>
         )}
       </div>
@@ -299,21 +298,21 @@ function Workspace() {
             <>
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-muted-foreground">Smart Align · point {anchor.step + 1} of 4</p>
+                  <p className="text-xs font-medium text-muted-foreground">{t('align.smart.progress', { point: String(anchor.step + 1) })}</p>
                   {/* Fixed two-line height: if this panel grew or shrank between
                       taps, the canvas would resize and the image would shift
                       under the finger mid-alignment. */}
                   <p className="mt-0.5 h-10 overflow-hidden text-sm leading-5 text-foreground">
                     <ImageBadge image={ANCHOR_STEPS[anchor.step]?.image ?? 'Artwork'} inline />{' '}
-                    {ANCHOR_STEPS[anchor.step]?.text}
+                    {ANCHOR_STEPS[anchor.step] && t(`align.smart.${ANCHOR_STEPS[anchor.step].text}`)}
                   </p>
                 </div>
                 <button
                   onClick={() => setAnchor(null)}
                   className="flex min-h-[40px] items-center gap-1 rounded-lg bg-secondary px-3 text-xs font-medium text-muted-foreground"
-                  aria-label="Cancel alignment"
+                  aria-label={t('align.smart.cancelLabel')}
                 >
-                  <X className="h-3.5 w-3.5" /> Cancel
+                  <X className="h-3.5 w-3.5" /> {t('align.smart.cancel')}
                 </button>
               </div>
               <div className="flex gap-1" aria-hidden="true">
@@ -321,39 +320,41 @@ function Workspace() {
                   <span key={i} className={`h-1 flex-1 rounded-full ${i < anchor.step ? 'bg-primary' : i === anchor.step ? 'bg-primary/50' : 'bg-secondary'}`} />
                 ))}
               </div>
-              <p className="text-[11px] text-muted-foreground">Hold and slide to aim with the magnifier; the point is placed when you lift.</p>
+              <p className="text-[11px] text-muted-foreground">{t('align.smart.hold')}</p>
             </>
           ) : phase === 'align' ? (
             <>
               <div>
-                <p className="text-sm font-semibold text-foreground">Align the images</p>
-                <p className="text-xs text-muted-foreground">Match your artwork to the reference so the differences you see are real.</p>
+                <p className="text-sm font-semibold text-foreground">{t('align.title')}</p>
+                <p className="text-xs text-muted-foreground">{t('align.lead')}</p>
               </div>
               <ChoiceCard
                 icon={<Sparkles className="h-5 w-5" />}
                 title="Smart Align"
-                badge="Recommended"
-                text="Tap two matching points on each image (e.g. both eyes)."
+                badge={t('align.recommended')}
+                text={t('align.smartText')}
                 primary
                 onClick={startSmartAlign}
               />
               <ChoiceCard
                 icon={<SlidersHorizontal className="h-5 w-5" />}
-                title="Manual Align"
-                text="Move, scale and rotate the reference by hand."
+                title={t('align.manual')}
+                text={t('align.manualText')}
                 onClick={() => openSheet('align')}
               />
               <button onClick={() => goTo('compare')} className="flex min-h-[40px] w-full items-center justify-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-                Already lined up? Skip to Compare <ArrowRight className="h-3.5 w-3.5" />
+                {t('align.skip')} <ArrowRight className="h-3.5 w-3.5 rtl:-scale-x-100" />
               </button>
             </>
           ) : phase === 'compare' ? (
             <>
-              <div className="flex rounded-lg bg-secondary/60 p-0.5" role="group" aria-label="Show">
+              {/* Laid out like the opacity slider below (artwork at 0, on the
+                  left), so it stays left to right in every language. */}
+              <div className="flex rounded-lg bg-secondary/60 p-0.5" role="group" aria-label={t('compare.show')} dir="ltr">
                 {[
-                  { v: 0, label: 'Artwork' },
+                  { v: 0, label: t('compare.artwork') },
                   { v: 0.5, label: '50 / 50' },
-                  { v: 1, label: 'Reference' },
+                  { v: 1, label: t('compare.reference') },
                 ].map((o) => (
                   <button
                     key={o.label}
@@ -372,12 +373,14 @@ function Workspace() {
               ) : (
                 <div className="flex min-h-[32px] items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    <span className="font-semibold text-foreground">{MODE_LABELS[session.mode]}</span>
-                    {session.mode === 'split' ? ' — drag the divider on the image' : session.mode === 'blink' ? ' — the images swap automatically' : ' — bright areas differ most'}
+                    {t.rich(`compare.hints.${session.mode === 'split' ? 'split' : session.mode === 'blink' ? 'blink' : 'difference'}`, {
+                      label: t(`modes.${session.mode}`),
+                      mode: (chunks) => <span className="font-semibold text-foreground">{chunks}</span>,
+                    })}
                   </span>
                   {session.mode === 'split' && (
                     <button onClick={doFlipSides} className="flex min-h-[36px] items-center gap-1 rounded-lg bg-secondary px-2.5 font-medium text-foreground">
-                      <FlipHorizontal2 className="h-4 w-4" /> Flip
+                      <FlipHorizontal2 className="h-4 w-4" /> {t('compare.flip')}
                     </button>
                   )}
                 </div>
@@ -391,36 +394,39 @@ function Workspace() {
                     session.grid.enabled ? 'bg-primary/15 text-primary ring-1 ring-primary/40' : 'bg-secondary text-foreground'
                   }`}
                 >
-                  <Grid3X3 className="h-4 w-4" /> Grid {session.grid.enabled ? `${session.grid.columns}×${session.grid.rows}` : 'off'}
+                  <Grid3X3 className="h-4 w-4" />{' '}
+                  {session.grid.enabled
+                    ? t('compare.gridOn', { columns: String(session.grid.columns), rows: String(session.grid.rows) })
+                    : t('compare.gridOff')}
                 </button>
-                <button onClick={() => openSheet('grid')} aria-label="Grid settings" className="flex h-11 w-11 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                <button onClick={() => openSheet('grid')} aria-label={t('compare.gridSettings')} className="flex h-11 w-11 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
                   <SlidersHorizontal className="h-4 w-4" />
                 </button>
                 <button onClick={() => openSheet('mode')} className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary text-sm font-medium text-foreground">
-                  <Layers className="h-4 w-4" /> More views
+                  <Layers className="h-4 w-4" /> {t('compare.moreViews')}
                 </button>
               </div>
               <button
                 onClick={() => goTo('save')}
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground"
               >
-                Next: Save <ArrowRight className="h-5 w-5" />
+                {t('compare.next')} <ArrowRight className="h-5 w-5 rtl:-scale-x-100" />
               </button>
             </>
           ) : (
             <>
               <div>
-                <p className="text-sm font-semibold text-foreground">Create a comparison GIF</p>
+                <p className="text-sm font-semibold text-foreground">{t('save.title')}</p>
                 <p className="text-xs text-muted-foreground">
-                  It fades between your artwork and the reference, so proportion mistakes jump out.
+                  {t('save.lead')}
                 </p>
               </div>
-              <QuickGifButton label="Create & Save GIF" />
+              <QuickGifButton label={t('save.quickGif')} />
               <button
                 onClick={() => openSheet('export')}
                 className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary/50 text-sm font-medium text-foreground"
               >
-                <Download className="h-4 w-4" /> Save still image & more options
+                <Download className="h-4 w-4" /> {t('save.moreOptions')}
               </button>
             </>
           )}
@@ -428,13 +434,13 @@ function Workspace() {
       </div>
 
       {/* Sheets */}
-      <CompareBottomSheet open={sheet === 'mode'} title="Compare view" onClose={() => setSheet(null)}>
+      <CompareBottomSheet open={sheet === 'mode'} title={t('sheets.view')} onClose={() => setSheet(null)}>
         <ModeSheet />
       </CompareBottomSheet>
       <CompareBottomSheet
         open={sheet === 'align'}
-        title="Manual align"
-        subtitle="Drag on the canvas, or nudge precisely here."
+        title={t('align.sheet.title')}
+        subtitle={t('align.sheet.subtitle')}
         collapsed={sheet === 'align' && sheetCollapsed}
         maxVh={56}
         headerAction={
@@ -442,7 +448,7 @@ function Workspace() {
             onClick={() => goTo('compare')}
             className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
           >
-            Done
+            {t('align.sheet.done')}
           </button>
         }
         onClose={() => {
@@ -469,13 +475,13 @@ function Workspace() {
           }}
         />
       </CompareBottomSheet>
-      <CompareBottomSheet open={sheet === 'grid'} title="Comparison grid" onClose={() => setSheet(null)}>
+      <CompareBottomSheet open={sheet === 'grid'} title={t('sheets.grid')} onClose={() => setSheet(null)}>
         <GridSheet />
       </CompareBottomSheet>
       <CompareBottomSheet
         open={sheet === 'export'}
-        title="Save comparison"
-        subtitle="Still image, difference image, or a custom GIF."
+        title={t('sheets.save')}
+        subtitle={t('sheets.saveSubtitle')}
         onClose={() => setSheet(null)}
       >
         <CompareExportSheet />
@@ -485,6 +491,7 @@ function Workspace() {
 }
 
 function ImageBadge({ image, inline = false }: { image: 'Artwork' | 'Reference'; inline?: boolean }) {
+  const t = useTranslations('compareTool');
   const artwork = image === 'Artwork';
   return (
     <span
@@ -492,7 +499,7 @@ function ImageBadge({ image, inline = false }: { image: 'Artwork' | 'Reference';
         inline ? 'px-2 py-0.5 text-xs' : 'px-3 py-1.5 text-xs shadow-lg'
       } ${artwork ? 'bg-primary text-primary-foreground' : 'bg-blue-500 text-white'}`}
     >
-      {artwork ? 'Your artwork' : 'Reference'}
+      {artwork ? t('align.smart.showingArtwork') : t('align.smart.showingReference')}
     </span>
   );
 }
@@ -503,7 +510,7 @@ function ChoiceCard({ icon, title, badge, text, primary, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-start transition-colors ${
         primary ? 'border-primary bg-primary/10' : 'border-border bg-secondary/30 hover:border-primary/40'
       }`}
     >
@@ -517,7 +524,7 @@ function ChoiceCard({ icon, title, badge, text, primary, onClick }: {
         </span>
         <span className="block text-xs leading-snug text-muted-foreground">{text}</span>
       </span>
-      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:-scale-x-100" />
     </button>
   );
 }

@@ -24,10 +24,13 @@ import {
   generateComparisonGif,
 } from './compareArtGif';
 
+/** Why the one-tap GIF did not happen; the button shows the message (compareTool.quickGif.errors). */
+export type QuickGifError = 'differencePro' | 'notInPlan' | 'limit' | 'failed';
+
 export interface QuickGifState {
   busy: boolean;
   progress: GifProgress | null;
-  error: string | null;
+  error: QuickGifError | null;
   generate: (animation?: GifAnimation) => Promise<void>;
   cancel: () => void;
 }
@@ -38,7 +41,7 @@ export function useCompareGif(): QuickGifState {
   const { save } = useSaveMedia();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<GifProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<QuickGifError | null>(null);
   const handle = useRef<{ cancel: () => void } | null>(null);
   const account = useAccount();
   const largeAllowed = useHasFeature('export.gif_large');
@@ -50,7 +53,7 @@ export function useCompareGif(): QuickGifState {
     async (animation: GifAnimation = 'opacity-pulse') => {
       if (!session.artwork || !session.reference) return;
       if (animation === 'compare-diff' && !differenceAllowed) {
-        setError('Compare + Difference GIFs are part of Pro.');
+        setError('differencePro');
         return;
       }
       // The one-tap GIF uses the saved size, or the largest the plan includes.
@@ -65,10 +68,10 @@ export function useCompareGif(): QuickGifState {
       if (access !== 'ok' && access !== 'unavailable') {
         setBusy(false);
         if (access === 'locked') {
-          setError('Your plan does not include this GIF.');
+          setError('notInPlan');
           void account?.refresh();
         }
-        if (access === 'limit') setError('You have used all the GIFs your plan includes for now. See your account page for when more are available.');
+        if (access === 'limit') setError('limit');
         return;
       }
       try {
@@ -120,7 +123,7 @@ export function useCompareGif(): QuickGifState {
       } catch (e) {
         if (!(e instanceof CancelledError)) {
           console.error('[useCompareGif] generation failed:', e);
-          setError('GIF failed. Try a smaller output size in Export.');
+          setError('failed');
         }
       } finally {
         setBusy(false);

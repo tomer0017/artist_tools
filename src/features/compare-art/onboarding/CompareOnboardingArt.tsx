@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { useTranslations } from 'use-intl';
 import { Image as ImageIcon, Crosshair, Grid3X3, Hand } from 'lucide-react';
 
 /**
@@ -104,12 +105,13 @@ const BLUE = '#3b82f6';
 // ─── The 5-step flow ribbon (Load → Align → Compare → Grid → Export GIF) ──────
 
 export function FlowRibbon() {
+  const t = useTranslations('compareTool');
   const steps = [
-    { icon: <ImageIcon className="h-5 w-5" />, title: 'Load', sub: 'Add both images', tone: 'text-foreground' },
-    { icon: <Crosshair className="h-5 w-5" />, title: 'Align', sub: 'Choose a method', tone: 'text-primary' },
-    { icon: <CompareGlyph />, title: 'Compare', sub: 'Spot the difference', tone: 'text-foreground' },
-    { icon: <Grid3X3 className="h-5 w-5" />, title: 'Grid', sub: 'Optional guide', tone: 'text-muted-foreground' },
-    { icon: <GifGlyph />, title: 'Export GIF', sub: 'See it blink', tone: 'text-foreground' },
+    { icon: <ImageIcon className="h-5 w-5" />, title: t('intro.flow.load'), sub: t('intro.flow.loadSub'), tone: 'text-foreground' },
+    { icon: <Crosshair className="h-5 w-5" />, title: t('intro.flow.align'), sub: t('intro.flow.alignSub'), tone: 'text-primary' },
+    { icon: <CompareGlyph />, title: t('intro.flow.compare'), sub: t('intro.flow.compareSub'), tone: 'text-foreground' },
+    { icon: <Grid3X3 className="h-5 w-5" />, title: t('intro.flow.grid'), sub: t('intro.flow.gridSub'), tone: 'text-muted-foreground' },
+    { icon: <GifGlyph />, title: t('intro.flow.gif'), sub: t('intro.flow.gifSub'), tone: 'text-foreground' },
   ];
   return (
     <div className="rounded-2xl border border-border bg-secondary/25 px-2 py-3">
@@ -123,7 +125,7 @@ export function FlowRibbon() {
               </div>
               <div className="text-[9px] leading-tight text-muted-foreground">{s.sub}</div>
             </div>
-            {i < steps.length - 1 && <div className="mt-1.5 px-0.5 text-muted-foreground/50">→</div>}
+            {i < steps.length - 1 && <div className="mt-1.5 px-0.5 text-muted-foreground/50 rtl:-scale-x-100">→</div>}
           </div>
         ))}
       </div>
@@ -151,18 +153,19 @@ function GifGlyph() {
 // ─── Workflow A: manual overlay comic-strip ──────────────────────────────────
 
 export function WorkflowA() {
+  const t = useTranslations('compareTool');
   const uid = useId().replace(/[:]/g, '');
   return (
     <div className="grid grid-cols-3 gap-2">
-      <Frame n={1} caption="Load"><Landscape /></Frame>
-      <Frame n={2} caption="Drag over reference">
+      <Frame n={1} caption={t('intro.overlaySteps.load')}><Landscape /></Frame>
+      <Frame n={2} caption={t('intro.overlaySteps.drag')}>
         <g transform="translate(6,6) scale(0.88)"><Landscape dim /></g>
         <g transform="translate(-4,-4) scale(0.9)"><Landscape /></g>
         <g transform="translate(52,40)">
           <path d="M4 0 L4 15 L8 11 L11 17 L14 15 L11 9 L16 9 Z" fill="#fff" stroke="#111" strokeWidth="1" />
         </g>
       </Frame>
-      <Frame n={3} caption="Fade opacity">
+      <Frame n={3} caption={t('intro.overlaySteps.fade')}>
         <Landscape dim />
         <g opacity="0.5"><Landscape /></g>
         <g transform="translate(0,66)">
@@ -171,17 +174,20 @@ export function WorkflowA() {
           <circle cx="52" cy="4" r="5" fill={AMBER} />
         </g>
       </Frame>
-      <Frame n={4} caption="Mistakes appear">
+      <Frame n={4} caption={t('intro.overlaySteps.mistakes')}>
         <Landscape />
         <circle cx="70" cy="22" r="10" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="3 3" />
         <circle cx="34" cy="50" r="9" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="3 3" />
       </Frame>
-      <Frame n={5} caption="Export GIF"><GifStack /></Frame>
+      <Frame n={5} caption={t('intro.overlaySteps.gif')}><GifStack /></Frame>
       <div className="flex min-w-0 flex-col justify-center">
         <p className="text-[10px] leading-snug text-muted-foreground">
           <style>{`@keyframes ${uid}b{0%,49%{opacity:1}50%,100%{opacity:0}}@media(prefers-reduced-motion:reduce){.${uid}b{animation:none}}`}</style>
-          Lower the opacity to see what’s off. A GIF makes it{' '}
-          <span className={`${uid}b font-semibold text-foreground`} style={{ animation: `${uid}b 0.9s steps(1) infinite` }}>jump out</span>.
+          {t.rich('intro.overlaySteps.note', {
+            blink: (chunks) => (
+              <span className={`${uid}b font-semibold text-foreground`} style={{ animation: `${uid}b 0.9s steps(1) infinite` }}>{chunks}</span>
+            ),
+          })}
         </p>
       </div>
     </div>
@@ -191,21 +197,22 @@ export function WorkflowA() {
 // ─── Workflow B: Smart Align comic-strip ─────────────────────────────────────
 
 export function WorkflowB() {
+  const t = useTranslations('compareTool');
   return (
     <div className="grid grid-cols-3 gap-2">
-      <Frame n={1} caption="Tap an eye — painting">
+      <Frame n={1} caption={t('intro.smartSteps.tapEye')}>
         <FacePainting /><TapDot x={44} y={38} tint={AMBER} />
       </Frame>
-      <Frame n={2} caption="Same eye — reference">
+      <Frame n={2} caption={t('intro.smartSteps.sameEye')}>
         <StatueReference /><TapDot x={47} y={40} tint={BLUE} />
       </Frame>
-      <Frame n={3} caption="Other eye — painting">
+      <Frame n={3} caption={t('intro.smartSteps.otherEye')}>
         <FacePainting /><TapDot x={58} y={38} tint={AMBER} />
       </Frame>
-      <Frame n={4} caption="Other eye — reference">
+      <Frame n={4} caption={t('intro.smartSteps.otherEyeReference')}>
         <StatueReference /><TapDot x={55} y={40} tint={BLUE} />
       </Frame>
-      <Frame n={5} caption="It snaps into place">
+      <Frame n={5} caption={t('intro.smartSteps.snaps')}>
         <clipPath id="halfL"><rect x="0" y="0" width="50" height="76" /></clipPath>
         <clipPath id="halfR"><rect x="50" y="0" width="50" height="76" /></clipPath>
         <g clipPath="url(#halfL)"><FacePainting /></g>
@@ -213,10 +220,10 @@ export function WorkflowB() {
         <line x1="50" y1="0" x2="50" y2="76" stroke={AMBER} strokeWidth="1.5" strokeDasharray="3 3" />
         <path d="M84 10 l2 5 l5 2 l-5 2 l-2 5 l-2 -5 l-5 -2 l5 -2 Z" fill={AMBER} />
       </Frame>
-      <Frame n={6} caption="Export GIF"><GifStack tint={BLUE} /></Frame>
+      <Frame n={6} caption={t('intro.smartSteps.gif')}><GifStack tint={BLUE} /></Frame>
       <div className="col-span-3">
         <p className="text-[10px] leading-snug text-muted-foreground">
-          Tap two matching points on each image. They line up perfectly — instantly.
+          {t('intro.smartSteps.note')}
         </p>
       </div>
     </div>
@@ -226,17 +233,17 @@ export function WorkflowB() {
 // ─── "Why export a GIF?" — a real blink between painting and reference ────────
 
 export function WhyGifBlink() {
+  const t = useTranslations('compareTool');
   const uid = useId().replace(/[:]/g, '');
   return (
     <div className="flex items-center gap-3">
       <div className="grow">
         <div className="mb-1 flex items-center gap-1.5">
           <Hand className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-bold text-foreground">Why export a GIF?</span>
+          <span className="text-xs font-bold text-foreground">{t('intro.whyGif.title')}</span>
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground">
-          It blinks between your painting and the reference — mistakes that hide in a still image
-          become obvious in the flicker.
+          {t('intro.whyGif.text')}
         </p>
       </div>
       {/* One frame that actually blinks painting ↔ reference. */}

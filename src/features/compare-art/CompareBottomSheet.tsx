@@ -4,6 +4,7 @@
 // caps its own height so the important image area is never fully covered.
 
 import { ReactNode } from 'react';
+import { useTranslations } from 'use-intl';
 import { X } from 'lucide-react';
 
 interface Props {
@@ -33,6 +34,7 @@ export default function CompareBottomSheet({
   collapsed = false,
   maxVh = 60,
 }: Props) {
+  const t = useTranslations('compareTool');
   if (!open) return null;
   return (
     <div
@@ -51,7 +53,7 @@ export default function CompareBottomSheet({
           <button
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground active:scale-95"
-            aria-label="Close"
+            aria-label={t('sheets.close')}
           >
             <X className="h-4 w-4" />
           </button>
