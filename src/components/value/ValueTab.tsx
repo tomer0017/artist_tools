@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
@@ -145,29 +146,55 @@ const FAMILY_LABEL: Record<HueFamily, string> = {
   skin: 'skin', neutral: 'neutral',
 };
 
-function dominantLabel(fam: HueFamily, band: 'dark' | 'mid' | 'light', hsl: { h: number; s: number; l: number }) {
+// A dominant colour's name as message keys (studyTool.colors), so the screen
+// can name it in the studio's language. The study sheet draws the English
+// name from dominantLabel below.
+type NamedColor =
+  | 'deepBlack' | 'darkNeutral' | 'midGray' | 'lightGray' | 'nearWhite'
+  | 'skinShadow' | 'skinMidtone' | 'skinHighlight'
+  | 'darkOlive' | 'lightOlive' | 'oliveGreen';
+type DominantName =
+  | { named: NamedColor }
+  | { hue: Exclude<HueFamily, 'skin' | 'neutral'>; tone: 'dark' | 'light' | null; muted: boolean };
+
+const NAMED_LABEL: Record<NamedColor, string> = {
+  deepBlack: 'deep black', darkNeutral: 'dark neutral', midGray: 'mid gray',
+  lightGray: 'light gray', nearWhite: 'near white',
+  skinShadow: 'skin shadow', skinMidtone: 'skin midtone', skinHighlight: 'skin highlight',
+  darkOlive: 'dark olive', lightOlive: 'light olive', oliveGreen: 'olive green',
+};
+
+function dominantName(fam: HueFamily, band: 'dark' | 'mid' | 'light', hsl: { h: number; s: number; l: number }): DominantName {
   if (fam === 'neutral') {
-    if (hsl.l < 12) return 'deep black';
-    if (hsl.l < 32) return 'dark neutral';
-    if (hsl.l < 60) return 'mid gray';
-    if (hsl.l < 85) return 'light gray';
-    return 'near white';
+    if (hsl.l < 12) return { named: 'deepBlack' };
+    if (hsl.l < 32) return { named: 'darkNeutral' };
+    if (hsl.l < 60) return { named: 'midGray' };
+    if (hsl.l < 85) return { named: 'lightGray' };
+    return { named: 'nearWhite' };
   }
   if (fam === 'skin') {
-    return band === 'dark' ? 'skin shadow' : band === 'mid' ? 'skin midtone' : 'skin highlight';
+    return { named: band === 'dark' ? 'skinShadow' : band === 'mid' ? 'skinMidtone' : 'skinHighlight' };
   }
   // Special-case olive (yellow-green low saturation)
   if (fam === 'green' && hsl.h < 90 && hsl.s < 45) {
-    return band === 'dark' ? 'dark olive' : band === 'light' ? 'light olive' : 'olive green';
+    return { named: band === 'dark' ? 'darkOlive' : band === 'light' ? 'lightOlive' : 'oliveGreen' };
   }
-  const muted = hsl.s < 32 ? 'muted ' : '';
-  const adj = band === 'dark' ? 'dark ' : band === 'light' ? 'light ' : '';
-  return `${adj}${muted}${FAMILY_LABEL[fam]}`.trim();
+  return { hue: fam, tone: band === 'dark' ? 'dark' : band === 'light' ? 'light' : null, muted: hsl.s < 32 };
+}
+
+// The English name (drawn into the study sheet).
+function dominantLabel(fam: HueFamily, band: 'dark' | 'mid' | 'light', hsl: { h: number; s: number; l: number }) {
+  const name = dominantName(fam, band, hsl);
+  if ('named' in name) return NAMED_LABEL[name.named];
+  const muted = name.muted ? 'muted ' : '';
+  const adj = name.tone === 'dark' ? 'dark ' : name.tone === 'light' ? 'light ' : '';
+  return `${adj}${muted}${FAMILY_LABEL[name.hue]}`.trim();
 }
 
 export default function ValueTab() {
   const { image, valueSettings, setValueSettings } = useProject();
   const { save } = useSaveMedia();
+  const t = useTranslations('studyTool');
   const [localImage, setLocalImage] = useState<string | null>(null);
   const [processedUrl, setProcessedUrl] = useState<string | null>(null);
   const [groups, setGroups] = useState<ValueGroup[]>([]);
@@ -565,7 +592,7 @@ export default function ValueTab() {
 
   const saveDataUrl = (dataUrl: string, name: string, mime: string) => {
     dataUrlToBlob(dataUrl)
-      .then((blob) => save({ blob, filename: name, mime, title: 'Save image' }))
+      .then((blob) => save({ blob, filename: name, mime, title: t('save.imageTitle') }))
       .catch((error) => console.error('[ValueTab] Failed to prepare image for saving:', error));
   };
 
@@ -585,7 +612,7 @@ export default function ValueTab() {
     if (!result) return;
     try {
       const blob = new Blob([traceToSvg(result)], { type: 'image/svg+xml' });
-      save({ blob, filename: 'sketch.svg', mime: 'image/svg+xml', title: 'Save SVG' });
+      save({ blob, filename: 'sketch.svg', mime: 'image/svg+xml', title: t('save.svgTitle') });
     } catch (error) {
       console.error('[ValueTab] Failed to export sketch SVG:', error);
     }
@@ -697,18 +724,18 @@ export default function ValueTab() {
   if (!activeImage) {
     return (
       <div className="flex flex-1 flex-col min-h-0">
-        <ToolHeader tool="value" task="Simplify a reference into colors, values and shapes" />
+        <ToolHeader tool="value" task={t('empty.task')} />
         <ToolEmptyState
           tool="value"
-          heading="Make your reference easier to read"
+          heading={t('empty.heading')}
           steps={[
-            'Upload your reference photo.',
-            'Pick a study: Color, Values or Sketch.',
-            'Adjust it, then save the study to paint from.',
+            t('empty.step1'),
+            t('empty.step2'),
+            t('empty.step3'),
           ]}
-          note="A photo loaded in Measure & Plan opens here automatically."
+          note={t('empty.note')}
         >
-          <ImageUploader primary label="Upload reference photo" onImageLoad={setLocalImage} />
+          <ImageUploader primary label={t('empty.upload')} onImageLoad={setLocalImage} />
         </ToolEmptyState>
       </div>
     );
@@ -722,23 +749,23 @@ export default function ValueTab() {
   //   Sketch → where should I draw?
   // Painter is treated as a color-rendering variant, so it highlights "Color".
   const studyModes = ([
-    { id: 'color' as Mode, label: 'Color', icon: <PaletteIcon className="w-3.5 h-3.5" /> },
-    { id: 'grayscale' as Mode, label: 'Values', icon: <Contrast className="w-3.5 h-3.5" /> },
-    { id: 'sketch' as Mode, label: 'Sketch', icon: <PencilLine className="w-3.5 h-3.5" /> },
+    { id: 'color' as Mode, label: t('modes.color.label'), icon: <PaletteIcon className="w-3.5 h-3.5" /> },
+    { id: 'grayscale' as Mode, label: t('modes.grayscale.label'), icon: <Contrast className="w-3.5 h-3.5" /> },
+    { id: 'sketch' as Mode, label: t('modes.sketch.label'), icon: <PencilLine className="w-3.5 h-3.5" /> },
   ]);
   const studyModeActive = (id: Mode) =>
     id === 'color' ? (mode === 'color' || mode === 'painter') : mode === id;
   // The three studies as picture cards, always visible above the image, so
   // the difference between them is clear *before* choosing — no guessing from
   // an icon. `layout="column"` stacks them in the desktop sidebar.
-  const STUDY_MODE_INFO: Record<string, { caption: string; treatment: 'flat' | 'values' | 'sketch'; task: string }> = {
-    color: { caption: 'Major colors', treatment: 'flat', task: 'Simplify the reference into its main color families' },
-    grayscale: { caption: 'Light & shadow', treatment: 'values', task: 'See the big shapes of light and shadow' },
-    sketch: { caption: 'Shapes & lines', treatment: 'sketch', task: 'Turn the reference into clean shapes to draw from' },
+  const STUDY_MODE_INFO: Record<string, { caption: string; treatment: 'flat' | 'values' | 'sketch'; task: string; example: string }> = {
+    color: { caption: t('modes.color.caption'), treatment: 'flat', task: t('modes.color.task'), example: t('modes.color.example') },
+    grayscale: { caption: t('modes.grayscale.caption'), treatment: 'values', task: t('modes.grayscale.task'), example: t('modes.grayscale.example') },
+    sketch: { caption: t('modes.sketch.caption'), treatment: 'sketch', task: t('modes.sketch.task'), example: t('modes.sketch.example') },
   };
   const studyTask = STUDY_MODE_INFO[mode === 'painter' ? 'color' : mode]?.task;
   const StudyModeCards = ({ layout }: { layout: 'row' | 'column' }) => (
-    <div data-onboarding="value-modes" role="radiogroup" aria-label="Study"
+    <div data-onboarding="value-modes" role="radiogroup" aria-label={t('modes.group')}
       className={layout === 'row' ? 'grid grid-cols-3 gap-2' : 'flex flex-col gap-1.5'}>
       {studyModes.map(m => {
         const info = STUDY_MODE_INFO[m.id];
@@ -746,11 +773,11 @@ export default function ValueTab() {
         return (
           <button key={m.id} role="radio" aria-checked={active}
             onClick={() => updateMode(m.id === 'color' && mode === 'painter' ? 'painter' : m.id)}
-            className={`flex min-w-0 items-center gap-1.5 rounded-xl border p-1.5 text-left md:gap-2 transition-colors ${
+            className={`flex min-w-0 items-center gap-1.5 rounded-xl border p-1.5 text-start md:gap-2 transition-colors ${
               active ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/40'
             }`}>
             <span className="h-9 w-9 shrink-0 overflow-hidden rounded-lg md:h-10 md:w-10">
-              <PortraitArt treatment={info.treatment} viewBox="30 26 40 40" label={`${m.label} example`} />
+              <PortraitArt treatment={info.treatment} viewBox="30 26 40 40" label={info.example} />
             </span>
             <span className="min-w-0">
               <span className={`block truncate text-[13px] font-semibold leading-tight ${active ? 'text-primary' : 'text-foreground'}`}>{m.label}</span>
@@ -770,7 +797,7 @@ export default function ValueTab() {
         mode === 'painter' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
       }`}>
       <Brush className="w-3.5 h-3.5" />
-      Painter mode {mode === 'painter' ? 'on' : 'off'}
+      {mode === 'painter' ? t('controls.painterOn') : t('controls.painterOff')}
     </button>
   );
 
@@ -779,7 +806,7 @@ export default function ValueTab() {
       <div className="flex gap-1">
         {[3, 5, 7, 9, 11, 13].map(l => (
           <button key={l} onClick={() => updateLevels(l)}
-            title={l === 9 ? 'Recommended default' : undefined}
+            title={l === 9 ? t('levels.recommended') : undefined}
             className={`relative flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
               levels === l
                 ? 'bg-primary text-primary-foreground'
@@ -789,13 +816,13 @@ export default function ValueTab() {
             }`}>
             {l}
             {l === 9 && (
-              <span className="absolute -top-1 -right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+              <span className="absolute -top-1 -end-1 h-1.5 w-1.5 rounded-full bg-primary" />
             )}
           </button>
         ))}
       </div>
       <p className="text-[9px] text-muted-foreground mt-1">
-        9 = recommended default · 3 block-in → 13 max separation
+        {t('levels.hint')}
       </p>
     </div>
   );
@@ -803,10 +830,10 @@ export default function ValueTab() {
   const FocusButtons = (
     <div className="grid grid-cols-2 gap-1.5">
       {([
-        { id: 'none' as Focus, label: 'All', icon: <Eye className="w-3 h-3" /> },
-        { id: 'shadow' as Focus, label: 'Shadows', icon: <Moon className="w-3 h-3" /> },
-        { id: 'highlight' as Focus, label: 'Lights', icon: <Sun className="w-3 h-3" /> },
-        { id: 'squint' as Focus, label: 'Squint', icon: <Layers className="w-3 h-3" /> },
+        { id: 'none' as Focus, label: t('focus.none'), icon: <Eye className="w-3 h-3" /> },
+        { id: 'shadow' as Focus, label: t('focus.shadow'), icon: <Moon className="w-3 h-3" /> },
+        { id: 'highlight' as Focus, label: t('focus.highlight'), icon: <Sun className="w-3 h-3" /> },
+        { id: 'squint' as Focus, label: t('focus.squint'), icon: <Layers className="w-3 h-3" /> },
       ]).map(f => (
         <button key={f.id} onClick={() => updateFocus(f.id)}
           className={`flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium transition-colors ${
@@ -823,9 +850,36 @@ export default function ValueTab() {
   // for anyone who does want to reproduce one.
   const bandLabel = (v: number, bands: string[]) =>
     bands[Math.min(bands.length - 1, Math.floor((v / 100) * bands.length))];
-  const inkLabel = bandLabel(trace.ink, ['Minimal', 'Light', 'Medium', 'Heavy', 'Solid']);
-  const detailLabel = bandLabel(trace.detail, ['Everything', 'Fine', 'Clean', 'Simple', 'Bold']);
-  const separationLabel = bandLabel(trace.separation, ['Off', 'Gentle', 'Medium', 'Strong', 'Extreme']);
+  const inkLabel = bandLabel(trace.ink, [
+    t('sketch.ink.minimal'), t('sketch.ink.light'), t('sketch.ink.medium'), t('sketch.ink.heavy'), t('sketch.ink.solid'),
+  ]);
+  const detailLabel = bandLabel(trace.detail, [
+    t('sketch.detail.everything'), t('sketch.detail.fine'), t('sketch.detail.clean'), t('sketch.detail.simple'), t('sketch.detail.bold'),
+  ]);
+  const separationLabel = bandLabel(trace.separation, [
+    t('sketch.separation.off'), t('sketch.separation.gentle'), t('sketch.separation.medium'),
+    t('sketch.separation.strong'), t('sketch.separation.extreme'),
+  ]);
+  // The presets come from src/lib/sketch (English labels); named here by id.
+  const presetLabels: Record<string, string> = {
+    balanced: t('presets.balanced'),
+    graphic: t('presets.graphic'),
+    rich: t('presets.rich'),
+    fine: t('presets.fine'),
+  };
+
+  // Names shown on screen follow the studio's language; the exported palette
+  // and study sheet keep the English ones (brightnessLabel, dominantLabel).
+  const brightnessName = (l: number) => t(`brightness.${brightnessLabel(l)}`);
+  const warmthName = (warmth: 'warm' | 'cool' | 'neutral') => t(`warmth.${warmth}`);
+  const colorName = (d: DominantSwatch) => {
+    const name = dominantName(d.family, d.valueBand, d.hsl);
+    if ('named' in name) return t(`colors.${name.named}`);
+    let label = t(`colors.hue.${name.hue}`);
+    if (name.muted) label = t('colors.muted', { color: label });
+    if (name.tone) label = t(`colors.${name.tone}`, { color: label });
+    return label;
+  };
 
   // A slider that keeps the preview moving with the finger: `onChange` fires on
   // every pointermove and `onCommit` when it lifts, which is when the
@@ -861,20 +915,20 @@ export default function ValueTab() {
         // require opening a panel.
         <div className="flex flex-col sm:flex-row sm:gap-6">
           <div className="flex-1 min-w-0">
-            {traceSlider('ink', 'Ink', inkLabel, 'How much of the image becomes black')}
+            {traceSlider('ink', t('sketch.ink.label'), inkLabel, t('sketch.ink.hint'))}
           </div>
           <div className="flex-1 min-w-0">
-            {traceSlider('detail', 'Detail', detailLabel, 'Removes tiny shapes, keeps the main forms clean')}
+            {traceSlider('detail', t('sketch.detail.label'), detailLabel, t('sketch.detail.hint'))}
           </div>
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-6">
           <div className="flex-1 min-w-0">
-            <Slider label="Contrast" value={contrast} min={50} max={200} readout={`${contrast}%`}
+            <Slider label={t('controls.contrast')} value={contrast} min={50} max={200} readout={`${contrast}%`}
               onChange={(v) => setValueSettings({ contrast: v })} />
           </div>
           <div className="flex-1 min-w-0">
-            <Slider label="Brightness" value={brightness} min={50} max={200} readout={`${brightness}%`}
+            <Slider label={t('controls.brightness')} value={brightness} min={50} max={200} readout={`${brightness}%`}
               onChange={(v) => setValueSettings({ brightness: v })} />
           </div>
         </div>
@@ -895,14 +949,13 @@ export default function ValueTab() {
       <div>
         {isColorFamily && (
           <>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Color rendering</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('controls.colorRendering')}</p>
             {PainterToggle}
           </>
         )}
         {isSketch && (
           <p className="text-[10px] text-muted-foreground">
-            A deterministic black &amp; white vector trace. Ink and Detail are below
-            the image.
+            {t('sketch.about')}
           </p>
         )}
       </div>
@@ -910,17 +963,17 @@ export default function ValueTab() {
         <>
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Presets</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{t('presets.title')}</p>
               <button onClick={() => setTrace(DEFAULT_SKETCH_TRACE)}
                 className="flex items-center gap-1 text-[10px] text-primary hover:underline min-h-[44px] px-1">
-                <RotateCcw className="w-3 h-3" />Reset
+                <RotateCcw className="w-3 h-3" />{t('presets.reset')}
               </button>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {TRACE_PRESETS.map((preset) => (
                 <button key={preset.id} onClick={() => setTrace(preset.settings)}
                   className="py-2 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-                  {preset.label}
+                  {presetLabels[preset.id] ?? preset.label}
                 </button>
               ))}
             </div>
@@ -930,37 +983,39 @@ export default function ValueTab() {
             <button onClick={() => setShowMoreTrace((v) => !v)}
               aria-expanded={showMoreTrace}
               className="w-full flex items-center justify-between py-2 min-h-[44px] text-[11px] font-medium text-foreground">
-              <span>More controls</span>
+              <span>{t('sketch.more')}</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${showMoreTrace ? 'rotate-180' : ''}`} />
             </button>
             {showMoreTrace && (
               <div className="space-y-2 pt-1">
-                {traceSlider('separation', 'Separation', separationLabel,
-                  'Makes light and dark areas easier to tell apart')}
+                {traceSlider('separation', t('sketch.separation.label'), separationLabel,
+                  t('sketch.separation.hint'))}
                 <button onClick={() => setTrace({ invert: !trace.invert })}
                   className={`w-full flex items-center justify-center gap-1.5 min-h-[44px] rounded-md text-[11px] font-medium transition-colors ${
                     trace.invert ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                   }`}>
                   <Contrast className="w-3.5 h-3.5" />
-                  Invert black / white {trace.invert ? 'on' : 'off'}
+                  {trace.invert ? t('sketch.invertOn') : t('sketch.invertOff')}
                 </button>
                 <button onClick={exportSketchSvg}
                   className="w-full flex items-center justify-center gap-1.5 min-h-[44px] rounded-md text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-                  <Download className="w-3.5 h-3.5" />Save as SVG (vector)
+                  <Download className="w-3.5 h-3.5" />{t('save.svg')}
                 </button>
 
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold pt-2">Advanced</p>
-                {traceSlider('smoothing', 'Smoothing', String(trace.smoothing),
-                  'How much fine texture reaches the threshold')}
-                {traceSlider('local', 'Local threshold', trace.local === 0 ? 'Global' : `${trace.local}%`,
-                  '0 = one level for the whole frame. Raise it when the lighting is uneven.')}
-                {traceSlider('simplify', 'Simplify', String(trace.simplify),
-                  'How tightly the paths follow the pixels')}
-                {traceSlider('corners', 'Corners', String(trace.corners),
-                  'Sharp corners to fully rounded curves')}
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold pt-2">{t('sketch.advanced')}</p>
+                {traceSlider('smoothing', t('sketch.smoothing.label'), String(trace.smoothing),
+                  t('sketch.smoothing.hint'))}
+                {traceSlider('local', t('sketch.local.label'), trace.local === 0 ? t('sketch.local.global') : `${trace.local}%`,
+                  t('sketch.local.hint'))}
+                {traceSlider('simplify', t('sketch.simplify.label'), String(trace.simplify),
+                  t('sketch.simplify.hint'))}
+                {traceSlider('corners', t('sketch.corners.label'), String(trace.corners),
+                  t('sketch.corners.hint'))}
                 <p className="text-[9px] text-muted-foreground">
-                  Ink resolves to threshold {traceStats.threshold}
-                  {trace.local > 0 ? ' (of the local highlight)' : ''} · smallest shape {traceStats.minShapePx} px
+                  {t(trace.local > 0 ? 'sketch.statsLocal' : 'sketch.stats', {
+                    threshold: String(traceStats.threshold),
+                    minShape: String(traceStats.minShapePx),
+                  })}
                 </p>
               </div>
             )}
@@ -968,53 +1023,53 @@ export default function ValueTab() {
         </>
       ) : (
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Value groups</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('levels.title')}</p>
           {LevelButtons}
         </div>
       )}
       {!isSketch && (
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Focus</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('focus.title')}</p>
           {FocusButtons}
         </div>
       )}
       <div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Compare</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('compare.title')}</p>
         <div className="flex gap-1.5">
           <button onClick={() => { setShowCompare(true); setCompareMode('slider'); }}
             className={`flex-1 py-1.5 rounded text-[11px] font-medium transition-colors ${
               showCompare && compareMode === 'slider' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
-            }`}>Slider</button>
+            }`}>{t('compare.slider')}</button>
           <button onClick={() => { setShowCompare(true); setCompareMode('side'); }}
             className={`flex-1 py-1.5 rounded text-[11px] font-medium transition-colors ${
               showCompare && compareMode === 'side' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
-            }`}>Side</button>
+            }`}>{t('compare.side')}</button>
           <button onClick={() => setShowCompare(false)}
             className={`flex-1 py-1.5 rounded text-[11px] font-medium transition-colors ${
               !showCompare ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
-            }`}>Off</button>
+            }`}>{t('compare.off')}</button>
         </div>
       </div>
       <div data-onboarding="value-save">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Save</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('save.title')}</p>
         <div className="grid grid-cols-1 gap-1.5">
           <button onClick={exportProcessed}
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-            <Download className="w-3 h-3" />Save processed image
+            <Download className="w-3 h-3" />{t('save.processed')}
           </button>
           {isSketch && (
             <button onClick={exportSketchSvg}
               className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-              <Download className="w-3 h-3" />Save as SVG (vector)
+              <Download className="w-3 h-3" />{t('save.svg')}
             </button>
           )}
           <button onClick={exportPalette}
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-            <Download className="w-3 h-3" />Save palette
+            <Download className="w-3 h-3" />{t('save.palette')}
           </button>
           <button onClick={exportStudySheet}
             className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-            <Download className="w-3 h-3" />Save study sheet
+            <Download className="w-3 h-3" />{t('save.sheet')}
           </button>
         </div>
       </div>
@@ -1024,15 +1079,17 @@ export default function ValueTab() {
     </div>
   );
 
+  // Both strips are value scales, dark → light from left to right in every
+  // language, so they (and their tooltips) stay left to right.
   const DistributionStrip = (
-    <div className="flex w-full h-10 rounded-md overflow-hidden border border-border bg-secondary/40">
+    <div dir="ltr" className="flex w-full h-10 rounded-md overflow-hidden border border-border bg-secondary/40">
       {groups.map(g => (
         <button
           key={g.index}
           onClick={() => setIsolatedIdx(isolatedIdx === g.index ? null : g.index)}
           style={{ flexBasis: `${Math.max(g.pct, 1.5)}%`, backgroundColor: g.hex }}
           className={`relative group transition-all ${isolatedIdx === g.index ? 'ring-2 ring-primary z-10' : ''}`}
-          title={`${brightnessLabel(g.hsl.l)} • ${g.pct.toFixed(1)}% • ${g.hex}`}
+          title={t('palette.groupTitle', { brightness: brightnessName(g.hsl.l), pct: g.pct.toFixed(1), hex: g.hex })}
         >
           <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold opacity-0 group-hover:opacity-100"
             style={{ color: g.hsl.l > 50 ? '#000' : '#fff' }}>
@@ -1048,19 +1105,21 @@ export default function ValueTab() {
       {groups.map(g => (
         <button key={g.index}
           onClick={() => setIsolatedIdx(isolatedIdx === g.index ? null : g.index)}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-secondary/40 ${
+          className={`w-full flex items-center gap-2 px-2 py-1.5 text-start transition-colors hover:bg-secondary/40 ${
             isolatedIdx === g.index ? 'bg-primary/10' : ''
           }`}>
           <span className="w-7 h-7 rounded shrink-0 border border-border/70" style={{ backgroundColor: g.hex }} />
-          <span className="text-[10px] font-mono text-foreground w-16 shrink-0">{g.hex.toUpperCase()}</span>
-          <span className="text-[10px] text-muted-foreground w-20 shrink-0 capitalize">V{g.index + 1} · {brightnessLabel(g.hsl.l)}</span>
+          {/* Colour codes and the (English) paint names stay left to right;
+              on right-to-left pages they still sit next to the swatch. */}
+          <span dir="ltr" className="text-[10px] font-mono text-foreground w-16 shrink-0 rtl:text-right">{g.hex.toUpperCase()}</span>
+          <span className="text-[10px] text-muted-foreground w-20 shrink-0 capitalize">V{g.index + 1} · {brightnessName(g.hsl.l)}</span>
           <span className="text-[10px] text-muted-foreground w-12 shrink-0 tabular-nums">{g.pct.toFixed(1)}%</span>
           <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${
             g.warmth === 'warm' ? 'bg-orange-500/20 text-orange-300'
             : g.warmth === 'cool' ? 'bg-blue-500/20 text-blue-300'
             : 'bg-secondary text-muted-foreground'
-          }`}>{g.warmth}</span>
-          <span className="text-[10px] text-muted-foreground/80 italic truncate flex-1 hidden sm:block">{g.paintHint}</span>
+          }`}>{warmthName(g.warmth)}</span>
+          <span dir="ltr" className="text-[10px] text-muted-foreground/80 italic truncate flex-1 hidden sm:block rtl:text-right">{g.paintHint}</span>
         </button>
       ))}
     </div>
@@ -1070,21 +1129,21 @@ export default function ValueTab() {
     <div className="divide-y divide-border/60 rounded-md border border-border bg-card/40">
       {dominant.map(d => (
         <div key={d.key}
-          className="w-full flex items-center gap-2 px-2 py-1.5 text-left">
+          className="w-full flex items-center gap-2 px-2 py-1.5 text-start">
           <span className="w-7 h-7 rounded shrink-0 border border-border/70" style={{ backgroundColor: d.hex }} />
-          <span className="text-[10px] font-mono text-foreground w-16 shrink-0">{d.hex.toUpperCase()}</span>
-          <span className="text-[10px] text-foreground w-24 shrink-0 capitalize truncate">{d.label}</span>
+          <span dir="ltr" className="text-[10px] font-mono text-foreground w-16 shrink-0 rtl:text-right">{d.hex.toUpperCase()}</span>
+          <span className="text-[10px] text-foreground w-24 shrink-0 capitalize truncate">{colorName(d)}</span>
           <span className="text-[10px] text-muted-foreground w-12 shrink-0 tabular-nums">{d.pct.toFixed(1)}%</span>
           <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${
             d.warmth === 'warm' ? 'bg-orange-500/20 text-orange-300'
             : d.warmth === 'cool' ? 'bg-blue-500/20 text-blue-300'
             : 'bg-secondary text-muted-foreground'
-          }`}>{d.warmth}</span>
-          <span className="text-[10px] text-muted-foreground/80 italic truncate flex-1 hidden sm:block">{d.paintHint}</span>
+          }`}>{warmthName(d.warmth)}</span>
+          <span dir="ltr" className="text-[10px] text-muted-foreground/80 italic truncate flex-1 hidden sm:block rtl:text-right">{d.paintHint}</span>
         </div>
       ))}
       {dominant.length === 0 && (
-        <div className="px-3 py-4 text-[11px] text-muted-foreground text-center">Analyzing dominant colors…</div>
+        <div className="px-3 py-4 text-[11px] text-muted-foreground text-center">{t('palette.analyzing')}</div>
       )}
     </div>
   );
@@ -1096,10 +1155,10 @@ export default function ValueTab() {
           <span className="w-9 h-9 rounded shrink-0 border border-border/70" style={{ backgroundColor: d.hex }} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-medium capitalize">{d.label}</span>
+              <span className="text-[11px] font-medium capitalize">{colorName(d)}</span>
               <span className="text-[10px] text-muted-foreground tabular-nums">{d.pct.toFixed(1)}%</span>
             </div>
-            <p className="text-[10px] text-muted-foreground italic truncate">{d.paintHint}</p>
+            <p dir="ltr" className="text-[10px] text-muted-foreground italic truncate rtl:text-right">{d.paintHint}</p>
           </div>
         </div>
       ))}
@@ -1109,14 +1168,14 @@ export default function ValueTab() {
   const PaletteTabs = (
     <div className="inline-flex rounded-md border border-border bg-secondary/30 p-0.5 text-[10px] font-medium">
       {([
-        { id: 'dominant' as PaletteView, label: 'Dominant' },
-        { id: 'value' as PaletteView, label: 'Value' },
-        { id: 'mix' as PaletteView, label: 'Paint Mix' },
-      ]).map(t => (
-        <button key={t.id} onClick={() => setPaletteView(t.id)}
+        { id: 'dominant' as PaletteView, label: t('palette.dominant') },
+        { id: 'value' as PaletteView, label: t('palette.value') },
+        { id: 'mix' as PaletteView, label: t('palette.mix') },
+      ]).map(tab => (
+        <button key={tab.id} onClick={() => setPaletteView(tab.id)}
           className={`px-2.5 py-1 rounded transition-colors ${
-            paletteView === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-          }`}>{t.label}</button>
+            paletteView === tab.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+          }`}>{tab.label}</button>
       ))}
     </div>
   );
@@ -1125,11 +1184,11 @@ export default function ValueTab() {
     : paletteView === 'mix' ? MixRows : DominantRows;
 
   const DominantStrip = (
-    <div className="flex w-full h-10 rounded-md overflow-hidden border border-border bg-secondary/40">
+    <div dir="ltr" className="flex w-full h-10 rounded-md overflow-hidden border border-border bg-secondary/40">
       {dominant.map(d => (
         <div key={d.key}
           style={{ flexBasis: `${Math.max(d.pct, 2)}%`, backgroundColor: d.hex }}
-          title={`${d.label} • ${d.pct.toFixed(1)}% • ${d.hex}`}
+          title={t('palette.colorTitle', { name: colorName(d), pct: d.pct.toFixed(1), hex: d.hex })}
         />
       ))}
     </div>
@@ -1149,30 +1208,32 @@ export default function ValueTab() {
   const ReplaceImageButton = (
     <div className="flex items-center justify-center min-h-[44px] min-w-[44px] rounded-full
                     bg-card/90 backdrop-blur-sm border border-border shadow-lg"
-      title="Replace image">
+      title={t('image.replace')}>
       <ImageUploader onImageLoad={replaceImage} compact />
     </div>
   );
 
   const maxImgH = fullscreen ? 'max-h-[88vh]' : 'max-h-full';
+  // The before/after views stay left to right in every language: original on
+  // the left, and the slider's divider is positioned from the left edge.
   const ProcessedImage = (
     <div className={`relative w-full h-full flex items-center justify-center ${fullscreen ? 'p-1' : 'p-3'}`}>
       {showCompare && processedUrl && compareMode === 'side' ? (
-        <div className="flex gap-3 w-full h-full items-center justify-center">
+        <div dir="ltr" className="flex gap-3 w-full h-full items-center justify-center">
           <div className="flex-1 h-full flex flex-col items-center justify-center min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Original</p>
-            <img src={activeImage} alt="Original" className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t('image.original')}</p>
+            <img src={activeImage} alt={t('image.original')} className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
           </div>
           <div className="flex-1 h-full flex flex-col items-center justify-center min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Processed</p>
-            <img src={processedUrl} alt="Processed" className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t('image.processed')}</p>
+            <img src={processedUrl} alt={t('image.processed')} className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
           </div>
         </div>
       ) : showCompare && processedUrl && compareMode === 'slider' ? (
-        <div className="relative inline-block max-w-full max-h-full select-none">
-          <img src={activeImage} alt="Original" className={`block max-w-full ${maxImgH} object-contain rounded`} />
+        <div dir="ltr" className="relative inline-block max-w-full max-h-full select-none">
+          <img src={activeImage} alt={t('image.original')} className={`block max-w-full ${maxImgH} object-contain rounded`} />
           <div className="absolute inset-0 overflow-hidden rounded" style={{ clipPath: `inset(0 0 0 ${compareSlider}%)` }}>
-            <img src={processedUrl} alt="Processed" className={`block max-w-full ${maxImgH} object-contain rounded`} />
+            <img src={processedUrl} alt={t('image.processed')} className={`block max-w-full ${maxImgH} object-contain rounded`} />
           </div>
           <div className="absolute top-0 bottom-0 w-px bg-primary/80 pointer-events-none" style={{ left: `${compareSlider}%` }} />
           <input type="range" min={0} max={100} value={compareSlider}
@@ -1180,14 +1241,14 @@ export default function ValueTab() {
             className="absolute inset-x-4 bottom-3 accent-primary" />
         </div>
       ) : (
-        processedUrl && <img src={processedUrl} alt="Value study"
+        processedUrl && <img src={processedUrl} alt={t('image.alt')}
           className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
       )}
-      <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
+      <div className="absolute top-2 end-2 z-20 flex items-center gap-2">
         {ReplaceImageButton}
         <button onClick={() => setFullscreen(v => !v)}
           className="btn-tool bg-card/90 backdrop-blur-sm border border-border min-h-[44px] min-w-[44px]"
-          title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+          title={fullscreen ? t('image.exitFullscreen') : t('image.fullscreen')}>
           {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>
       </div>
@@ -1208,10 +1269,10 @@ export default function ValueTab() {
         </div>
         <div className="relative flex-1 min-h-0 overflow-hidden flex items-center justify-center">
           {mobilePane !== 'palette' && (
-            <div className="absolute top-2 right-2 z-20">{ReplaceImageButton}</div>
+            <div className="absolute top-2 end-2 z-20">{ReplaceImageButton}</div>
           )}
-          {mobilePane === 'original' && <img src={activeImage} alt="Original" className="max-h-full max-w-full object-contain" />}
-          {mobilePane === 'processed' && processedUrl && <img src={processedUrl} alt="Processed" className="max-h-full max-w-full object-contain" />}
+          {mobilePane === 'original' && <img src={activeImage} alt={t('image.original')} className="max-h-full max-w-full object-contain" />}
+          {mobilePane === 'processed' && processedUrl && <img src={processedUrl} alt={t('image.processed')} className="max-h-full max-w-full object-contain" />}
           {mobilePane === 'palette' && (
             <div className="w-full h-full overflow-y-auto p-3 space-y-3">
               <div className="flex items-center justify-between">
@@ -1220,7 +1281,7 @@ export default function ValueTab() {
                   dominantWarmth === 'warm' ? 'bg-orange-500/20 text-orange-300'
                   : dominantWarmth === 'cool' ? 'bg-blue-500/20 text-blue-300'
                   : 'bg-secondary text-muted-foreground'
-                }`}>{dominantWarmth}</span>
+                }`}>{warmthName(dominantWarmth)}</span>
               </div>
               {paletteView === 'value' ? DistributionStrip : DominantStrip}
               {ActivePaletteContent}
@@ -1240,28 +1301,28 @@ export default function ValueTab() {
 
         {/* View switch, settings and the one primary action. */}
         <div className="flex shrink-0 items-center gap-2 border-t border-border toolbar-surface px-2 py-2">
-          <div className="flex min-w-0 flex-1 rounded-lg bg-secondary/60 p-0.5" role="group" aria-label="Show">
+          <div className="flex min-w-0 flex-1 rounded-lg bg-secondary/60 p-0.5" role="group" aria-label={t('view.group')}>
             {(isSketch ? (['original', 'processed'] as const) : (['original', 'processed', 'palette'] as const)).map(v => (
               <button key={v} onClick={() => setMobileView(v)} aria-pressed={mobilePane === v}
                 className={`min-h-[40px] min-w-0 flex-1 rounded-md px-1 text-xs font-medium transition-colors ${
                   mobilePane === v ? 'bg-card text-foreground shadow' : 'text-muted-foreground'
-                }`}>{v === 'processed' ? 'Study' : v === 'original' ? 'Original' : 'Palette'}</button>
+                }`}>{v === 'processed' ? t('view.study') : v === 'original' ? t('view.original') : t('view.palette')}</button>
             ))}
           </div>
           <button onClick={() => setShowMobileControls(true)}
             className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-secondary px-3 text-xs font-medium text-foreground">
-            <SlidersHorizontal className="h-4 w-4" /> Adjust
+            <SlidersHorizontal className="h-4 w-4" /> {t('controls.adjust')}
           </button>
           <button onClick={exportProcessed} data-onboarding="value-save"
             className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground">
-            <Download className="h-4 w-4" /> Save
+            <Download className="h-4 w-4" /> {t('save.button')}
           </button>
         </div>
 
         {showMobileControls && (
           <div className="absolute inset-x-0 bottom-0 z-30 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-3 sticky top-0 bg-card">
-              <p className="text-sm font-semibold">Adjust study</p>
+              <p className="text-sm font-semibold">{t('controls.adjustTitle')}</p>
               <button onClick={() => setShowMobileControls(false)}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground">
                 <X className="w-4 h-4" />
@@ -1281,15 +1342,15 @@ export default function ValueTab() {
     <div className="flex-1 flex flex-col min-h-0">
     <ToolHeader tool="value" task={studyTask} actions={
       <button onClick={exportProcessed}
-        className="mr-1 flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
-        <Download className="h-4 w-4" /> Save study
+        className="me-1 flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+        <Download className="h-4 w-4" /> {t('save.study')}
       </button>
     } />
     <div className="flex-1 flex min-h-0">
-      {/* Left controls: the three studies first, settings below. */}
-      <aside className="w-64 panel-surface border-r border-border p-4 overflow-y-auto shrink-0 space-y-4">
+      {/* Side controls (left, or right in right-to-left languages): the three studies first, settings below. */}
+      <aside className="w-64 panel-surface border-e border-border p-4 overflow-y-auto shrink-0 space-y-4">
         <div>
-          <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Choose a study</h2>
+          <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">{t('modes.choose')}</h2>
           <StudyModeCards layout="column" />
         </div>
         {ControlsBlock}
@@ -1316,11 +1377,11 @@ export default function ValueTab() {
                 dominantWarmth === 'warm' ? 'bg-orange-500/20 text-orange-300'
                 : dominantWarmth === 'cool' ? 'bg-blue-500/20 text-blue-300'
                 : 'bg-secondary text-muted-foreground'
-              }`}>{dominantWarmth}</span>
+              }`}>{warmthName(dominantWarmth)}</span>
             </div>
             {isolatedIdx !== null && (
               <button onClick={() => setIsolatedIdx(null)}
-                className="text-[10px] text-primary hover:underline">Clear isolation</button>
+                className="text-[10px] text-primary hover:underline">{t('palette.clearIsolation')}</button>
             )}
           </div>
           <div className="shrink-0">{paletteView === 'value' ? DistributionStrip : DominantStrip}</div>
