@@ -35,8 +35,9 @@ export function AdminShell({ active, children }: { active: (typeof TABS)[number]
       >
         <div className="mx-auto max-w-6xl">
           <header className="flex items-center justify-between gap-4">
-            <Link href="/app" aria-label="Back to the studio" className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Link href="/app" className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <BrandMark compact />
+              <span className="sr-only">: back to the studio</span>
             </Link>
             <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Admin</span>
           </header>

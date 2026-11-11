@@ -1,3 +1,4 @@
+import type { Viewport } from 'next';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import StudioClient from '@/components/shell/StudioClient';
@@ -14,6 +15,18 @@ import { requireUser } from '@/server/session';
 
 // Depends on who is signed in: always rendered per request, never cached.
 export const dynamic = 'force-dynamic';
+
+// The studio keeps the page at its own scale: the canvas tools handle pinch
+// and pan themselves, and iOS would otherwise zoom into small inputs (a scale
+// length) and stay zoomed. A known accessibility limitation (it blocks page
+// zoom on Android), to lift once the tools' inputs are 16 px on phones
+// (docs/accessibility/README.md).
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+};
 
 // Every /app route shares this layout, so the studio (and the tools it keeps
 // alive) stays mounted while the URL moves between Home, the tools and the

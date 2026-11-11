@@ -108,7 +108,7 @@ test.describe('the studio in Hebrew', () => {
     await expect(page.getByRole('heading', { name: 'על מה עובדים היום?' })).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'כלים' });
     for (const label of ['בית', 'מדידה', 'לימוד', 'רשת', 'השוואה', 'צבע']) await expect(nav.getByRole('link', { name: label, exact: true })).toBeVisible();
-    await page.getByRole('link', { name: /^יצירת רשת:/ }).click();
+    await page.getByRole('link', { name: /^יצירת רשת/ }).click();
     await expect(page).toHaveURL(/\/app\/grid$/);
     await expect(page.getByRole('heading', { name: 'Create a Grid', level: 1 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Create a Grid', level: 1 }).locator('xpath=ancestor::*[@dir][1]')).toHaveAttribute('dir', 'ltr');

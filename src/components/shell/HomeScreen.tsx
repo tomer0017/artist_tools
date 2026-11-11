@@ -99,15 +99,16 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
   const title = tt('title');
   const description = tt('description');
   return (
+    // Named by its own text (title, description, what it includes), so what a
+    // screen reader says is what is on the card.
     <Link
       href={pathForView(id)}
-      aria-label={`${title}: ${description}`}
       className="group flex h-full items-stretch gap-3 rounded-2xl border border-border bg-card p-2 pe-2.5 shadow-sm transition-colors hover:border-primary/50 active:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:gap-5 md:p-2.5 md:pe-4 lg:flex-col lg:gap-0 lg:p-0"
     >
       <div className={`relative aspect-[4/3] w-[38%] max-w-[260px] shrink-0 self-center overflow-hidden rounded-xl bg-secondary ${lead ? 'lg:aspect-[21/9]' : 'lg:aspect-[16/9]'} lg:w-full lg:max-w-none lg:rounded-b-none lg:rounded-t-2xl`}>
         <img
           src={art.src}
-          alt={tt('alt')}
+          alt=""
           width={art.width}
           height={art.height}
           loading={eager ? 'eager' : 'lazy'}

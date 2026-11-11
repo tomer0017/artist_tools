@@ -672,6 +672,7 @@ export default function ColorTab() {
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
+                      aria-label="Selected color (HEX)"
                       value={hexInput}
                       onChange={(e) => {
                         setHexInput(e.target.value);

@@ -68,14 +68,14 @@ test.describe('desktop', () => {
     await page.goto('/app');
     await expect(page.getByRole('heading', { name: /Your All-in-One/ })).toBeVisible();
     for (const t of TOOLS) {
-      const card = page.getByRole('link', { name: new RegExp(`^${t.card}:`) });
+      const card = page.getByRole('link', { name: new RegExp(`^${t.card}`) });
       await expect(card).toBeVisible();
       // Each card shows an illustration, not just an icon.
-      await expect(card.getByRole('img').first()).toBeVisible();
+      await expect(card.locator('img').first()).toBeVisible(); // decorative: the card's text names it
     }
     for (const t of TOOLS) {
       await page.goto('/app');
-      await page.getByRole('link', { name: new RegExp(`^${t.card}:`) }).click();
+      await page.getByRole('link', { name: new RegExp(`^${t.card}`) }).click();
       await expect(page).toHaveURL(new RegExp(`${t.path}$`));
       await expect(page.getByRole('heading', { name: t.card })).toBeVisible();
     }

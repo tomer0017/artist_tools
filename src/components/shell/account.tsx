@@ -199,11 +199,11 @@ export function AccountButton() {
   return (
     <Link
       href={pathForView('profile')}
-      aria-label={t('yourAccount')}
       data-account-ui
       className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background/60 ring-1 ring-border/70 transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <AccountAvatar account={state.account} size={32} />
+      <span className="sr-only">{t('yourAccount')}</span>
     </Link>
   );
 }

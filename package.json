@@ -71,6 +71,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@eslint/js": "^9.32.0",
     "@next/eslint-plugin-next": "^16.4.6",
     "@playwright/test": "^1.57.0",
@@ -98,6 +99,7 @@
   "overrides": {
     "icu-minify": "4.14.9",
     "@formatjs/icu-messageformat-parser": "3.5.18",
-    "@formatjs/icu-skeleton-parser": "2.1.11"
+    "@formatjs/icu-skeleton-parser": "2.1.11",
+    "axe-core": "4.14.0"
   }
 }

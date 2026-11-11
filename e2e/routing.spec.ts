@@ -8,7 +8,7 @@ test('the public landing page opens the studio', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Your All-in-One/ })).toBeVisible();
   await page.getByRole('link', { name: 'Open the studio' }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole('link', { name: /^Compare & Correct:/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^Compare & Correct/ })).toBeVisible();
 });
 
 test('links from the old hash URLs open the right tool', async ({ page }) => {
@@ -24,7 +24,7 @@ test('links from the old hash URLs open the right tool', async ({ page }) => {
 test('old hash links to an unknown tool land on Home', async ({ page }) => {
   await page.goto('/#/nope');
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole('link', { name: /^Measure & Plan:/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^Measure & Plan/ })).toBeVisible();
 });
 
 test('every tool has its own URL, and reloading keeps the tool open', async ({ page }) => {

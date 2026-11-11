@@ -17,7 +17,7 @@ export function EventList({ events, viewerId, showSubject }: { events: AdminAudi
             <p className="break-words text-xs text-muted-foreground">
               {showSubject && event.subject && (
                 <>
-                  <Link href={`/admin/users/${event.subject.id}`} className="text-primary underline-offset-2 hover:underline">
+                  <Link href={`/admin/users/${event.subject.id}`} className="text-primary underline underline-offset-2">
                     {event.subject.email ?? 'deleted account'}
                   </Link>
                   {' · '}

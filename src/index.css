@@ -20,7 +20,8 @@
     --secondary-foreground: 40 10% 78%;
 
     --muted: 240 4% 16%;
-    --muted-foreground: 240 5% 50%;
+    /* 60% (was 50%): at least 4.5:1 on every dark surface it sits on (WCAG AA, checked by e2e/accessibility.spec.ts). */
+    --muted-foreground: 240 5% 60%;
 
     --accent: 38 80% 45%;
     --accent-foreground: 240 6% 10%;
