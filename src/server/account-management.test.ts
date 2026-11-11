@@ -15,7 +15,7 @@ import {
   setMarketingConsent,
   updateProfile,
 } from './account-management';
-import { runMaintenance } from './maintenance';
+import { monthsBefore, runMaintenance } from './maintenance';
 
 // Self-service account management against a real database: every function
 // acts on the caller's own account only, is audited, and never hands out
@@ -270,5 +270,29 @@ describe('nightly maintenance', () => {
     for (const kept of [recent, verified, google]) expect(await users.countDocuments({ _id: kept })).toBe(1);
     expect(await collections(db).auditEvents.findOne({ userId: stale, type: 'account.deleted' })).toMatchObject({ actor: 'system', metadata: { reason: 'never_verified' } });
     expect((await runMaintenance(db)).unverifiedRemoved).toBe(0);
+  });
+
+  it('deletes analytics events after 13 months and audit events after 24, and nothing newer', async () => {
+    // Relative to now: the other tests' events (written just now) must survive.
+    const now = new Date();
+    const userId = new ObjectId();
+    const around = (cutoff: Date) => [new Date(cutoff.getTime() - 1000), new Date(cutoff.getTime() + 1000)];
+    const [analyticsOld, analyticsNew] = around(monthsBefore(now, 13));
+    const [auditOld, auditNew] = around(monthsBefore(now, 24));
+    await collections(db).analyticsEvents.insertMany(
+      [analyticsOld, analyticsNew].map((at) => ({ name: 'active_day' as const, userId, anonymousId: null, dedupeKey: null, campaign: null, at, props: {} })),
+    );
+    await collections(db).auditEvents.insertMany(
+      [auditOld, auditNew].map((at) => ({ type: 'user.login' as const, userId, actor: `user:${userId}`, at, metadata: {} })),
+    );
+
+    const report = await runMaintenance(db, now);
+    expect(report).toMatchObject({ analyticsPruned: 1, auditPruned: 1 });
+    expect((await collections(db).analyticsEvents.find({ userId }).toArray()).map((e) => e.at)).toEqual([analyticsNew]);
+    expect((await collections(db).auditEvents.find({ userId }).toArray()).map((e) => e.at)).toEqual([auditNew]);
+    // Calendar months, clamped to shorter months (not JavaScript's overflow into the next month).
+    expect(monthsBefore(new Date('2026-03-31T08:00:00Z'), 1).toISOString()).toBe('2026-02-28T08:00:00.000Z');
+    expect(monthsBefore(new Date('2028-03-31T08:00:00Z'), 13).toISOString()).toBe('2027-02-28T08:00:00.000Z');
+    expect(monthsBefore(new Date('2028-02-29T08:00:00Z'), 24).toISOString()).toBe('2026-02-28T08:00:00.000Z');
   });
 });

@@ -123,7 +123,10 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
     }
     case 'maintenance': {
       const r = await runMaintenance(db);
-      console.log(`Maintenance done: ${r.unverifiedRemoved} never-confirmed sign-ups removed, ${r.rateLimitsPruned} idle rate-limit rows pruned.`);
+      console.log(
+        `Maintenance done: ${r.unverifiedRemoved} never-confirmed sign-ups removed, ${r.rateLimitsPruned} idle rate-limit rows pruned, ` +
+          `${r.analyticsPruned} analytics events and ${r.auditPruned} audit events past their retention deleted.`,
+      );
       return;
     }
     default:
