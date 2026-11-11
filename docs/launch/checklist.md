@@ -53,7 +53,7 @@ sign-off. Each gate is marked:
 | Threat model | Done (draft) | `docs/security/threat-model.md` |
 | Incident response plan | Partial | `docs/security/incident-response.md`: contacts and notification rules to fill in |
 | Dependency audit | Partial | 22 → 8 findings; the 8 left need major upgrades and are assessed one by one in `docs/security/dependency-audit.md` (only zod runs in production, mitigated) |
-| CI: type-check, lint, tests and audit on every push | Done | `.github/workflows/ci.yml` |
+| CI: type-check, lint, tests and audit on every push | Done (green on 80bbc06) | `.github/workflows/ci.yml`. The e2e suite (150 tests, Chromium and iPhone WebKit) runs in Playwright's pinned image. The full log needs a GitHub sign-in; failed tests also appear as annotations on the run page. Deploys stay manual. |
 | OWASP ASVS L2 review with evidence | Open | |
 | External penetration test | **Owner** (budget) | Recommended before billing |
 
