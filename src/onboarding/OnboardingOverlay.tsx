@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, X } from 'lucide-react';
+import { useMessages, useTranslations } from 'use-intl';
 import { useOnboarding } from './onboardingContext';
 import { ONBOARDING } from './onboardingConfig';
 import { PreviewFrameCard } from './PreviewArt';
-import type { PreviewFrame, TourStep } from './onboardingTypes';
+import type { OnboardingConfig, OnboardingSpec, PreviewFrame, TourStep } from './onboardingTypes';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ function PreviewPanel({
   onSkip: () => void;
   reduced: boolean;
 }) {
+  const t = useTranslations('toolsCommon.tour');
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onSkip} aria-hidden="true" />
@@ -100,8 +102,8 @@ function PreviewPanel({
       >
         <button
           onClick={onSkip}
-          className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-secondary/80 text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Close"
+          className="absolute end-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-secondary/80 text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={t('close')}
         >
           <X className="h-4 w-4" />
         </button>
@@ -122,7 +124,7 @@ function PreviewPanel({
                   <PreviewFrameCard frame={frame} />
                 </div>
                 {i < frames.length - 1 && (
-                  <ChevronRight className="h-4 w-4 shrink-0 self-start text-muted-foreground/60" style={{ marginTop: '2.25rem' }} />
+                  <ChevronRight className="h-4 w-4 shrink-0 self-start text-muted-foreground/60 rtl:-scale-x-100" style={{ marginTop: '2.25rem' }} />
                 )}
               </div>
             ))}
@@ -131,13 +133,13 @@ function PreviewPanel({
 
         <div className="flex items-center justify-between gap-3 border-t border-border px-6 py-4">
           <button onClick={onSkip} className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            Skip
+            {t('skip')}
           </button>
           <button
             onClick={onStart}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-95"
           >
-            {hasTour ? 'Show me how' : 'Got it'}
+            {hasTour ? t('showMe') : t('gotIt')}
           </button>
         </div>
       </div>
@@ -229,12 +231,13 @@ function TourLayer({
     return { left, top };
   }, [hole, cardSize.w, cardSize.h, viewport.w, viewport.h]);
 
+  const t = useTranslations('toolsCommon.tour');
   const isLast = step >= steps.length - 1;
   const maskId = 'onboarding-spotlight-mask';
   const transition = reduced ? 'none' : 'all 220ms cubic-bezier(0.22, 1, 0.36, 1)';
 
   return (
-    <div className="fixed inset-0 z-[120]" role="dialog" aria-modal="true" aria-label="Guided tour">
+    <div className="fixed inset-0 z-[120]" role="dialog" aria-modal="true" aria-label={t('guidedTour')}>
       {/* Dimming with a soft cut-out around the active element. */}
       <svg width={viewport.w} height={viewport.h} className="absolute inset-0" aria-hidden="true">
         <defs>
@@ -275,9 +278,9 @@ function TourLayer({
       >
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
-            {step + 1} / {steps.length}
+            {t('stepOf', { step: step + 1, total: steps.length })}
           </span>
-          <button onClick={onClose} className="text-muted-foreground transition-colors hover:text-foreground" aria-label="End tour">
+          <button onClick={onClose} className="text-muted-foreground transition-colors hover:text-foreground" aria-label={t('endTour')}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -299,14 +302,14 @@ function TourLayer({
                 onClick={onPrev}
                 className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
-                Back
+                {t('back')}
               </button>
             )}
             <button
               onClick={onNext}
               className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-transform active:scale-95"
             >
-              {isLast ? 'Done' : 'Next'}
+              {isLast ? t('done') : t('next')}
             </button>
           </div>
         </div>
@@ -321,7 +324,9 @@ export default function OnboardingOverlay() {
   const { toolId, phase, step, isOpen, beginTour, next, prev, close } = useOnboarding();
   const reduced = useMemo(prefersReducedMotion, []);
 
-  const config = toolId ? ONBOARDING[toolId] : undefined;
+  const tours = useMessages().toolsCommon.tours as Record<string, TourText>;
+  const spec = toolId ? ONBOARDING[toolId] : undefined;
+  const config = useMemo(() => (spec ? localize(spec, tours) : undefined), [spec, tours]);
   const inTour = phase === 'tour';
 
   // Keyboard navigation: Esc closes; arrows / Enter drive the flow.
@@ -331,9 +336,9 @@ export default function OnboardingOverlay() {
       if (e.key === 'Escape') {
         e.preventDefault();
         close();
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === (rtl() ? 'ArrowRight' : 'ArrowLeft')) {
         if (inTour) prev();
-      } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+      } else if (e.key === (rtl() ? 'ArrowLeft' : 'ArrowRight') || e.key === 'Enter') {
         e.preventDefault();
         if (inTour) next();
         else beginTour();
@@ -365,12 +370,29 @@ export default function OnboardingOverlay() {
       <TourLayer steps={config.steps} step={step} onNext={next} onPrev={prev} onClose={close} reduced={reduced} />
     );
 
-  // Rendered outside the studio's tree: keep the tours English and left to
-  // right, like the tools they explain, whatever the page language.
-  return createPortal(
-    <div lang="en" dir="ltr" style={{ display: 'contents' }}>
-      {node}
-    </div>,
-    document.body,
-  );
+  return createPortal(node, document.body);
 }
+
+/** A tour's words, as in the messages (toolsCommon.tours.<id>). */
+interface TourText {
+  title: string;
+  tagline: string;
+  preview: Record<string, string>;
+  steps: Record<string, { title: string; body: string }>;
+}
+
+/** The declared tour with its words in the page language. */
+function localize(spec: OnboardingSpec, tours: Record<string, TourText>): OnboardingConfig | undefined {
+  const text = tours[spec.id];
+  if (!text) return undefined;
+  return {
+    id: spec.id,
+    title: text.title,
+    tagline: text.tagline,
+    preview: spec.preview.map((frame) => ({ ...frame, label: text.preview[frame.variant] })),
+    steps: spec.steps.map((step) => ({ target: step.target, ...text.steps[step.key] })),
+  };
+}
+
+/** Right-to-left pages: the arrow keys follow the reading direction. */
+const rtl = () => document.documentElement.dir === 'rtl';

@@ -1,6 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
+import { I18nProvider } from '@/i18n/client';
+import { en } from '@/i18n/messages/en';
 import { SaveMediaProvider, useSaveMedia } from './SaveMedia';
+
+/** Rendered on an English page, as the studio does. */
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <I18nProvider locale="en" messages={en}>
+        {children}
+      </I18nProvider>
+    ),
+  });
 
 function Harness({ filename, mime }: { filename: string; mime?: string }) {
   const { save } = useSaveMedia();

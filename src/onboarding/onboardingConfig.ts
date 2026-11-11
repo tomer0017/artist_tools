@@ -1,8 +1,9 @@
-import type { OnboardingConfig, ToolId } from './onboardingTypes';
+import type { OnboardingSpec, ToolId } from './onboardingTypes';
 
 // ─── Tool onboarding registry ─────────────────────────────────────────────────
 // The single source of truth for every tour. Adding onboarding to a future tool
-// means appending one entry here — the preview + spotlight engine is shared and
+// means appending one entry here, and its words to the messages
+// (toolsCommon.tours.<id>) — the preview + spotlight engine is shared and
 // needs no new code. Copy is deliberately short (Apple-onboarding, not docs):
 // every step answers one thing in at most two lines.
 
@@ -13,7 +14,7 @@ import type { OnboardingConfig, ToolId } from './onboardingTypes';
 // restore the previous show-once-per-tool behaviour.
 export const AUTO_START_TUTORIALS = false;
 
-export const ONBOARDING: Partial<Record<ToolId, OnboardingConfig>> = {
+export const ONBOARDING: Partial<Record<ToolId, OnboardingSpec>> = {
   // NOTE: Measure intentionally has NO entry here. It uses a dedicated,
   // workflow-driven onboarding (a single illustrated intro + an on-canvas
   // helper + a success card) instead of the generic preview + spotlight tour —
@@ -21,100 +22,34 @@ export const ONBOARDING: Partial<Record<ToolId, OnboardingConfig>> = {
   // MeasureHelpButton, not the generic HelpButton.
   value: {
     id: 'value',
-    title: 'Value Study',
-    tagline: 'Turn any reference into color groups, value maps and a clean drawing guide.',
-    preview: [
-      { variant: 'original', label: 'Original' },
-      { variant: 'color', label: 'Color' },
-      { variant: 'values', label: 'Values' },
-      { variant: 'sketch', label: 'Sketch' },
-    ],
+    preview: [{ variant: 'original' }, { variant: 'color' }, { variant: 'values' }, { variant: 'sketch' }],
     steps: [
-      {
-        target: 'value-modes',
-        title: 'Pick a study',
-        body: 'Switch Color, Values or Sketch — each answers a different question.',
-      },
-      {
-        target: 'value-levels',
-        title: 'Choose value groups',
-        body: 'Fewer groups simplify the masses; more separate subtle transitions.',
-      },
-      {
-        target: 'value-inline',
-        title: 'Tune the read',
-        body: 'Adjust contrast and brightness — or sketch detail — right under the image.',
-      },
-      {
-        target: 'value-save',
-        title: 'Save your study',
-        body: 'Export the processed image, the palette or a full study sheet.',
-      },
+      { key: 'modes', target: 'value-modes' },
+      { key: 'levels', target: 'value-levels' },
+      { key: 'inline', target: 'value-inline' },
+      { key: 'save', target: 'value-save' },
     ],
   },
 
   color: {
     id: 'color',
-    title: 'Color Studio',
-    tagline: 'Find, mix and harmonize colors — from the wheel to ready-made paint recipes.',
-    preview: [
-      { variant: 'wheel', label: 'Pick' },
-      { variant: 'color', label: 'Harmonies' },
-      { variant: 'original', label: 'From a photo' },
-    ],
+    preview: [{ variant: 'wheel' }, { variant: 'color' }, { variant: 'original' }],
     steps: [
-      {
-        target: 'color-wheel',
-        title: 'Pick a color',
-        body: 'Drag the ring for hue and the square for shade.',
-      },
-      {
-        target: 'color-tabs',
-        title: 'Build harmonies',
-        body: 'Open Harmonies for complementary, analogous and triadic sets of your color.',
-      },
-      {
-        target: 'color-tabs',
-        title: 'Recipes & skin tones',
-        body: 'Mixing and Skin Tones give step-by-step paint recipes.',
-      },
-      {
-        target: 'color-pick',
-        title: 'Sample from a photo',
-        body: 'Load a reference and pick colors straight off the image.',
-      },
+      { key: 'wheel', target: 'color-wheel' },
+      { key: 'harmonies', target: 'color-tabs' },
+      { key: 'recipes', target: 'color-tabs' },
+      { key: 'pick', target: 'color-pick' },
     ],
   },
 
   grid: {
     id: 'grid',
-    title: 'Grid Guide',
-    tagline: 'Lay an accurate grid over your canvas and reference to transfer proportions by eye.',
-    preview: [
-      { variant: 'original', label: 'Reference' },
-      { variant: 'grid', label: 'Gridded' },
-    ],
+    preview: [{ variant: 'original' }, { variant: 'grid' }],
     steps: [
-      {
-        target: 'grid-size',
-        title: 'Set your canvas',
-        body: 'Enter your real canvas size or pick a ratio so the grid matches your surface.',
-      },
-      {
-        target: 'grid-divisions',
-        title: 'Choose divisions',
-        body: 'More rows and columns give finer, more precise cells.',
-      },
-      {
-        target: 'grid-canvas',
-        title: 'Fit your image',
-        body: 'Drag, pinch or use Fit / Fill to place the reference in the frame.',
-      },
-      {
-        target: 'grid-export',
-        title: 'Save the grid',
-        body: 'Export a printable grid to draw the same lines on your canvas.',
-      },
+      { key: 'size', target: 'grid-size' },
+      { key: 'divisions', target: 'grid-divisions' },
+      { key: 'canvas', target: 'grid-canvas' },
+      { key: 'export', target: 'grid-export' },
     ],
   },
 

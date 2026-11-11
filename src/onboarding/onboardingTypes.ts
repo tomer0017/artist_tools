@@ -38,8 +38,17 @@ export interface TourStep {
   body: string;
 }
 
-// Everything a tool needs to declare. The rendering engine is shared; a tool
-// only supplies this configuration.
+// What a tool declares: the structure of its tour. Its words live in the
+// messages (toolsCommon.tours.<id>: title, tagline, preview.<variant>,
+// steps.<key>), so the same tour reads in every language.
+export interface OnboardingSpec {
+  id: ToolId;
+  preview: { variant: PreviewVariant; src?: string }[];
+  steps: { key: string; target?: string }[];
+}
+
+// A tour with its words, ready to show. The rendering engine is shared; a
+// tool only supplies its OnboardingSpec and messages.
 export interface OnboardingConfig {
   id: ToolId;
   // Tool name, shown in the preview header.

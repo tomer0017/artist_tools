@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { Upload, Image as ImageIcon } from 'lucide-react';
+import { useTranslations } from 'use-intl';
 
 interface Props {
   onImageLoad: (dataUrl: string) => void;
@@ -16,9 +17,10 @@ interface Props {
 }
 
 export default function ImageUploader({ onImageLoad, compact, disabled, onUploadStart, onUploadError, label, icon, primary }: Props) {
+  const t = useTranslations('toolsCommon.upload');
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
-      onUploadError?.('Unsupported file type. Please choose an image.');
+      onUploadError?.(t('unsupported'));
       return;
     }
     // Signal loading immediately — before FileReader/decoding work begins.
@@ -30,14 +32,14 @@ export default function ImageUploader({ onImageLoad, compact, disabled, onUpload
       };
       reader.onerror = (e) => {
         console.error('[ImageUploader] FileReader failed to read image file:', e);
-        onUploadError?.('Failed to read image file.');
+        onUploadError?.(t('readFailed'));
       };
       reader.readAsDataURL(file);
     } catch (error) {
       console.error('[ImageUploader] Failed to start reading image file:', error);
-      onUploadError?.('Failed to read image file.');
+      onUploadError?.(t('readFailed'));
     }
-  }, [onImageLoad, onUploadStart, onUploadError]);
+  }, [onImageLoad, onUploadStart, onUploadError, t]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -99,7 +101,7 @@ export default function ImageUploader({ onImageLoad, compact, disabled, onUpload
       );
     }
     return (
-      <button onClick={handleClick} className={`btn-tool ${disabled ? 'opacity-40 pointer-events-none' : ''}`} title="Upload image" disabled={disabled}>
+      <button onClick={handleClick} className={`btn-tool ${disabled ? 'opacity-40 pointer-events-none' : ''}`} title={t('button')} disabled={disabled}>
         {icon ?? <Upload className="w-4 h-4" />}
       </button>
     );
@@ -115,7 +117,7 @@ export default function ImageUploader({ onImageLoad, compact, disabled, onUpload
         className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[15px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 active:scale-[0.99] disabled:opacity-50"
       >
         {icon ?? <Upload className="h-5 w-5" />}
-        {label ?? 'Upload image'}
+        {label ?? t('button')}
       </button>
     );
   }
@@ -131,8 +133,8 @@ export default function ImageUploader({ onImageLoad, compact, disabled, onUpload
         <ImageIcon className="w-7 h-7 text-muted-foreground" />
       </div>
       <div className="text-center">
-        <p className="text-sm font-medium text-foreground">Drop an image here or click to upload</p>
-        <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP supported</p>
+        <p className="text-sm font-medium text-foreground">{t('drop')}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t('formats')}</p>
       </div>
     </div>
   );

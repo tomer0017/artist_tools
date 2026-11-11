@@ -18,6 +18,7 @@ import {
   useState,
 } from 'react';
 import { Download, ExternalLink, Image as ImageIcon, Share2, X } from 'lucide-react';
+import { useLocale, useTranslations } from 'use-intl';
 import { ToolFrame } from '@/components/shell/ToolFrame';
 import {
   canShareFile,
@@ -97,12 +98,15 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
 }
 
 function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () => void }) {
+  const t = useTranslations('toolsCommon.save');
+  // The small Hebrew hints under the English instructions are for English pages; Hebrew pages say it all in Hebrew.
+  const english = useLocale() === 'en';
   const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
 
   const gif = isGif(media.mime);
-  const noun = gif ? 'GIF' : 'Image';
+  const kind = gif ? 'gif' : 'image';
   const file = useMemo(
     () => makeShareFile(media.blob, media.filename, media.mime),
     [media.blob, media.filename, media.mime],
@@ -120,10 +124,10 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
     } else if (result === 'unsupported') {
       setFullscreen(true);
     } else if (result === 'error') {
-      setError('Could not open the share sheet. Try “Open” and long-press to save.');
+      setError(t('shareFailed'));
     }
     // 'cancelled' → leave the sheet open so the user can retry.
-  }, [file, onClose]);
+  }, [file, onClose, t]);
 
   const runDownload = useCallback(
     (thenClose = false) => {
@@ -138,11 +142,11 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
     return (
       <div className="fixed inset-0 z-[60] flex flex-col bg-black">
         <div className="flex items-center justify-between px-4 py-3">
-          <p className="text-sm font-medium text-white/90">Save to Photos</p>
+          <p className="text-sm font-medium text-white/90">{t('toPhotos')}</p>
           <button
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white active:scale-95"
-            aria-label="Close preview"
+            aria-label={t('closePreview')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -150,18 +154,18 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
         <div className="flex flex-1 items-center justify-center overflow-auto px-3">
           <img
             src={media.url}
-            alt={`${noun} to save`}
+            alt={t('toSaveAlt', { kind })}
             className="max-h-full max-w-full select-auto object-contain"
             style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
           />
         </div>
         <div className="space-y-1 px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3 text-center">
-          <p className="text-sm text-white/90">
-            Press and hold the {noun.toLowerCase()}, then choose Save to Photos.
-          </p>
-          <p className="text-xs text-white/60" dir="rtl">
-            יש ללחוץ לחיצה ארוכה על התמונה ואז לבחור שמירה בתמונות.
-          </p>
+          <p className="text-sm text-white/90">{t('pressAndHold', { kind })}</p>
+          {english && (
+            <p className="text-xs text-white/60" dir="rtl">
+              יש ללחוץ לחיצה ארוכה על התמונה ואז לבחור שמירה בתמונות.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -170,14 +174,14 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
   // ── Preview + actions sheet ────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
-      <button className="absolute inset-0 bg-black/60" aria-label="Dismiss" onClick={onClose} />
+      <button className="absolute inset-0 bg-black/60" aria-label={t('dismiss')} onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-border bg-card p-4 shadow-2xl sm:rounded-2xl sm:border">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-foreground">{media.title ?? `Save ${noun}`}</p>
+          <p className="text-sm font-semibold text-foreground">{media.title ?? t('title', { kind })}</p>
           <button
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground active:scale-95"
-            aria-label="Close"
+            aria-label={t('close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -187,7 +191,7 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
         <div className="mb-3 flex max-h-[42vh] items-center justify-center overflow-hidden rounded-lg bg-black/30">
           <img
             src={media.url}
-            alt={`${noun} preview`}
+            alt={t('previewAlt', { kind })}
             className="max-h-[42vh] w-auto max-w-full object-contain"
             style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
           />
@@ -201,21 +205,21 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
               disabled={sharing}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground active:scale-95 disabled:opacity-60"
             >
-              <ImageIcon className="h-4 w-4" /> Save to Photos
+              <ImageIcon className="h-4 w-4" /> {t('toPhotos')}
             </button>
-            <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-              In the next screen, choose Save {noun}.
-            </p>
-            <p className="text-center text-[11px] text-muted-foreground" dir="rtl">
-              במסך הבא יש לבחור שמירת התמונה.
-            </p>
+            <p className="mt-1.5 text-center text-[11px] text-muted-foreground">{t('nextScreen', { kind })}</p>
+            {english && (
+              <p className="text-center text-[11px] text-muted-foreground" dir="rtl">
+                במסך הבא יש לבחור שמירת התמונה.
+              </p>
+            )}
           </>
         ) : (
           <button
             onClick={() => runDownload(true)}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground active:scale-95"
           >
-            <Download className="h-4 w-4" /> Save {noun}
+            <Download className="h-4 w-4" /> {t('saveKind', { kind })}
           </button>
         )}
 
@@ -225,7 +229,7 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
             onClick={() => setFullscreen(true)}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95"
           >
-            <ExternalLink className="h-4 w-4" /> Open {noun}
+            <ExternalLink className="h-4 w-4" /> {t('open', { kind })}
           </button>
           {canShare && !preferShare && (
             <button
@@ -233,7 +237,7 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
               disabled={sharing}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95 disabled:opacity-60"
             >
-              <Share2 className="h-4 w-4" /> Share
+              <Share2 className="h-4 w-4" /> {t('share')}
             </button>
           )}
           {preferShare && (
@@ -241,7 +245,7 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
               onClick={() => runDownload(false)}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95"
             >
-              <Download className="h-4 w-4" /> Save file
+              <Download className="h-4 w-4" /> {t('saveFile')}
             </button>
           )}
         </div>

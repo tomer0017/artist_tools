@@ -1,3 +1,4 @@
+import { useTranslations } from 'use-intl';
 import { useId } from 'react';
 import type { TabId } from '@/types/project';
 
@@ -175,9 +176,10 @@ function Pill({ x, y, text }: { x: number; y: number; text: string }) {
 }
 
 function MeasureArt({ uid }: { uid: string }) {
+  const t = useTranslations('toolsCommon.art');
   const line = { stroke: '#8b5cf6', strokeWidth: 0.9, strokeLinecap: 'round' as const };
   return (
-    <Art viewBox="-8 8 116 87" label="Portrait with purple measurement lines and sizes">
+    <Art viewBox="-8 8 116 87" label={t('measure')}>
       <Portrait treatment="photo" uid={uid} />
       <line x1="50" y1="17" x2="50" y2="79" {...line} strokeDasharray="2 1.4" />
       <line x1="37" y1="47" x2="63" y2="47" {...line} />
@@ -193,9 +195,10 @@ function MeasureArt({ uid }: { uid: string }) {
 }
 
 function StudyArt({ uid }: { uid: string }) {
+  const t = useTranslations('toolsCommon.art');
   const treatments: Treatment[] = ['photo', 'flat', 'values', 'sketch'];
   return (
-    <svg viewBox="0 0 160 120" role="img" aria-label="The same portrait as photo, color groups, values and sketch"
+    <svg viewBox="0 0 160 120" role="img" aria-label={t('value')}
       preserveAspectRatio="xMidYMid slice" className="block h-full w-full">
       {treatments.map((t, i) => (
         <svg key={t} x={i * 40} y="0" width="40" height="120" viewBox="27 12 46 104" preserveAspectRatio="xMidYMid slice">
@@ -210,6 +213,7 @@ function StudyArt({ uid }: { uid: string }) {
 }
 
 function ColorArt() {
+  const t = useTranslations('toolsCommon.art');
   // A 24-step hue ring around a dark palette, with three primaries squeezed out.
   const segs = 24;
   const cx = 80, cy = 104, r0 = 50, r1 = 82;
@@ -226,7 +230,7 @@ function ColorArt() {
     </g>
   );
   return (
-    <svg viewBox="0 0 160 120" role="img" aria-label="Color wheel with paint on a palette" preserveAspectRatio="xMidYMid slice" className="block h-full w-full">
+    <svg viewBox="0 0 160 120" role="img" aria-label={t('color')} preserveAspectRatio="xMidYMid slice" className="block h-full w-full">
       <rect width="160" height="120" fill="#1a1714" />
       {Array.from({ length: segs }, (_, i) => (
         <path key={i} d={arc(i)} fill={`hsl(${(i / segs) * 360 + 180}, 78%, 55%)`} />
@@ -240,13 +244,14 @@ function ColorArt() {
 }
 
 function GridArt({ uid }: { uid: string }) {
+  const t = useTranslations('toolsCommon.art');
   const lines = [];
   for (let i = 1; i < 4; i++) {
     lines.push(<line key={`v${i}`} x1={22 + i * 14} y1="26.5" x2={22 + i * 14} y2="68.5" />);
     lines.push(<line key={`h${i}`} x1="22" y1={26.5 + i * 10.5} x2="78" y2={26.5 + i * 10.5} />);
   }
   return (
-    <Art viewBox="22 26.5 56 42" label="Portrait with a 4 by 4 drawing grid">
+    <Art viewBox="22 26.5 56 42" label={t('grid')}>
       <Portrait treatment="photo" uid={uid} />
       <g stroke="#ffffff" strokeOpacity="0.85" strokeWidth="0.35">{lines}</g>
     </Art>
@@ -254,8 +259,9 @@ function GridArt({ uid }: { uid: string }) {
 }
 
 function CompareArt({ uid }: { uid: string }) {
+  const t = useTranslations('toolsCommon.art');
   return (
-    <Art viewBox="14 14 72 54" label="Pencil artwork beside the reference photo with a comparison slider">
+    <Art viewBox="14 14 72 54" label={t('compare')}>
       <defs>
         <clipPath id={`${uid}-left`}><rect x="-50" y="-50" width="100" height="250" /></clipPath>
         <clipPath id={`${uid}-right`}><rect x="50" y="-50" width="150" height="250" /></clipPath>

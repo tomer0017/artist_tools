@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { useTranslations } from 'use-intl';
 import type { PreviewFrame, PreviewVariant } from './onboardingTypes';
 
 // ─── Code-driven demo art ─────────────────────────────────────────────────────
@@ -87,12 +88,13 @@ function PhotoSphere({ gradId }: { gradId: string }) {
 }
 
 function Svg({ children, label }: { children: React.ReactNode; label: string }) {
+  const t = useTranslations('toolsCommon.tour');
   return (
     <svg
       viewBox="0 0 100 100"
       className="h-full w-full"
       role="img"
-      aria-label={`${label} example`}
+      aria-label={t('example', { label })}
       preserveAspectRatio="xMidYMid slice"
     >
       {children}
@@ -107,9 +109,10 @@ function Svg({ children, label }: { children: React.ReactNode; label: string }) 
  */
 export function PreviewArt({ variant, src, label }: PreviewFrame) {
   const uid = useId().replace(/:/g, '');
+  const t = useTranslations('toolsCommon.tour');
 
   if (src) {
-    return <img src={src} alt={`${label} example`} className="h-full w-full object-cover" />;
+    return <img src={src} alt={t('example', { label })} className="h-full w-full object-cover" />;
   }
 
   const v: PreviewVariant = variant ?? 'original';

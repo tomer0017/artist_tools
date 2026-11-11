@@ -47,24 +47,6 @@ export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'diff
   { id: 'difference', label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs', features: ['export.gif_difference'] },
 ];
 
-/**
- * What each Pro-only capability does and why it is part of Pro, shown when an
- * account without it picks it. Pro cannot be bought yet; nothing here may
- * suggest otherwise.
- */
-export const PRO_FEATURE_INFO: Partial<Record<FeatureId, { name: string; what: string; why: string }>> = {
-  'export.gif_large': {
-    name: 'Large GIFs',
-    what: 'Saves your comparison GIF at up to 800 px: sharp enough to share online, show a student or print.',
-    why: 'Free includes small and medium GIFs, which cover everyday checks. Large, high-detail exports are one of the extras planned for Pro.',
-  },
-  'export.gif_difference': {
-    name: 'Compare + Difference GIFs',
-    what: 'Adds a frame that highlights exactly where your painting differs from the reference, so corrections are easy to see and to explain.',
-    why: 'Free includes the opacity pulse and blink animations. Analysis animations like this one are part of Pro.',
-  },
-};
-
 /** Short names for usage counts and admin screens. */
 export const FEATURE_LABELS: Record<FeatureId, string> = {
   'tool.measure': 'Measure & Plan',
