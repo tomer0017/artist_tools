@@ -6,6 +6,7 @@ import { collections } from '@/server/db/collections';
 import { createAuth, signupAllowed, type Auth } from './auth';
 import { createMailer } from './mail/mailer';
 import type { SignupPolicy } from './env';
+import { EVERYONE, THROTTLES, throttleCount, throttleKey } from './security/throttle';
 
 // The real sign-in flow, end to end, against a real database. Only Google's
 // token endpoint is simulated: it returns an ID token for a fake Google user.
@@ -115,12 +116,14 @@ async function startSignIn(callbackURL = '/app', using: Auth = auth, ip = nextVi
 
 /** Run the whole sign-in as `user`: start, "consent" at Google, come back. */
 async function signInAs(user: GoogleUser, using: Auth = auth) {
-  const { response, body } = await startSignIn('/app', using);
+  // One visitor: the browser comes back from Google from the same address.
+  const ip = nextVisitorIp();
+  const { response, body } = await startSignIn('/app', using, ip);
   const state = new URL(body!.url).searchParams.get('state')!;
   simulateGoogle(user);
   const callback = await using.handler(
     new Request(`${BASE}/api/auth/callback/google?state=${encodeURIComponent(state)}&code=test-code`, {
-      headers: { cookie: cookiesFrom(response) },
+      headers: { cookie: cookiesFrom(response), 'x-real-ip': ip },
     }),
   );
   return { callback, cookies: cookiesFrom(callback, cookiesFrom(response)) };
@@ -296,9 +299,9 @@ describe('public registration (AUTH_SIGNUP_MODE=open)', () => {
     expect(await auditEvents.countDocuments({ userId: user!._id, type: 'user.registered' })).toBe(1);
   });
 
-  it('still refuses an address Google has not verified', async () => {
+  it('still refuses an address Google has not verified, saying so (not "invite-only")', async () => {
     const { callback } = await signInAs({ sub: 'google-sub-unverified-open', email: 'unverified-open@example.com', verified: false });
-    expect(new URL(callback.headers.get('location')!, BASE).searchParams.get('error')).toBe('not_invited');
+    expect(new URL(callback.headers.get('location')!, BASE).searchParams.get('error')).toBe('email_not_verified');
     expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-unverified-open' })).toBe(0);
   });
 });
@@ -350,7 +353,7 @@ describe('invite-only registration (staging)', () => {
   it('refuses an invited address that Google has not verified', async () => {
     // On the list and never registered, so only Google's verification is missing.
     const { callback } = await signInAs({ sub: 'google-sub-unverified', email: 'second-invite@example.com', verified: false }, inviteOnly);
-    expect(refusedWith(callback)).toEqual({ path: '/sign-in', error: 'not_invited' });
+    expect(refusedWith(callback)).toEqual({ path: '/sign-in', error: 'email_not_verified' });
     expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-unverified' })).toBe(0);
   });
 
@@ -399,5 +402,56 @@ describe('rate limiting', () => {
     expect(statuses[10]).toBe(429);
     // Other visitors are unaffected.
     expect((await startSignIn('/app', auth, '192.0.2.78')).response.status).toBe(200);
+  });
+});
+
+describe('pausing sign-ups after too many new accounts', () => {
+  const windows = ['signups:hour', 'signups:day', 'signups:paused'];
+  /** As if `limit` accounts had been created in the current hour (or day). */
+  const fill = (purpose: 'signups:hour' | 'signups:day', limit: number) =>
+    collections(mongo.db).authThrottles.updateOne(
+      { _id: throttleKey(purpose, EVERYONE) },
+      { $set: { count: limit, firstAt: new Date(), expiresAt: new Date(Date.now() + 60 * 60 * 1000) } },
+      { upsert: true },
+    );
+  /** The windows end. */
+  const resume = () => collections(mongo.db).authThrottles.deleteMany({ _id: { $in: windows.map((w) => throttleKey(w, EVERYONE)) } });
+  const errorOf = (callback: Response) => new URL(callback.headers.get('location')!, BASE).searchParams.get('error');
+  afterEach(resume);
+
+  it('counts each new account once, whatever the method, against the hourly and the daily limit', async () => {
+    await resume();
+    await signInAs({ sub: 'google-sub-counted', email: 'counted@example.com' });
+    expect(await throttleCount(mongo.db, 'signups:hour', EVERYONE)).toBe(1);
+    expect(await throttleCount(mongo.db, 'signups:day', EVERYONE)).toBe(1);
+    // Signing in again is not a new account.
+    await signInAs({ sub: 'google-sub-counted', email: 'counted@example.com' });
+    expect(await throttleCount(mongo.db, 'signups:hour', EVERYONE)).toBe(1);
+  });
+
+  it('refuses new accounts while paused, audits the pause once, and never stops existing accounts', async () => {
+    await signInAs({ sub: 'google-sub-before-pause', email: 'before-pause@example.com' });
+    await fill('signups:hour', THROTTLES.newAccountsPerHour.limit);
+    for (const n of [1, 2]) {
+      const { callback, cookies } = await signInAs({ sub: `google-sub-paused-${n}`, email: `paused-${n}@example.com` });
+      expect(errorOf(callback)).toBe('signups_paused');
+      expect(sessionTokenCookie(cookies)).toBe('');
+      expect(await collections(mongo.db).users.countDocuments({ email: `paused-${n}@example.com` })).toBe(0);
+    }
+    expect(await collections(mongo.db).auditEvents.countDocuments({ type: 'auth.throttled', 'metadata.purpose': 'signups' })).toBe(1);
+
+    const returning = await signInAs({ sub: 'google-sub-before-pause', email: 'before-pause@example.com' });
+    expect(new URL(returning.callback.headers.get('location')!, BASE).pathname).toBe('/app');
+    expect(sessionTokenCookie(returning.cookies)).toBeTruthy();
+
+    // The daily limit pauses sign-ups the same way…
+    await resume();
+    await fill('signups:day', THROTTLES.newAccountsPerDay.limit);
+    expect(errorOf((await signInAs({ sub: 'google-sub-paused-3', email: 'paused-3@example.com' })).callback)).toBe('signups_paused');
+    // …and once the window ends, new accounts are welcome again.
+    await resume();
+    const after = await signInAs({ sub: 'google-sub-paused-3', email: 'paused-3@example.com' });
+    expect(new URL(after.callback.headers.get('location')!, BASE).pathname).toBe('/app');
+    expect(await collections(mongo.db).users.findOne({ email: 'paused-3@example.com' })).toMatchObject({ role: 'user', plan: 'free' });
   });
 });

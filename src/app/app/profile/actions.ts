@@ -209,7 +209,8 @@ export async function deleteMyAccount(input: unknown): Promise<ActionResult> {
     if (result.status === 'active_subscription') return refusal('refused', m.t('actions.subscriptionFirst'));
     if (result.status === 'not_found') return m.signedOut;
     log.info('account.deleted', { userId: who.userId.toHexString() });
-    runInBackground(createMailer(db, authConfig().mail.transport).deliver(mailTemplates(result.locale).accountDeleted(result.name), { address: result.email, userId: null }));
+    const { mail } = authConfig();
+    runInBackground(createMailer(db, mail.transport, mail).deliver(mailTemplates(result.locale).accountDeleted(result.name), { address: result.email, userId: null }));
     const jar = await cookies();
     for (const name of ['session_token', 'session_data', 'dont_remember']) {
       jar.delete(`${COOKIE_PREFIX}.${name}`);

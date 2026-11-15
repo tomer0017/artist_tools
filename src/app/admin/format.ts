@@ -48,6 +48,7 @@ export function describeEvent(event: AdminAuditEvent): string {
     case 'auth.login_failed':
       return 'Failed password sign-in';
     case 'auth.throttled':
+      if (m.purpose === 'signups') return 'New sign-ups paused: too many new accounts this hour or day';
       return m.purpose === 'mail' ? 'Email limit reached' : 'Sign-in paused after too many attempts';
     case 'admin.role_granted':
       return 'Made an admin';

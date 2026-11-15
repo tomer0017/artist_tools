@@ -61,10 +61,13 @@ up; existing accounts always keep working.
 
 ### Opening public registration (only when approved)
 
-Staging stays invite-only. To let anyone with a Google-verified address create
-a free account, add `AUTH_SIGNUP_MODE="open"` to `/etc/studio-companion/<env>.env`
-(back up the file first) and `systemctl restart studio-companion-<env>`, then
-check `/api/health?ready=1`. New accounts are always role `user` on Free;
+Staging stays invite-only until real email works: the configuration refuses
+`AUTH_SIGNUP_MODE="open"` with `MAIL_TRANSPORT="outbox"` (outside development
+and tests), because real people's confirmation and reset links must be
+emailed to them, never kept for admins to read. Set up email first (below and
+`docs/ops/email.md`). Then add `AUTH_SIGNUP_MODE="open"` to
+`/etc/studio-companion/<env>.env` (back up the file first) and
+`systemctl restart studio-companion-<env>`, then check `/api/health?ready=1`. New accounts are always role `user` on Free;
 admin access is never granted automatically. To close it again, set
 `AUTH_SIGNUP_MODE="invite"` and restart. The sign-in, landing and plans pages
 follow the setting on their own.
@@ -89,6 +92,22 @@ development, test or staging, so a production server cannot start with it
 applies to email sign-ups exactly as to Google ones. To turn it off: set
 `AUTH_EMAIL_PASSWORD="off"` and restart; password accounts then cannot sign
 in until it is on again (their data is kept).
+
+### Real email (an SMTP provider)
+
+Install the server side once (as root):
+
+```sh
+install -m 700 deploy/install-mail.sh /usr/local/sbin/studio-set-mail
+install -m 755 deploy/mail-test.sh /usr/local/sbin/studio-mail-test
+```
+
+`sudo studio-set-mail <env>` asks for the provider's SMTP server, port, username, sender and
+password (hidden) and writes `MAIL_TRANSPORT="smtp"` with them, keeping the
+rest of the file and a `.previous` copy; nothing restarts. `sudo studio-mail-test <env> <address>`
+then connects, signs in over TLS and sends one test message, before the app
+uses it. Restart to switch the app over. Providers and their settings:
+`docs/ops/email.md`.
 
 ### Nightly maintenance
 

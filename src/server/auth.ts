@@ -16,7 +16,7 @@ import { log } from '@/server/log';
 import { createMailer, type Mailer } from '@/server/mail/mailer';
 import { mailTemplates, type RenderedMail } from '@/server/mail/templates';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MESSAGES, PASSWORD_MIN_LENGTH, checkPassword } from '@/server/security/password-policy';
-import { THROTTLES, clearThrottle, consumeThrottle, throttleCount } from '@/server/security/throttle';
+import { EVERYONE, THROTTLES, clearThrottle, consumeThrottle, throttleCount } from '@/server/security/throttle';
 
 // ─── Authentication ────────────────────────────────────────────────────────────
 // Google sign-in (OpenID Connect: authorization code + state + PKCE, handled by
@@ -125,6 +125,28 @@ export function createAuth(deps: AuthDeps) {
     if (user.email) await mailer.deliver(mail, { address: user.email, userId: user.id ?? null });
   };
 
+  // New accounts from everyone together: past the hourly or the daily limit,
+  // sign-ups pause for every address alike until the window ends. Signing in
+  // to an existing account is never affected. The first refusal of a window
+  // is audited, so admins see it in the activity log.
+  const SIGNUP_WINDOWS = [
+    ['signups:hour', THROTTLES.newAccountsPerHour],
+    ['signups:day', THROTTLES.newAccountsPerDay],
+  ] as const;
+  async function signupsPaused() {
+    for (const [purpose, rule] of SIGNUP_WINDOWS) {
+      if ((await throttleCount(db, purpose, EVERYONE)) < rule.limit) continue;
+      if ((await consumeThrottle(db, 'signups:paused', EVERYONE, { limit: 1, windowSeconds: rule.windowSeconds })).allowed) {
+        await safely('auth.audit_failed', () => recordAudit(db, { type: 'auth.throttled', userId: null, actor: 'system', metadata: { purpose: 'signups' } }));
+      }
+      return true;
+    }
+    return false;
+  }
+  async function countSignup() {
+    for (const [purpose, rule] of SIGNUP_WINDOWS) await consumeThrottle(db, purpose, EVERYONE, rule);
+  }
+
   return betterAuth({
     appName: 'Studio Companion',
     baseURL: deps.baseURL,
@@ -221,12 +243,22 @@ export function createAuth(deps: AuthDeps) {
       // throws, the sign-up is refused too (fails closed). Existing accounts
       // signing in pass through untouched. A refused password sign-up gets the
       // same answer as any other, so the gate never reveals the invite list.
+      // Past the global limits on new accounts, sign-ups pause (see above).
       validateUserInfo: async ({ user, source }) => {
         if (source.action !== 'create-user') return;
         const method: SignupMethod = source.method === 'email-password' ? 'email-password' : 'google';
-        if (signupAllowed(deps.signups, user, method)) return;
-        log.warn('auth.signup_refused', { method, reason: method === 'google' && !user.emailVerified ? 'email_not_verified' : 'not_invited' });
-        return { error: 'not_invited', errorDescription: 'This account has not been invited yet.' };
+        if (!signupAllowed(deps.signups, user, method)) {
+          const unverified = method === 'google' && !user.emailVerified;
+          log.warn('auth.signup_refused', { method, reason: unverified ? 'email_not_verified' : 'not_invited' });
+          return unverified
+            ? { error: 'email_not_verified', errorDescription: 'Google has not verified this email address.' }
+            : { error: 'not_invited', errorDescription: 'This account has not been invited yet.' };
+        }
+        if (await signupsPaused()) {
+          log.warn('auth.signup_refused', { method, reason: 'paused' });
+          return { error: 'signups_paused', errorDescription: 'New sign-ups are paused for a short while.' };
+        }
+        await countSignup();
       },
       // `input: false`: none of these can be set through any auth endpoint
       // (sign-up, update-user); only the server writes them.
@@ -267,6 +299,11 @@ export function createAuth(deps: AuthDeps) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         const body = (ctx.body ?? {}) as Record<string, unknown>;
+        // Sign-ups paused: the same answer for every address, given before
+        // the library looks up whether the address already has an account.
+        if (ctx.path === '/sign-up/email' && (await signupsPaused())) {
+          throw new APIError('TOO_MANY_REQUESTS', { code: 'SIGNUPS_PAUSED', message: 'New sign-ups are paused for a short while. Please try again later.' });
+        }
         // Password policy, on every way a password is chosen.
         if (ctx.path === '/sign-up/email' || ctx.path === '/reset-password' || ctx.path === '/change-password') {
           const password = ctx.path === '/sign-up/email' ? body.password : body.newPassword;
@@ -414,7 +451,7 @@ export function getAuth(): Auth {
   if (!instance) {
     const { baseURL, secret, google, signups, emailPassword, mail } = authConfig();
     const { client, db } = getMongo();
-    instance = createAuth({ db, client, baseURL, secret, google, signups, emailPassword, mailer: createMailer(db, mail.transport), nextjs: true });
+    instance = createAuth({ db, client, baseURL, secret, google, signups, emailPassword, mailer: createMailer(db, mail.transport, mail), nextjs: true });
   }
   return instance;
 }

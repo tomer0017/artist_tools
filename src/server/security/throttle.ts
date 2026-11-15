@@ -21,7 +21,18 @@ export const THROTTLES = {
   /** Emails of one kind to one address. */
   mailPerHour: { limit: 3, windowSeconds: 60 * 60 },
   mailPerDay: { limit: 10, windowSeconds: 24 * 60 * 60 },
+  /**
+   * New accounts from everyone together (Google and password alike): a
+   * circuit breaker against mass sign-ups, which also keeps the email
+   * provider's daily quota and the sender's reputation safe. Counted under
+   * the key EVERYONE rather than an address.
+   */
+  newAccountsPerHour: { limit: 50, windowSeconds: 60 * 60 },
+  newAccountsPerDay: { limit: 300, windowSeconds: 24 * 60 * 60 },
 } satisfies Record<string, ThrottleRule>;
+
+/** The "address" of counters that cover every visitor at once. */
+export const EVERYONE = '*';
 
 const hashAddress = (address: string) => createHash('sha256').update(address.trim().toLowerCase()).digest('base64url');
 export const throttleKey = (purpose: string, address: string) => `${purpose}:${hashAddress(address)}`;

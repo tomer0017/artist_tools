@@ -6,7 +6,7 @@ const BASE = { BETTER_AUTH_URL: 'https://staging.example.com', BETTER_AUTH_SECRE
 const saved = { ...process.env };
 
 function withEnv(env: Record<string, string | undefined>) {
-  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_SIGNUP_MODE', 'AUTH_SIGNUP_ALLOWLIST', 'APP_ENV', 'AUTH_EMAIL_PASSWORD', 'MAIL_TRANSPORT', 'MAIL_FROM']) {
+  for (const key of ['BETTER_AUTH_URL', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_SIGNUP_MODE', 'AUTH_SIGNUP_ALLOWLIST', 'APP_ENV', 'AUTH_EMAIL_PASSWORD', 'MAIL_TRANSPORT', 'MAIL_FROM', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD']) {
     delete process.env[key];
   }
   Object.assign(process.env, env);
@@ -27,7 +27,7 @@ describe('authConfig', () => {
       appEnv: null,
       emailPassword: false,
       adminMfaRequired: false,
-      mail: { transport: 'disabled', from: 'Studio Companion <no-reply@studio-companion.invalid>' },
+      mail: { transport: 'disabled', from: 'Studio Companion <no-reply@studio-companion.invalid>', smtp: null },
     });
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
     expect(authConfig().google).toBeNull();
@@ -95,6 +95,60 @@ describe('authConfig', () => {
     expect(authConfig().mail.from).toBe('Studio <hello@example.com>');
   });
 
+  it('sends real email through the provider only when every SMTP detail and a real sender are set', () => {
+    const SMTP = { MAIL_TRANSPORT: 'smtp', SMTP_HOST: ' smtp.example.com ', SMTP_PORT: '587', SMTP_USER: 'apikey', SMTP_PASSWORD: 'provider-secret', MAIL_FROM: 'Studio Companion <hello@example.com>' };
+    withEnv({ ...BASE, ...SMTP, APP_ENV: 'production', AUTH_EMAIL_PASSWORD: 'on' });
+    expect(authConfig()).toMatchObject({
+      emailPassword: true,
+      mail: { transport: 'smtp', from: 'Studio Companion <hello@example.com>', smtp: { host: 'smtp.example.com', port: 587, user: 'apikey', password: 'provider-secret' } },
+    });
+    for (const missing of ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD'] as const) {
+      withEnv({ ...BASE, ...SMTP, [missing]: '' });
+      expect(() => authConfig()).toThrow('MAIL_TRANSPORT=smtp needs SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASSWORD');
+    }
+    for (const port of [undefined, '', 'smtp', '0', '70000']) {
+      withEnv({ ...BASE, ...SMTP, SMTP_PORT: port });
+      expect(() => authConfig()).toThrow("SMTP_PORT must be the provider's submission port");
+    }
+    // The placeholder sender, or none, would be refused by any provider.
+    for (const from of [undefined, 'Studio Companion <no-reply@studio-companion.invalid>', 'not an address', 'Studio <hello@localhost>']) {
+      withEnv({ ...BASE, ...SMTP, MAIL_FROM: from });
+      expect(() => authConfig()).toThrow('MAIL_TRANSPORT=smtp needs MAIL_FROM');
+    }
+    withEnv({ ...BASE, ...SMTP, MAIL_FROM: 'hello@example.com' });
+    expect(authConfig().mail.from).toBe('hello@example.com');
+    withEnv({ ...BASE, MAIL_TRANSPORT: 'sendmail' });
+    expect(() => authConfig()).toThrow('MAIL_TRANSPORT must be "disabled", "outbox" or "smtp"');
+  });
+
+  it('opens registration only with real email outside development and tests', () => {
+    // Real people's verification and reset links never sit in the outbox, where admins can read them.
+    for (const open of [{ AUTH_SIGNUP_MODE: 'open' }, { AUTH_SIGNUP_ALLOWLIST: '*' }]) {
+      withEnv({ ...BASE, ...open, MAIL_TRANSPORT: 'outbox', APP_ENV: 'staging', AUTH_EMAIL_PASSWORD: 'on' });
+      expect(() => authConfig()).toThrow('Open registration needs real email (MAIL_TRANSPORT=smtp)');
+    }
+    for (const appEnv of ['development', 'test']) {
+      withEnv({ ...BASE, AUTH_SIGNUP_MODE: 'open', MAIL_TRANSPORT: 'outbox', APP_ENV: appEnv, AUTH_EMAIL_PASSWORD: 'on' });
+      expect(authConfig().signups).toEqual({ mode: 'open' });
+    }
+    // Invite-only staging keeps its outbox; open staging works with a provider.
+    withEnv({ ...BASE, AUTH_SIGNUP_ALLOWLIST: 'ada@example.com', MAIL_TRANSPORT: 'outbox', APP_ENV: 'staging', AUTH_EMAIL_PASSWORD: 'on' });
+    expect(authConfig().mail.transport).toBe('outbox');
+    withEnv({
+      ...BASE,
+      AUTH_SIGNUP_MODE: 'open',
+      APP_ENV: 'staging',
+      AUTH_EMAIL_PASSWORD: 'on',
+      MAIL_TRANSPORT: 'smtp',
+      SMTP_HOST: 'smtp.example.com',
+      SMTP_PORT: '465',
+      SMTP_USER: 'apikey',
+      SMTP_PASSWORD: 'provider-secret',
+      MAIL_FROM: 'Studio Companion <hello@example.com>',
+    });
+    expect(authConfig()).toMatchObject({ signups: { mode: 'open' }, mail: { transport: 'smtp', smtp: { port: 465 } } });
+  });
+
   it('names what is wrong without echoing secret values', () => {
     withEnv({ BETTER_AUTH_URL: BASE.BETTER_AUTH_URL, BETTER_AUTH_SECRET: 'too-short-secret' });
     let message = '';
@@ -105,5 +159,13 @@ describe('authConfig', () => {
     }
     expect(message).toContain('BETTER_AUTH_SECRET must be at least 32 characters');
     expect(message).not.toContain('too-short-secret');
+    withEnv({ ...BASE, MAIL_TRANSPORT: 'smtp', SMTP_HOST: 'smtp.example.com', SMTP_PORT: 'x', SMTP_USER: 'apikey', SMTP_PASSWORD: 'provider-secret' });
+    try {
+      authConfig();
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('SMTP_PORT');
+    expect(message).not.toContain('provider-secret');
   });
 });

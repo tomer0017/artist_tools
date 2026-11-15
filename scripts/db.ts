@@ -8,6 +8,7 @@
 //   npm run db -- revoke-admin <userId>       take the admin role away; never from the last admin (audited)
 //   npm run db -- set-plan <userId> free|pro  assign a plan without billing, for testing (audited)
 //   npm run db -- maintenance                 nightly: remove never-confirmed password sign-ups, prune rate limits
+//   npm run db -- mail-test <email> [en|he]   check the email provider: connect, sign in, send one test message
 //
 // Admin access is granted only here or by another admin, always by user id —
 // never from configuration or an email address.
@@ -20,13 +21,15 @@ import { closeMongo, getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { authConfig } from '@/server/env';
+import { createMailer } from '@/server/mail/mailer';
+import { mailTemplates } from '@/server/mail/templates';
 import { runMaintenance } from '@/server/maintenance';
 import { resetMfa } from '@/server/admin-mfa';
 
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he]';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -136,6 +139,29 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
         `Maintenance done: ${r.unverifiedRemoved} never-confirmed sign-ups removed, ${r.rateLimitsPruned} idle rate-limit rows pruned, ` +
           `${r.analyticsPruned} analytics events and ${r.auditPruned} audit events past their retention deleted.`,
       );
+      return;
+    }
+    case 'mail-test': {
+      // After setting up email (deploy/set-mail.sh): proves the provider
+      // accepts this server's connection and sign-in, then sends one message.
+      if (!arg?.includes('@')) throw new Error(USAGE);
+      const { mail } = authConfig();
+      const mailer = createMailer(db, mail.transport, mail);
+      console.log(`Transport: ${mail.transport}. Sender: ${mail.from}.${mail.smtp ? ` Server: ${mail.smtp.host}:${mail.smtp.port} (TLS).` : ''}`);
+      if (mail.transport === 'smtp') {
+        const check = await mailer.check();
+        if (!check.ok) throw new Error(`The mail server refused the connection or the sign-in: ${check.reason}`);
+        console.log('Connected and signed in to the mail server.');
+      }
+      const result = await mailer.deliver(mailTemplates(arg2).deliveryTest(), { address: arg, userId: null });
+      const outcomes: Record<typeof result, string> = {
+        sent: mail.transport === 'smtp' ? `The provider accepted the message for ${mask(arg)}. Check that inbox, and its spam folder.` : `Kept in the outbox (/admin/mail) for ${mask(arg)}; nothing was emailed.`,
+        throttled: `Not sent: ${mask(arg)} already had 3 test messages this hour.`,
+        disabled: 'Not sent: MAIL_TRANSPORT is disabled.',
+        failed: 'The provider refused the message; the error code is in the log (mail.failed).',
+      };
+      console.log(outcomes[result]);
+      if (result !== 'sent') process.exitCode = 1;
       return;
     }
     default:

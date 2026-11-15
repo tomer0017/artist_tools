@@ -72,6 +72,11 @@ const STRINGS = {
       ],
       footer: 'If you did not ask for this, contact support right away.',
     },
+    test: {
+      subject: 'Studio Companion: email delivery test',
+      body: ['This is a test message from the Studio Companion server. If it reached you, account emails (address confirmations and password resets) can reach this inbox too.'],
+      footer: 'Sent by an operator check. No account was created or changed.',
+    },
   },
   he: {
     hello: (name: string) => (name ? `שלום ${name},` : 'שלום,'),
@@ -118,6 +123,11 @@ const STRINGS = {
       subject: 'החשבון ב-Studio Companion נמחק',
       body: ['החשבון והמידע האישי שנשמר איתו נמחקו, לבקשתכם. התמונות שעבדתם עליהן מעולם לא יצאו מהמכשירים שלכם.', 'גיבויים שעדיין מכילים את החשבון נמחקים תוך 14 יום.'],
       footer: 'אם לא ביקשתם את זה, כדאי לפנות לתמיכה מיד.',
+    },
+    test: {
+      subject: 'Studio Companion: בדיקת שליחת אימייל',
+      body: ['זו הודעת בדיקה מהשרת של Studio Companion. אם היא הגיעה אליכם, גם הודעות החשבון (אישורי כתובת ואיפוסי סיסמה) יכולות להגיע לתיבה הזו.'],
+      footer: 'נשלחה בבדיקה של מפעיל המערכת. שום חשבון לא נוצר ולא השתנה.',
     },
   },
 } as const;
@@ -177,5 +187,7 @@ export function mailTemplates(locale: unknown) {
     passwordAdded: (name: string | null) => render(l, 'password_added', s.added.subject, name, s.added.body, null, s.added.footer),
     googleConnected: (name: string | null) => render(l, 'google_connected', s.google.subject, name, s.google.body, null, s.google.footer),
     accountDeleted: (name: string | null) => render(l, 'account_deleted', s.deleted.subject, name, s.deleted.body, null, s.deleted.footer),
+    /** The operator's check that the provider delivers (`npm run db -- mail-test`). */
+    deliveryTest: () => render(l, 'delivery_test', s.test.subject, null, s.test.body, null, s.test.footer),
   };
 }

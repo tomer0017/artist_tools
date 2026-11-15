@@ -427,7 +427,8 @@ export type MailTemplate =
   | 'password_changed'
   | 'password_added'
   | 'google_connected'
-  | 'account_deleted';
+  | 'account_deleted'
+  | 'delivery_test';
 
 /**
  * A message held by the outbox transport (development and staging only)

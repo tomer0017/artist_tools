@@ -6,6 +6,7 @@ import { collections } from '@/server/db/collections';
 import { settleBackground } from './background';
 import { createAuth, type Auth } from './auth';
 import { createMailer } from './mail/mailer';
+import { EVERYONE, THROTTLES, throttleKey } from './security/throttle';
 
 // Email + password sign-in, end to end against a real database: sign-up,
 // verification, sign-in, reset, the invite gate, the password policy,
@@ -29,7 +30,7 @@ beforeAll(async () => {
     baseURL: BASE,
     secret: 'test-secret-that-is-at-least-32-characters-long',
     google: { clientId: CLIENT_ID, clientSecret: 'test-client-secret' },
-    signups: { mode: 'invite', invited: ['ada@example.com', 'grace@example.com', 'mary@example.com', 'emmy@example.com', 'rosalind@example.com', 'hedy@example.com', 'katherine@example.com', 'barbara@example.com', 'frances@example.com'] },
+    signups: { mode: 'invite', invited: ['ada@example.com', 'grace@example.com', 'mary@example.com', 'emmy@example.com', 'rosalind@example.com', 'hedy@example.com', 'katherine@example.com', 'barbara@example.com', 'frances@example.com', 'joan@example.com', 'lise@example.com'] },
     emailPassword: true,
     mailer: createMailer(mongo.db, 'outbox'),
   });
@@ -328,5 +329,39 @@ describe('a password account and Google', () => {
     const [notice] = await mailTo('barbara@example.com', 'existing_account');
     expect(notice.text).toContain('You sign in with Google.');
     expect((await signIn('barbara@example.com')).status).toBe(401);
+  });
+});
+
+describe('pausing sign-ups after too many new accounts', () => {
+  const key = throttleKey('signups:hour', EVERYONE);
+  const pause = () =>
+    collections(mongo.db).authThrottles.updateOne(
+      { _id: key },
+      { $set: { count: THROTTLES.newAccountsPerHour.limit, firstAt: new Date(), expiresAt: new Date(Date.now() + 60 * 60 * 1000) } },
+      { upsert: true },
+    );
+  const resume = () => collections(mongo.db).authThrottles.deleteMany({ _id: { $in: [key, throttleKey('signups:paused', EVERYONE)] } });
+
+  it('gives every address the same answer while paused, sends nothing, and lets existing accounts sign in', async () => {
+    await signedUpAndVerified('joan@example.com');
+    await pause();
+    try {
+      const fresh = await signUp('lise@example.com');
+      const existing = await signUp('joan@example.com', 'another sturdy phrase 7', 'Somebody Else');
+      const stranger = await signUp('nobody-invited@example.com');
+      for (const answer of [fresh, existing, stranger]) {
+        expect(answer.status).toBe(429);
+        expect(answer.body).toEqual(fresh.body);
+      }
+      expect(fresh.body.code).toBe('SIGNUPS_PAUSED');
+      expect(await collections(mongo.db).users.countDocuments({ email: 'lise@example.com' })).toBe(0);
+      expect(await mailTo('lise@example.com')).toHaveLength(0);
+      expect(await mailTo('joan@example.com', 'existing_account')).toHaveLength(0);
+      expect((await signIn('joan@example.com')).status).toBe(200);
+    } finally {
+      await resume();
+    }
+    expect((await signUp('lise@example.com')).status).toBe(200);
+    expect(await mailTo('lise@example.com', 'verify_email')).toHaveLength(1);
   });
 });

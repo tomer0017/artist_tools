@@ -31,8 +31,13 @@ const authSchema = z
       .enum(['development', 'test', 'staging', 'production'], { message: 'APP_ENV must be development, test, staging or production' })
       .optional(),
     AUTH_EMAIL_PASSWORD: z.enum(['on', 'off'], { message: 'AUTH_EMAIL_PASSWORD must be "on" or "off"' }).optional(),
-    MAIL_TRANSPORT: z.enum(['disabled', 'outbox'], { message: 'MAIL_TRANSPORT must be "disabled" or "outbox"' }).optional(),
+    MAIL_TRANSPORT: z.enum(['disabled', 'outbox', 'smtp'], { message: 'MAIL_TRANSPORT must be "disabled", "outbox" or "smtp"' }).optional(),
     MAIL_FROM: z.string().max(200).optional(),
+    // The email provider's SMTP submission server (MAIL_TRANSPORT=smtp).
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.string().optional(),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
     ADMIN_MFA_REQUIRED: z.enum(['on', 'off'], { message: 'ADMIN_MFA_REQUIRED must be "on" or "off"' }).optional(),
   })
   .refine((env) => !env.GOOGLE_CLIENT_ID === !env.GOOGLE_CLIENT_SECRET, {
@@ -46,7 +51,35 @@ const authSchema = z
   // Passwords need email: there is no verification or reset without it.
   .refine((env) => env.AUTH_EMAIL_PASSWORD !== 'on' || (env.MAIL_TRANSPORT ?? 'disabled') !== 'disabled', {
     message: 'AUTH_EMAIL_PASSWORD=on needs a mail transport (MAIL_TRANSPORT)',
+  })
+  // A real provider needs every connection detail and a sender it accepts.
+  .refine((env) => env.MAIL_TRANSPORT !== 'smtp' || Boolean(env.SMTP_HOST?.trim() && env.SMTP_USER && env.SMTP_PASSWORD), {
+    message: 'MAIL_TRANSPORT=smtp needs SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASSWORD',
+  })
+  .refine((env) => env.MAIL_TRANSPORT !== 'smtp' || smtpPort(env.SMTP_PORT) !== null, {
+    message: 'SMTP_PORT must be the provider\'s submission port, e.g. 465 or 587',
+  })
+  .refine((env) => env.MAIL_TRANSPORT !== 'smtp' || senderAddress(env.MAIL_FROM) !== null, {
+    message: 'MAIL_TRANSPORT=smtp needs MAIL_FROM, a sender address the provider accepts, e.g. "Studio Companion <hello@example.com>"',
+  })
+  // Public registration means real people: their sign-in links are emailed
+  // to them, never kept in the outbox where admins can read them.
+  .refine((env) => env.MAIL_TRANSPORT !== 'outbox' || parseSignupPolicy(env.AUTH_SIGNUP_MODE, env.AUTH_SIGNUP_ALLOWLIST).mode !== 'open' || ['development', 'test'].includes(env.APP_ENV ?? ''), {
+    message: 'Open registration needs real email (MAIL_TRANSPORT=smtp): the outbox is for test accounts only',
   });
+
+/** A TCP port number, or null. */
+const smtpPort = (value: string | undefined) => {
+  const port = /^\d{1,5}$/.test(value?.trim() ?? '') ? Number(value) : 0;
+  return port > 0 && port < 65536 ? port : null;
+};
+
+/** The address in MAIL_FROM ("Name <address>" or just the address), or null when there is none a provider would accept. */
+const senderAddress = (from: string | undefined) => {
+  const value = from?.trim() ?? '';
+  const address = (value.match(/<([^<>]+)>$/)?.[1] ?? value).trim().toLowerCase();
+  return /^[^\s@<>"]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(address) && !address.endsWith('.invalid') ? address : null;
+};
 
 function read<T extends z.ZodTypeAny>(schema: T, area: string): z.infer<T> {
   const result = schema.safeParse(process.env);
@@ -81,7 +114,15 @@ const parseSignupPolicy = (mode: 'invite' | 'open' | undefined, allowlist: strin
   };
 };
 
-export type MailTransport = 'disabled' | 'outbox';
+export type MailTransport = 'disabled' | 'outbox' | 'smtp';
+
+/** How to reach the email provider; always over TLS (src/server/mail/mailer.ts). */
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+}
 
 export function authConfig() {
   const env = read(authSchema, 'authentication');
@@ -106,6 +147,11 @@ export function authConfig() {
     mail: {
       transport: (env.MAIL_TRANSPORT ?? 'disabled') as MailTransport,
       from: env.MAIL_FROM?.trim() || 'Studio Companion <no-reply@studio-companion.invalid>',
+      /** Set only with MAIL_TRANSPORT=smtp. */
+      smtp:
+        env.MAIL_TRANSPORT === 'smtp'
+          ? ({ host: env.SMTP_HOST!.trim(), port: smtpPort(env.SMTP_PORT)!, user: env.SMTP_USER!, password: env.SMTP_PASSWORD! } satisfies SmtpSettings)
+          : null,
     },
   };
 }

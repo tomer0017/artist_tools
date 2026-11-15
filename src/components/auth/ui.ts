@@ -21,6 +21,7 @@ const KNOWN = [
   'PASSWORD_TOO_COMMON',
   'PASSWORD_TOO_PREDICTABLE',
   'PASSWORD_PERSONAL',
+  'SIGNUPS_PAUSED',
 ] as const;
 export type AuthErrorKey = (typeof KNOWN)[number] | 'DISABLED' | 'RATE_LIMITED' | 'UNKNOWN';
 
@@ -34,3 +35,27 @@ export function authErrorKey(error: { status?: number; code?: string } | null | 
 }
 
 export const isPasswordError = (key: AuthErrorKey) => key.startsWith('PASSWORD_');
+
+// Codes a failed Google sign-in brings back to /sign-in (?error=…).
+const SIGN_IN_ERRORS = [
+  'access_denied',
+  'account_not_linked',
+  'not_invited',
+  'email_not_verified',
+  'signups_paused',
+  'unable_to_create_user',
+  'unable_to_create_session',
+] as const;
+export type SignInErrorKey = (typeof SIGN_IN_ERRORS)[number] | 'unable_to_create_user_open' | 'generic';
+
+/**
+ * Which message (auth.errors.*) explains `error` on the sign-in page — never
+ * the code itself. With open registration no message mentions invitations.
+ */
+export function signInErrorKey(error: string | undefined, registration: 'open' | 'invite'): SignInErrorKey | null {
+  if (!error) return null;
+  if (!(SIGN_IN_ERRORS as readonly string[]).includes(error)) return 'generic';
+  if (registration === 'open' && error === 'not_invited') return 'generic';
+  if (registration === 'open' && error === 'unable_to_create_user') return 'unable_to_create_user_open';
+  return error as SignInErrorKey;
+}

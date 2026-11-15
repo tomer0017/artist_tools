@@ -61,6 +61,10 @@ test.describe('signed out: the way in', () => {
   test('a refused sign-up says why', async ({ page }) => {
     await page.goto('/sign-in?error=not_invited');
     await expect(page.getByRole('alert').filter({ hasText: 'invite-only while we test it' })).toBeVisible();
+    await page.goto('/sign-in?error=email_not_verified');
+    await expect(page.getByRole('alert').filter({ hasText: 'Google has not confirmed the email address' })).toBeVisible();
+    await page.goto('/sign-in?error=signups_paused');
+    await expect(page.getByRole('alert').filter({ hasText: 'New sign-ups are paused for a short while' })).toBeVisible();
   });
 
   test.describe('mobile', () => {
