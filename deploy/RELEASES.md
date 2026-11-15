@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-15 13:34:35 | `8ce4860` | Since `6033016`: CI fixes (`b5eaa19` `3e3f5b4` `80bbc06`), docs (`5b60feb` `5907f9f`), and the SMTP transport, the registration guards and the sign-up pause (`8ce4860`). Registration stays invite-only and mail stays in the outbox: no provider yet | 42 indexes ensured; no data changed | yes (release step, 13:34:31) |
 | 2026-11-11 14:01:44 | `6033016` | Since `3782e2c`: the dependency fixes (`f3120ba`), admin two-factor verification (`6fb6022`), CI (`056c79f`), error monitoring (`4405a76`), restore drill, off-site backup job and the missing auth indexes (`58fda2f`), the iOS-only zoom limit (`de2851b`), the five tools in Hebrew (`41dc7ae` `f22ac10` `1cec672` `43e51de` `bba5ec1` `c03f8cc` `ce96c15` `6033016`) | 42 indexes ensured, including the new **unique `users.email` and `sessions.token`**; new empty collections `admin_mfa`, `admin_mfa_sessions`, `error_reports`; no data changed | `mongodb-20261111T140139Z` (release step) |
 | 2026-11-11 10:27–10:57 (built 10:26:40) | `3782e2c` | Everything since `56b9629`: CSP with nonces and body limits (`2785aa9`), billing core and `/admin/billing` (`9e046a2`), Hebrew studio frame (`56d5f3c`), accessibility fixes (`a58baa9`), retention in nightly maintenance (`c41c978`), docs | New empty billing collections and indexes (additive) | By the release script, which switches only after the dump, migration and health check succeed. Its log was not read: the VPS was unreachable over SSH afterwards. |
 | 2026-11-11 01:28 | `56b9629` | Fix: `/he` pages served from real routes (a proxy rewrite returned 500 behind nginx) | none | yes (release step) |
@@ -33,6 +34,20 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Verification of `8ce4860` (2026-11-15, ~13:37Z)
+
+- **Over HTTPS:**
+  - `deploy/smoke.sh` 18/18, and `/api/health` reports `8ce4860`;
+  - the new sign-in messages render (`email_not_verified`, and `signups_paused` in English and Hebrew).
+- **On the server:**
+  - **The release log:** build done 13:34:30, dump 13:34:31, migration 13:34:33 ("42 indexes ensured", no data changed), healthy 13:34:35.
+  - **New tools,** installed from the live release:
+    - `studio-set-mail`: tested against a throwaway directory with fake values. It kept the other settings, the file mode and a `.previous` copy, and never printed the password. It refused a bad port, a placeholder sender, a password with `$` and a bad host, leaving the file unchanged.
+    - `studio-mail-test`: through the outbox ("Kept in the outbox").
+  - **Settings unchanged:** invite-only, `AUTH_EMAIL_PASSWORD=on`, `MAIL_TRANSPORT=outbox`.
+  - **The owner account:** admin, active, Free, verified, still the only user and admin, with 4 live sessions.
+- **Not done yet:** real email delivery, and with it public registration. Both wait for the owner's provider credentials (`docs/ops/email.md`).
 
 ## Verification of `6033016` (2026-11-11, ~14:03Z)
 
@@ -94,4 +109,4 @@ every migration was additive).
 
 ## Awaiting deployment
 
-Nothing: `6033016` is live.
+Nothing: `8ce4860` is live.
