@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-16 22:24:33 | `675d8de` | Color & Mixing: the wheel and all six harmonies on one screen ("Wheel & Harmonies"); a swatch click copies its HEX with feedback; a harmony's dots on the wheel make its colours the base. Study, Measure, Grid, Compare unchanged. Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 22:24:29) |
 | 2026-11-16 19:56:33 | `225ba58` | Sketch: Clean Outline and Pencil Study replace the black-and-white trace, drawn in a Web Worker (approved by the owner after a visual review; Color and Values unchanged). Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 19:56:29) |
 | 2026-11-16 11:08:59 | `186d2a4` | Email forms keep what was typed, or filled in by a password manager, before the page finished loading (`186d2a4`; it caused CI run 12's one failure), after docs `d240cb5`. Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 11:08:55) |
 | 2026-11-16 10:46:37 | `b22a510` | Google-only public sign-in: one button, no separate registration, password endpoints switched off (`b22a510`, after docs `23ff423`). **Settings changed after the release, 10:47Z:** `AUTH_SIGNUP_MODE=open`, `AUTH_EMAIL_PASSWORD=off`, `MAIL_TRANSPORT=disabled`; previous file in `/root/backups/google-only-20261116T104716Z/` | 42 indexes ensured; no data changed | yes (release step, 10:46:29) |
@@ -37,6 +38,21 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Verification of `675d8de` (2026-11-16, ~22:25Z)
+
+- **Before the release:** CI run 17 green on `675d8de` (completed by 22:22Z). Locally the same: 303 unit/integration and 184 e2e tests.
+- **The release log** (`studio-release-675d8de`, result success):
+  - dependencies 22:22:36, build 22:23:33, dump 22:24:29;
+  - migration ("42 indexes ensured", no data changed);
+  - healthy 22:24:33.
+- **Over HTTPS:**
+  - `deploy/smoke.sh` 20/20;
+  - health ok on `675d8de`, built 22:23:34Z;
+  - the studio chunk with the new Color code (`3yy-dj-opilwk.js`, 389 KB) served as JavaScript;
+  - `/app/color` sends signed-out visitors to sign-in.
+- **Not checked here:** Color & Mixing in a signed-in session on staging. Sign-in is Google only, with the owner's account, so this is the owner's iPhone check.
+- **Releases kept:** `675d8de 225ba58 186d2a4 b22a510 8ce4860` (`6033016` pruned). To roll back instantly, point `current` at `225ba58` and restart.
 
 ## Verification of `225ba58` (2026-11-16, ~19:57Z)
 
@@ -161,4 +177,4 @@ every migration was additive).
 
 ## Awaiting deployment
 
-Nothing: `225ba58` is live, Google only.
+Nothing: `675d8de` is live, Google only.
