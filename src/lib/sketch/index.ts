@@ -1,24 +1,38 @@
 /**
- * Deterministic black & white vector trace.
+ * The sketch engine: Clean Outline and Pencil Study.
  *
- *   const source = buildTraceSource(imageData);   // once per image
- *   const result = traceImage(source, settings);  // per control change
- *   renderTraceToCanvas(result, canvas);
- *   traceToSvg(result);                           // the same paths, scalable
+ *   pipeline.ts   the engine for one picture, staged and cached (DOM-free)
+ *   styles.ts     the two styles, their approved parameters and the controls
+ *   vector.ts     Clean Outline as true vector shapes (SVG)
+ *   sizing.ts     working and export sizes, and their memory limits
+ *   client.ts     the page's side of the worker (coalesces slider changes)
+ *   browser.ts    reading photo pixels, encoding PNGs, starting the worker
  *
- * The filter makes no editorial decisions: how much black, how much
- * simplification and how much detail survives are set by the operator. See
- * `trace.ts` for what each control does.
+ * Everything heavy runs in a Web Worker (sketch.worker.ts). The engine is
+ * deterministic: the same photo and settings give the same pixels everywhere.
  */
 
+export { SketchPipeline, OUTLINE_LAYERS, type PipelineStats } from './pipeline';
 export {
-  buildTraceSource,
-  traceImage,
-  DEFAULT_TRACE,
-  TRACE_PRESETS,
-  type TraceSettings,
-  type TraceSource,
-  type TraceResult,
-} from './trace';
-export { renderTraceToCanvas, type RenderOptions } from './render';
-export { traceToSvg, loopPath, simplify, type PathSink } from './vector';
+  DEFAULT_CONTROLS,
+  normalizeControls,
+  lineWeight,
+  detailMapping,
+  pencilShading,
+  type SketchControls,
+  type SketchStyle,
+} from './styles';
+export { inkToPathLayers, pathLayersToSvg, isoLoops, simplify, type PathLayer, type VectorLayer } from './vector';
+export {
+  DESKTOP_LIMITS,
+  MOBILE_LIMITS,
+  MAX_CANVAS_PIXELS,
+  fitSize,
+  previewSize,
+  pencilExportSize,
+  outlineExportSize,
+  type SketchLimits,
+  type Size,
+} from './sizing';
+export { SketchClient, SketchError, type SketchImage, type WorkerLike, type PixelEncoder } from './client';
+export type { SketchView, SketchRequest, SketchResponse, RenderTimings } from './protocol';

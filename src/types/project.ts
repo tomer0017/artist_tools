@@ -35,49 +35,49 @@ export interface ValueSettings {
   mode?: 'grayscale' | 'color' | 'painter' | 'sketch';
   levels?: number;
   focus?: 'none' | 'shadow' | 'highlight' | 'squint';
-  // Sketch mode only. The vector-trace controls, owned entirely by the user —
-  // the engine makes no editorial decisions about what to keep. See
-  // src/lib/sketch/trace.ts for what each one does.
-  sketchTrace?: SketchTraceSettings;
-  // Legacy Sketch fields, kept so older saved projects still load. The trace
+  // Sketch mode: which of the two styles is shown, and each style's own
+  // controls (0–100, 50 = default). See src/lib/sketch/styles.ts.
+  sketchStyle?: SketchStyleId;
+  sketchOutline?: SketchOutlineSettings;
+  sketchPencil?: SketchPencilSettings;
+  // Legacy Sketch fields: the black-and-white vector trace's controls (until
+  // November 2026) and, before them, sketchDetail / sketchShading. Kept so
+  // projects saved with them still load and keep them; the current Sketch
   // ignores them.
+  sketchTrace?: SketchTraceSettings;
   sketchDetail?: number;
   sketchShading?: boolean;
 }
 
-// Mirrors TraceSettings in src/lib/sketch/trace.ts. All values are 0–100 and
-// resolution-independent, so a saved project reproduces the same drawing at any
-// processing size.
-export interface SketchTraceSettings {
-  /** How much of the image becomes black. */
-  ink: number;
-  /** How small a shape is allowed to remain. */
+/** Clean Outline or Pencil Study. */
+export type SketchStyleId = 'outline' | 'pencil';
+
+export interface SketchOutlineSettings {
+  /** Finer ← 50 → bolder lines. */
+  lineWeight: number;
+  /** Main contours only ← 50 → every faint edge. */
   detail: number;
-  /** How far apart the lights and darks are pushed before thresholding. */
-  separation: number;
-  /** Trace the lights instead of the darks. */
-  invert: boolean;
-  /** Advanced: edge-preserving pre-blur. */
-  smoothing: number;
-  /** Advanced: 0 = one global threshold; 1–50 = local reference radius (% of diagonal). */
-  local: number;
-  /** Advanced: how tightly the paths follow the pixels. */
-  simplify: number;
-  /** Advanced: sharp polygon corners → fully rounded curves. */
-  corners: number;
 }
 
-// Mirrors DEFAULT_TRACE in src/lib/sketch/trace.ts.
-export const DEFAULT_SKETCH_TRACE: SketchTraceSettings = {
-  ink: 45,
-  detail: 60,
-  separation: 30,
-  invert: false,
-  smoothing: 55,
-  local: 8,
-  simplify: 40,
-  corners: 60,
-};
+export interface SketchPencilSettings extends SketchOutlineSettings {
+  /** Lighter ← 50 → deeper graphite. */
+  shading: number;
+}
+
+export const DEFAULT_SKETCH_OUTLINE: SketchOutlineSettings = { lineWeight: 50, detail: 50 };
+export const DEFAULT_SKETCH_PENCIL: SketchPencilSettings = { lineWeight: 50, detail: 50, shading: 50 };
+
+/** Legacy: the retired black-and-white trace's controls, as older projects saved them. */
+export interface SketchTraceSettings {
+  ink: number;
+  detail: number;
+  separation: number;
+  invert: boolean;
+  smoothing: number;
+  local: number;
+  simplify: number;
+  corners: number;
+}
 
 export interface SampledColor {
   id: string;
@@ -165,7 +165,7 @@ export const DEFAULT_VALUE_SETTINGS: ValueSettings = {
   // users can still drop to 3/5/7 for composition/block-in or push to 11/13.
   levels: 9,
   focus: 'none',
-  sketchTrace: DEFAULT_SKETCH_TRACE,
+  sketchStyle: 'outline',
 };
 
 export const genId = () => Math.random().toString(36).slice(2, 10);

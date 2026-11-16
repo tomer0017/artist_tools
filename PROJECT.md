@@ -557,8 +557,7 @@ Processing runs on an offscreen `<canvas>` and is capped at `MAX_PROCESS_DIM`
 
 1. **Pre-blur** proportional to mode (squint > painter > color > grayscale) so
    palette quantization yields clean color masses instead of speckle. Sketch
-   mode gets **no** pre-blur — the sketch engine runs its own edge-preserving
-   denoise and a plain Gaussian would soften exactly the boundaries it needs.
+   mode gets **no** pre-blur (in Sketch this pass only builds the palettes).
 2. **Contrast** via a per-channel LUT around 127.5. **Brightness** is
    *hue-preserving*: it converts each pixel to HSL, moves lightness toward 0 or
    1, preserves hue, and only eases saturation near white — so bright greens stay
@@ -585,13 +584,10 @@ Processing runs on an offscreen `<canvas>` and is capped at `MAX_PROCESS_DIM`
      softens saturation for a gouache-like look (`hslToRgb`).
    - *Focus modes:* shadows/highlights fade the non-focus bins toward mid-gray;
      "squint" just increases blur. **Isolation** hides all but one selected bin.
-   - *Sketch mode:* delegates entirely to the vector trace (`lib/sketch/`,
-     below). The grayscale source is cached on `[image, contrast, brightness,
-     size]` in a ref, so moving a control re-runs only the trace itself.
-     Renders PNG rather than JPEG — JPEG ringing around black lines
-     on white paper reads as noise the artist has to filter out. Focus and
-     isolation don't apply; the value/dominant palettes are still built,
-     because they remain useful reference while drawing.
+   - *Sketch mode:* the drawing comes from the sketch engine in a Web Worker
+     (`lib/sketch/`, below; `useSketchDrawing`). This pass still runs, without
+     pre-blur, to build the value and dominant palettes, which the palette and
+     study-sheet exports use; it no longer touches the image shown.
 6. **Value groups** (the distribution strip / palette rows) are rebuilt from the
    per-bin averages with percentage coverage, hex, warmth, and paint hint.
 
@@ -599,124 +595,106 @@ Processing runs on an offscreen `<canvas>` and is capped at `MAX_PROCESS_DIM`
 reused across the strip, palette rows, and the exported study sheet so labels
 stay consistent.
 
-### Vector trace (`lib/sketch/`)
+### Sketch engine (`lib/sketch/`)
 
-Sketch mode is a **deterministic black & white vector trace** — the same kind of
-filter as Illustrator's Image Trace or a Photoshop Threshold workflow. Given the
-same pixels and the same settings it produces exactly the same paths, every
-time.
+Sketch mode has two styles, chosen under the image:
 
-It makes **no editorial decisions**. It has no notion of faces, hair, subjects,
-backgrounds or importance, and it never decides what is worth keeping. How much
-black, how much simplification and how much detail survives are the operator's
-calls, on the controls. (An earlier version scored contours by "would a painter
-draw this?"; it was replaced because the tool should be predictable, not
-opinionated.)
+- **Clean Outline:** thin dark contours on white (never black fills), plus
+  lighter lines for soft shadow boundaries. Saves as PNG or as a true vector
+  SVG.
+- **Pencil Study:** graphite tones with soft transitions (the darkest is 30–38 %
+  grey, never a black mass), a fine directional grain, and the same contours
+  in grey on top.
+
+Both were chosen in a visual review against the retired black-and-white trace
+(lab/sketch, untracked; approved 2026-11-16). At the default controls the app
+reproduces the approved review images byte for byte (0 of 1,572,291 pixels
+differ, both styles).
+
+Everything is deterministic, DOM-free TypeScript on Float32 planes. Spatial
+settings are multiples of u = sqrt(w·h)/1000, so a drawing looks the same at
+any working size.
 
 ```
-buildTraceSource(imageData)     -> TraceSource   (grayscale; once per image)
-traceImage(source, settings)    -> TraceResult   (per control change)
-renderTraceToCanvas(result, canvas)
-traceToSvg(result)                               (the same paths, scalable)
+lightness (CIE L*, percentile-stretched) → logarithmic shadow lift
+  → domain-transform edge-preserving smoothing (Gastal & Oliveira)
+  → structure-tensor edge directions
+  → flow-based DoG (Kang 2007, separable form of Kyprianidis 2008)   ← shared by both styles
+  → soft threshold → hysteresis + small-stroke removal               ← Detail
+  → line weight: narrow toward the centre / round soft brush        ← Line thickness
+Clean Outline: + soft-boundary ridges (coarse Canny with absolute lightness steps), suppressed near contours
+Pencil Study:  graphite tone (edge-preserving, large dark areas lifted) + grain scaled by darkness and form ← Shading
 ```
 
 | File | Role |
 | --- | --- |
-| `trace.ts` | the filter: settings, presets, and the pipeline below |
-| `imageOps.ts` | luminance, box/Gaussian blur, domain-transform smoothing |
-| `regions.ts` | sliding-window max, binary morphology, connected components, hole filling, marching-squares boundaries |
-| `vector.ts` | RDP simplification, polygon → path (canvas or SVG), SVG document |
-| `render.ts` | canvas output |
+| `pipeline.ts` | `SketchPipeline`: the engine for one picture, staged and cached |
+| `planes.ts` | `PlanePool` (buffer reuse and memory accounting) and the image primitives |
+| `lines.ts` | tangent field, flow DoG, soft ridges, hysteresis, cleanup, line weight |
+| `styles.ts` | the approved parameters, and how the three controls map onto them |
+| `vector.ts` | marching squares with interpolation → RDP → even-odd SVG paths |
+| `sizing.ts` | working and export sizes, and their limits |
+| `protocol.ts`, `worker-core.ts`, `sketch.worker.ts` | the Web Worker |
+| `client.ts` | the page's side: one render in flight, only the newest waits |
+| `browser.ts` | reading photo pixels (in halving steps), PNG encoding, vector → PNG |
+| `settings.ts` | saved-project settings, including the retired trace's |
 
-#### Controls
+**Off the main thread.** `useSketchDrawing` (components/value) reads the photo
+once at the working size and transfers it to the worker. Each control change
+asks only for a render; the worker answers from cached stages and encodes the
+PNG itself (OffscreenCanvas, or the page does it on older browsers). Slider
+changes are coalesced (`SketchClient`): nothing queues up. Leaving Sketch shuts
+the worker down after 20 s, which returns all its memory.
 
-Two primary controls live permanently under the image; the rest are behind
-**More controls**, with a **Reset** back to the recommended default. All values
-are 0–100 and resolution-independent, so a saved project reproduces the same
-drawing at any processing size — raw pixel counts mean nothing to a painter and
-mean something different on every image size.
+**Caching.** Per picture: the DoG response (both styles), the soft ridges
+(Outline), the graphite curve, form and grain (Pencil, built when first asked
+for). Per Detail: which lines. Per Line thickness: their width. Per Shading:
+only the final compose. Measured on the review portrait (1269 × 1239, Node on
+an M-series Mac): first Clean Outline ≈ 1.3 s, first Pencil Study after it
+≈ 0.7 s, a Detail or Line thickness change ≈ 0.15–0.2 s, a Shading change
+≈ 45 ms.
 
-| Control | What it does |
-| --- | --- |
-| **Ink** | How much of the image becomes black. |
-| **Detail** | Removes tiny shapes and keeps the main forms clean. |
-| **Separation** | Makes light and dark areas easier to tell apart (black/white point stretch + S-curve, applied before thresholding). |
-| **Invert** | Trace the lights instead of the darks. |
-| *Advanced:* Smoothing | How much fine texture reaches the threshold. |
-| *Advanced:* Local threshold | 0 = one level for the whole frame; above 0, a local reference radius. Raise it when the lighting is uneven. |
-| *Advanced:* Simplify / Corners | Path fitting, and sharp corners → rounded curves. |
+**Memory.** Every full-size buffer comes from a `PlanePool`, so the footprint
+is a fixed number of planes: about 68 bytes per pixel at the peak and 48 held
+with both styles cached (pipeline.test.ts checks ≤ 72 and ≤ 52). Phones and
+tablets use the compact mode (only the active style's caches are held: ≤ 24–36
+bytes per pixel) and keep at most two spare planes.
 
-Read-outs are words (`Medium`, `Clean`) rather than numbers, because the
-painter is judging the picture, not reproducing a level. The raw threshold and
-the resolved minimum shape size are shown at the bottom of Advanced for anyone
-who does want to reproduce one.
+| Limit | Desktop | Phone / tablet |
+| --- | --- | --- |
+| On-screen drawing (both styles) | 1.6 MP, 1600 px | 1.6 MP, 1600 px |
+| Saved Clean Outline PNG (drawn from the vector paths) | longest side 3200 px | 2400 px |
+| Saved Pencil Study PNG (recomputed in a short-lived worker; the on-screen caches are freed first and on-screen renders wait until it is done) | 4.2 MP | 2.5 MP |
+| SVG (Clean Outline) | the on-screen paths, opening at the photo's size | same |
 
-**The mappings are measured, not guessed**, and both were wrong on the first
-attempt in instructive ways:
+Never above the photo's own size (except the outline, whose paths scale
+cleanly), never above 16 MP for a canvas (iOS).
 
-- **Ink → threshold ratio, 0.30–0.62.** Sweeping a portrait: ~0.32 keeps only
-  the darkest accents, 0.46 is a clean readable portrait, 0.56 is a bold
-  stencil, past 0.65 the face floods. The first mapping spanned 0.44–0.96 and
-  put that entire band inside the first tenth of the slider — the other nine
-  tenths produced a black mask. Getting the *band* right matters more than the
-  curve on top of it.
-- **Detail → smallest surviving shape, up to 0.05% of the frame.** The ceiling
-  is set by anatomy: an iris covers roughly 0.12% of a frame-filling portrait,
-  a nostril 0.02%, and texture speckle sits below 0.01%. The first ceiling of
-  0.6% cleared backgrounds beautifully and took both eyes with it.
+**Controls** (0–100, 50 = the approved look, Reset per style, word read-outs):
 
-A consequence worth knowing: **an area threshold cannot separate a clump of
-foliage from an iris** — they are the same number of pixels. Texture is
-therefore removed by *Smoothing*, before the threshold, where it is still
-distinguishable. That is why the default leans on Smoothing (55) more than it
-looks like it should.
+| Control | Styles | What it does |
+| --- | --- | --- |
+| Line thickness | both | Below 50, each contour keeps only the part of its cross-section above a share of its own peak response, so it narrows toward its centre without vanishing. Above 50, a round, soft-edged brush up to 2u px. Soft lines scale with it. |
+| Detail | both | Above 50, fainter edges join in (threshold × 0.5 at 100) and smaller strokes survive. Below 50, the threshold stays and weaker strokes are dropped whole (a stroke must reach up to 3.5× the default response at its strongest point), so the main contours stay at full weight instead of fading. |
+| Shading | Pencil Study | Below 50, the whole tone lightens to a wash (darkest 0.25). Above 50, the darkest graphite only goes from 38 % to 30 % grey and the mid-tones deepen, so it never becomes a black mass. |
 
-#### The pipeline
+**Overlay.** The drawing's lines in red over a lightened grey copy of the photo,
+for checking them against it. On desktop it is a fourth Compare option (Sketch
+only); on the phone, a view next to Original and Study.
 
-0. **Separation** — an optional black/white point stretch (from the image's own
-   2nd/98th percentiles) plus a gentle S-curve, applied after smoothing and
-   before thresholding. Deliberately *not* a local-contrast method: CLAHE and
-   friends pull skin texture and JPEG blocking back out of the noise floor that
-   the smoothing pass just removed.
-1. **Smoothing** — a domain-transform recursive filter rather than a Gaussian.
-   It flattens texture while leaving real boundaries where they were; a Gaussian
-   strong enough to remove the texture also drags every edge with it, and the
-   threshold would land somewhere other than on the shapes the operator sees.
-2. **Threshold** — global, or against a local reference. The local reference is
-   a sliding-window **maximum**, not a mean: a mean is dragged down by the very
-   area it measures, so a large dark mass reads as no darker than its own
-   interior and comes out hollow.
-3. **Noise** — an opening removes black specks, a closing removes white
-   pinholes, and a connected-components pass drops anything below the area the
-   operator set, in both directions.
-4. **Paths** — marching squares over the cleaned mask, RDP-simplified, drawn
-   with the corner treatment. Every loop goes into one **even-odd** path: under
-   that rule a loop inside a loop *is* a hole, so eyes, gaps and enclosed
-   highlights come out right with no outer/inner bookkeeping.
+**Known limits.**
+- Lines sit about 2 px inside the dark side of an edge, like a pen line drawn
+  along a shadow.
+- A very noisy dark area (a high-ISO shadow) can show small specks: the shadow
+  lift that finds an ear in shadow lifts the noise too. Lowering Detail to
+  about 30 removes them and keeps the contours (tested).
+- Dense hair becomes many short strokes.
+- A busy background gives many lines.
 
-**White holes are cleaned independently of black shapes**, and far more
-conservatively. An eye white, the slot between a brow and a lid, the gap
-between a moustache and a lip are all small — judging them by size alone closes
-the eyes. A pocket is filled only if it is well below the black threshold *and*
-the wrong shape: a thin sliver is an artifact, something roughly round and
-solidly filled is a feature. The morphological closing is likewise held to half
-the opening radius, because closing is the operation that swallows the gap
-between a brow and an eye.
-
-Grayscale conversion is cached per image, and the smoothing and local-reference
-passes are memoised on their own setting, so dragging Threshold, Noise, Simplify
-or Corners re-runs only the cheap half.
-
-Output is PNG on canvas (JPEG ringing along a hard black/white boundary is very
-visible) and SVG on export — the SVG is the same polygons as the screen, not a
-re-trace of the bitmap.
-
-`trace.test.ts` covers what "deterministic" has to mean: identical output for
-identical input, independence from the order controls were changed in, monotone
-coverage in Threshold, all-black and all-white at the extremes, Noise removing
-only small features, Simplify reducing points, Invert complementing coverage,
-the local threshold surviving a lighting ramp a global one cannot, and
-out-of-range settings being clamped rather than misbehaving.
+**Saved projects.** `valueSettings.sketchStyle`, `sketchOutline` and
+`sketchPencil` hold the new state. The retired trace's `sketchTrace` (and the
+older `sketchDetail` / `sketchShading`) are still accepted and kept untouched;
+such a project opens in Sketch as Clean Outline at the defaults.
 
 ### Grid & Measure geometry
 - **Grid** math (`GridTab`) computes a fit scale so the image fills the chosen
@@ -854,8 +832,9 @@ Photos library or choose which share targets iOS shows, so the flow opens the
 best native path and guides the user.
 
 - `src/lib/sketch/` — the Sketch-mode engine (see "Sketch engine" above).
-  Pure TypeScript; `analyzeSketch()` needs no DOM, `renderSketchToCanvas()` is
-  the only part that touches a canvas. Tests: `src/lib/sketch/pipeline.test.ts`.
+  Pure TypeScript run in a Web Worker; `browser.ts` is the only part that
+  touches the DOM. Tests: `src/lib/sketch/{pipeline,client,sizing,settings}.test.ts`
+  and `e2e/sketch.spec.ts`.
 - `src/lib/saveMedia.ts` — pure helpers: `mimeForFilename`/`extForMime`,
   `makeShareFile`, `canShareFile` (wraps `navigator.canShare({files:[file]})`),
   `shareFile` (calls `navigator.share({files:[file]})` — **file only**, no
@@ -1118,3 +1097,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-11 | **Backups verified by a real restore; missing auth indexes added.** `deploy/backup-offsite.sh` (checks the newest dump is recent, complete and readable by mongorestore; writes a manifest with size, SHA-256 and live document counts; when `/etc/studio-companion/offsite.conf` exists, encrypts with `age` to the owner's public key, uploads with `rclone --immutable` and checks the upload; healthchecks.io pings) and `deploy/restore-drill.sh` (restores one database into a throwaway one, compares counts with the manifest or the live database, checks unique indexes, drops it; the admin password never on the command line). Run on staging: restored in 4 s, counts OK. The drill found that Better Auth's MongoDB adapter creates no indexes: `users.email` unique, `sessions.token` unique and the userId/identifier lookups are now in the migration. Off-site copies wait for the owner's B2 bucket, age key and healthchecks.io check (docs/ops/backups.md, exact steps). vitest test timeout 20 s (integration tests migrate throwaway databases in parallel). Admin pages added to the regular-user 404 test. | deploy/{backup-offsite.sh,restore-drill.sh,cron/studio-offsite-backup} (new), src/server/db/migrate.ts, vitest.config.ts, e2e/accounts.spec.ts, docs/ops/backups.md, docs/launch/checklist.md, PROJECT.md |
 | 2026-11-11 | **Studio zoom limit narrowed to iOS.** The studio no longer sends `maximum-scale=1`; on iPhone and iPad only, `useIosNoInputZoom` (StudioClient) adds it after load, where Safari ignores it for pinch-zoom but stops zooming into small fields. Android and desktop can zoom the page; every tool canvas already handles its own pinch (`touch-action: none`). The accessibility spec's documented exception now applies to WebKit iPhone emulation only, and a test checks both cases. | src/components/shell/StudioClient.tsx, src/app/app/layout.tsx, e2e/accessibility.spec.ts, docs/accessibility/README.md, PROJECT.md |
 | 2026-11-11 | **Phase 3b-2 — the five tools in Hebrew.** Measure (138 messages), Study (139), Color (103) and Grid (36), Compare (263), translated in parallel by four agents in isolated worktrees from one brief (English verbatim, gender-neutral Hebrew, canvases and coordinate-based controls kept left to right, nothing drawn or exported changed), each checked by its agent against the original components' English output in jsdom, then merged; plus the shared parts (header, upload, save sheet, Pro notice — `PRO_FEATURE_INFO` moved into the messages —, tours restructured into structure + messages, illustrations). `ToolFrame` removed. New e2e: the five tools in Hebrew (photo loaded, Hebrew controls, canvases left to right) and on a Hebrew phone without sideways scrolling; visual review of the Hebrew phone screenshots. English unchanged: visual parity 36/36. | src/components/{measure,value,color,grid}/*, src/features/compare-art/*, src/components/common/{ImageUploader,SaveMedia,ProFeature}.tsx, src/components/shell/{Studio,ToolHeader,ToolArt}.tsx, src/onboarding/*, src/i18n/messages/tools/*, src/lib/plans.ts, src/app/app/layout.tsx, e2e/i18n.spec.ts, docs/adr/0009, PROJECT.md |
+| 2026-11-16 | **Sketch: Clean Outline and Pencil Study replace the black-and-white trace.** Chosen in a visual review (lab/sketch, untracked; Outline A flow lines + Pencil A graphite, approved by the owner). New engine in `src/lib/sketch/` (flow-based DoG on an edge-preserving, shadow-lifted lightness plane; soft-boundary ridges; graphite tone and grain), byte-identical to the approved review images at the default controls. Runs in a Web Worker with staged caches (a control change recomputes only what depends on it; slider changes coalesced), a `PlanePool` memory budget checked in tests, compact mode on phones, and limits: on screen ≤ 1.6 MP; saved outline PNG drawn from the vector paths (≤ 3200 px, 2400 on phones); saved pencil recomputed in a short-lived worker (≤ 4.2 MP, 2.5 on phones); SVG for Clean Outline only, real paths and no raster. Controls: Line thickness, Detail, Shading (Pencil), Reset per style, English and Hebrew. Red outline overlay as a Compare option (desktop) and a view (phone). The old trace's code and strings removed; its saved settings still load and stay untouched. Color and Values verified unchanged: 75 of 75 captured states identical to the previous release (5 photos × 15 control states). An independent code review found one real bug before release (a late result for a style switched away from could replace the drawing on screen), fixed with the reviewer's other points (export holds on-screen renders, worker queue survives a failed request, no old-photo frame, no URL after unmount). Tests: 36 new unit tests (determinism and golden hashes, geometry, no solid black, controls, caching, memory, overlay, SVG vs raster, sizes, settings migration, worker client, and the hook: stale results, photo change, unmount mid-encode, export hold; each hook fix checked to fail without it); 11 new e2e (Chromium, WebKit iPhone emulation: worker, controls, Reset, overlay, PNG/SVG saves at full size, legacy project, Hebrew, axe). Totals: 280 unit/integration, 171 e2e. | src/lib/sketch/* (rewritten), src/components/value/{ValueTab.tsx,useSketchDrawing.ts}, src/types/project.ts, src/i18n/messages/tools/study.ts, e2e/{sketch.spec.ts (new),fixtures/photo.ts}, playwright.config.ts, PROJECT.md |

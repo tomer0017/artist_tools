@@ -46,3 +46,41 @@ export function makePng(w: number, h: number): Buffer {
 }
 
 export const photo = { name: 'reference.png', mimeType: 'image/png', buffer: makePng(300, 400) };
+
+/**
+ * A larger reference for Sketch: a shaded dark disc and a thin dark line on a
+ * light, gently graded ground (RGB). Big enough that the on-screen drawing is
+ * worked at a reduced size and saving produces a larger file.
+ */
+export function makeSketchPng(w: number, h: number): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  const raw = Buffer.alloc(h * (w * 3 + 1));
+  const cx = w * 0.36;
+  const cy = h * 0.5;
+  const r = Math.min(w, h) * 0.3;
+  let p = 0;
+  for (let y = 0; y < h; y++) {
+    raw[p++] = 0;
+    for (let x = 0; x < w; x++) {
+      const d = Math.hypot(x - cx, y - cy);
+      let v = 200 + (20 * x) / w;
+      if (d < r) v = 40 + 50 * (d / r) ** 2;
+      if (Math.abs(y - (h * 0.2 + 0.3 * (x - w * 0.6))) < 2 && x > w * 0.62 && x < w * 0.95) v = 55;
+      raw[p++] = Math.round(v);
+      raw[p++] = Math.round(v * 0.92);
+      raw[p++] = Math.round(v * 0.85);
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+export const sketchPhoto = { name: 'portrait.png', mimeType: 'image/png', buffer: makeSketchPng(2000, 1500) };

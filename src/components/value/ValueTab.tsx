@@ -5,16 +5,18 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
 import {
   Sun, Moon, Eye, Palette as PaletteIcon, Brush, Layers,
-  SlidersHorizontal, X, Maximize2, Minimize2, Download, Image as ImageIcon,
-  Contrast, PencilLine, ChevronDown, RotateCcw, Replace,
+  SlidersHorizontal, X, Maximize2, Minimize2, Download,
+  Contrast, PencilLine, RotateCcw, Loader2,
 } from 'lucide-react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { dataUrlToBlob } from '@/lib/saveMedia';
+import type { SketchView } from '@/lib/sketch/protocol';
+import { activeControls, resolveSketch } from '@/lib/sketch/settings';
 import {
-  buildTraceSource, traceImage, renderTraceToCanvas, traceToSvg,
-  TRACE_PRESETS, type TraceSource, type TraceResult,
-} from '@/lib/sketch';
-import { DEFAULT_SKETCH_TRACE, type SketchTraceSettings } from '@/types/project';
+  DEFAULT_SKETCH_OUTLINE, DEFAULT_SKETCH_PENCIL,
+  type SketchOutlineSettings, type SketchPencilSettings, type SketchStyleId,
+} from '@/types/project';
+import { useSketchDrawing } from './useSketchDrawing';
 import Slider from '@/components/common/Slider';
 import ToolHeader from '@/components/shell/ToolHeader';
 import ToolEmptyState from '@/components/shell/ToolEmptyState';
@@ -192,7 +194,7 @@ function dominantLabel(fam: HueFamily, band: 'dark' | 'mid' | 'light', hsl: { h:
 }
 
 export default function ValueTab() {
-  const { image, valueSettings, setValueSettings } = useProject();
+  const { image, valueSettings, setValueSettings, activeTab } = useProject();
   const { save } = useSaveMedia();
   const t = useTranslations('studyTool');
   const [localImage, setLocalImage] = useState<string | null>(null);
@@ -202,26 +204,14 @@ export default function ValueTab() {
   const [paletteView, setPaletteView] = useState<PaletteView>('dominant');
   const [isolatedIdx, setIsolatedIdx] = useState<number | null>(null);
   const [showMobileControls, setShowMobileControls] = useState(false);
-  const [mobileView, setMobileView] = useState<'processed' | 'original' | 'palette'>('processed');
+  // 'overlay' (Sketch only): the drawing's lines in red over the photo.
+  const [mobileView, setMobileView] = useState<'processed' | 'original' | 'palette' | 'overlay'>('processed');
   const [compareSlider, setCompareSlider] = useState(50);
   const [showCompare, setShowCompare] = useState(false);
-  const [compareMode, setCompareMode] = useState<'slider' | 'side'>('slider');
+  const [compareMode, setCompareMode] = useState<'slider' | 'side' | 'overlay'>('slider');
   const [fullscreen, setFullscreen] = useState(false);
-  const [showMoreTrace, setShowMoreTrace] = useState(false);
-  // True only while a slider thumb is down. Drives the interactive (lower
-  // resolution) render so the preview keeps up with the finger; the moment the
-  // finger lifts, the same composition is re-rendered at full quality.
-  const [scrubbing, setScrubbing] = useState(false);
-  const [traceStats, setTraceStats] = useState({ threshold: 0, minShapePx: 0 });
+  const [savingSketch, setSavingSketch] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Grayscale conversion depends only on the pixels, so it is cached across
-  // control changes; the trace itself re-runs on every one of them.
-  const traceCache = useRef<{
-    image: string; contrast: number; brightness: number; w: number; h: number;
-    source: TraceSource;
-  } | null>(null);
-  // Kept so "Save SVG" exports exactly the paths on screen.
-  const traceResult = useRef<TraceResult | null>(null);
   const isMobile = useIsMobile();
 
   const activeImage = localImage || image;
@@ -232,11 +222,46 @@ export default function ValueTab() {
   const focus: Focus = (valueSettings.focus as Focus) || 'none';
   const contrast = valueSettings.contrast;
   const brightness = valueSettings.brightness;
-  const trace: SketchTraceSettings = { ...DEFAULT_SKETCH_TRACE, ...valueSettings.sketchTrace };
-  const setTrace = (patch: Partial<SketchTraceSettings>) =>
-    setValueSettings({ sketchTrace: { ...trace, ...patch } });
 
-  const updateMode = (m: Mode) => setValueSettings({ mode: m, grayscale: m === 'grayscale' });
+  // Sketch: two styles, each with its own controls (src/lib/sketch). Older
+  // projects' trace settings are left in place and ignored.
+  const sketch = resolveSketch(valueSettings);
+  const sketchControls = activeControls(sketch);
+  const setSketchStyle = (style: SketchStyleId) => setValueSettings({ sketchStyle: style });
+  const setSketchControl = (key: 'lineWeight' | 'detail' | 'shading', value: number) => {
+    if (sketch.style === 'pencil') setValueSettings({ sketchPencil: { ...sketch.pencil, [key]: value } as SketchPencilSettings });
+    else setValueSettings({ sketchOutline: { ...sketch.outline, [key]: value } as SketchOutlineSettings });
+  };
+  const resetSketch = () => {
+    if (sketch.style === 'pencil') setValueSettings({ sketchPencil: { ...DEFAULT_SKETCH_PENCIL } });
+    else setValueSettings({ sketchOutline: { ...DEFAULT_SKETCH_OUTLINE } });
+  };
+  const sketchAtDefaults = sketch.style === 'pencil'
+    ? sketch.pencil.lineWeight === 50 && sketch.pencil.detail === 50 && sketch.pencil.shading === 50
+    : sketch.outline.lineWeight === 50 && sketch.outline.detail === 50;
+  // The red overlay is a comparison: on desktop one of the Compare options,
+  // on the phone one of the views under the image.
+  const sketchOverlay = mode === 'sketch' && (isMobile ? mobileView === 'overlay' : showCompare && compareMode === 'overlay');
+  const sketchView: SketchView = sketchOverlay ? 'overlay' : 'drawing';
+  const drawing = useSketchDrawing({
+    // Study stays mounted (hidden) while another tool is open; Sketch only
+    // works, and holds memory, while it is the one on screen.
+    enabled: mode === 'sketch' && !!activeImage && activeTab === 'value',
+    image: activeImage,
+    style: sketch.style,
+    controls: sketchControls,
+    view: sketchView,
+  });
+
+  const updateMode = (m: Mode) => {
+    // The red overlay belongs to Sketch: leaving it turns that comparison off.
+    if (m !== 'sketch' && compareMode === 'overlay') {
+      setShowCompare(false);
+      setCompareMode('slider');
+    }
+    if (m !== 'sketch' && mobileView === 'overlay') setMobileView('processed');
+    setValueSettings({ mode: m, grayscale: m === 'grayscale' });
+  };
   const updateLevels = (l: number) => setValueSettings({ levels: l, posterize: l });
   const updateFocus = (f: Focus) => setValueSettings({ focus: f });
 
@@ -259,9 +284,8 @@ export default function ValueTab() {
       const ctx = canvas.getContext('2d')!;
 
       // Pre-blur reduces noisy speckle so palette quantization yields clean masses.
-      // Sketch deliberately gets none: the sketch engine runs its own
-      // edge-preserving denoise, and a plain Gaussian here would soften exactly
-      // the boundaries it needs to keep sharp.
+      // In Sketch this pass only feeds the value palette (the drawing itself
+      // comes from the sketch worker), so it keeps its old, unblurred input.
       const blur = focus === 'squint' ? 5 : mode === 'painter' ? 2.5 : mode === 'sketch' ? 0 : mode === 'color' ? 1.2 : 0;
       // NOTE: iOS Safari historically ignores ctx.filter for contrast()/brightness(),
       // so applying them via CSS filter silently no-ops on iPhone. Apply them
@@ -443,33 +467,11 @@ export default function ValueTab() {
       };
 
       if (mode === 'sketch') {
-        // === Sketch mode: a deterministic black & white vector trace ===
-        // src/lib/sketch/trace.ts is a filter, not an interpretation: the same
-        // pixels and the same settings always produce the same paths. It makes
-        // no judgement about faces, subjects or importance — how much black,
-        // how much simplification and how much detail survives are the
-        // operator's calls, on the controls below the image.
-        //
-        // Rendered as PNG: JPEG ringing along a hard black/white boundary is
-        // very visible and would read as noise the artist has to filter out.
-        const cached = traceCache.current;
-        const source =
-          cached && cached.image === activeImage && cached.contrast === contrast &&
-          cached.brightness === brightness && cached.w === w && cached.h === h
-            ? cached.source
-            : buildTraceSource({ data, width: w, height: h });
-        traceCache.current = { image: activeImage, contrast, brightness, w, h, source };
-        const result = traceImage(source, trace);
-        traceResult.current = result;
-        setTraceStats({ threshold: result.stats.threshold, minShapePx: result.stats.minShapePx });
-        // While a control is under the finger the preview is rendered at 1×;
-        // on release the same paths are re-rendered at 2×. Only the resolution
-        // changes, never the composition, so the picture does not appear to
-        // shift as the drag ends.
-        renderTraceToCanvas(result, canvas, { scale: scrubbing ? 1 : 2 });
-        setProcessedUrl(canvas.toDataURL('image/png'));
-        // Fall through below to build the value/dominant palettes (still useful
-        // reference while drawing), then skip the palette-quantization loop.
+        // === Sketch mode ===
+        // The drawing (Clean Outline or Pencil Study) is computed off the main
+        // thread by the sketch worker (useSketchDrawing). This pass only builds
+        // the value and dominant palettes below, which the palette and study
+        // sheet exports still use.
       } else {
       const usePalette = (mode === 'color' || mode === 'painter') && paletteRGB.length > 0;
       for (let i = 0, p = 0; i < data.length; i += 4, p++) {
@@ -570,14 +572,10 @@ export default function ValueTab() {
       }
     };
     img.src = activeImage;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeImage, mode, levels, focus, contrast, brightness, isolatedIdx,
-    trace.ink, trace.detail, trace.separation, trace.invert, trace.smoothing,
-    trace.local, trace.simplify, trace.corners, scrubbing]);
+  }, [activeImage, mode, levels, focus, contrast, brightness, isolatedIdx]);
 
   // Coalesce the burst of events a slider drag produces into one pass. The
-  // delay is short enough to still feel like the image updates as you drag,
-  // but stops the (heavier) sketch pipeline from queuing up per-pixel ticks.
+  // delay is short enough to still feel like the image updates as you drag.
   useEffect(() => {
     const id = window.setTimeout(processImage, 60);
     return () => window.clearTimeout(id);
@@ -596,25 +594,45 @@ export default function ValueTab() {
       .catch((error) => console.error('[ValueTab] Failed to prepare image for saving:', error));
   };
 
-  const exportProcessed = () => {
-    if (!processedUrl) return;
-    // Sketch output is line art on white — it is rendered and saved as PNG so
-    // the lines stay crisp for tracing / transferring.
-    if (mode === 'sketch') saveDataUrl(processedUrl, 'sketch.png', 'image/png');
-    else saveDataUrl(processedUrl, 'value-study.jpg', 'image/jpeg');
+  // Sketch drawings are saved as PNG (line art; JPEG would ring along every
+  // line), at the largest size the device's limits allow: Clean Outline is
+  // drawn from its vector paths, Pencil Study is recomputed at that size.
+  const exportSketchPng = async () => {
+    if (savingSketch) return;
+    setSavingSketch(true);
+    try {
+      const result = await drawing.savePng();
+      if (!result) return;
+      const filename = sketch.style === 'pencil' ? 'pencil-study.png' : 'clean-outline.png';
+      save({ blob: result.blob, filename, mime: 'image/png', title: t('save.imageTitle') });
+    } catch (error) {
+      console.error('[ValueTab] Failed to export the sketch:', error);
+    } finally {
+      setSavingSketch(false);
+    }
   };
 
-  // The trace is polygons all the way down, so the SVG is the same paths as the
-  // screen rather than a re-trace of the bitmap — scalable for large-format
-  // printing.
-  const exportSketchSvg = () => {
-    const result = traceResult.current;
-    if (!result) return;
+  const exportProcessed = () => {
+    if (mode === 'sketch') {
+      void exportSketchPng();
+      return;
+    }
+    if (!processedUrl) return;
+    saveDataUrl(processedUrl, 'value-study.jpg', 'image/jpeg');
+  };
+
+  // Clean Outline only: real vector shapes traced from the drawing on screen
+  // (no raster inside), opening at the photo's own size.
+  const exportSketchSvg = async () => {
+    if (savingSketch || sketch.style !== 'outline') return;
+    setSavingSketch(true);
     try {
-      const blob = new Blob([traceToSvg(result)], { type: 'image/svg+xml' });
-      save({ blob, filename: 'sketch.svg', mime: 'image/svg+xml', title: t('save.svgTitle') });
+      const blob = await drawing.saveSvg();
+      if (blob) save({ blob, filename: 'clean-outline.svg', mime: 'image/svg+xml', title: t('save.svgTitle') });
     } catch (error) {
       console.error('[ValueTab] Failed to export sketch SVG:', error);
+    } finally {
+      setSavingSketch(false);
     }
   };
 
@@ -645,14 +663,18 @@ export default function ValueTab() {
   };
 
   const exportStudySheet = async () => {
-    if (!activeImage || !processedUrl || !groups.length) return;
+    if (!activeImage || !groups.length) return;
+    // In Sketch the sheet shows the drawing (never the red overlay).
+    const sketchUrl = mode === 'sketch' ? await drawing.drawingUrl().catch(() => null) : null;
+    const procUrl = mode === 'sketch' ? sketchUrl : processedUrl;
+    if (!procUrl) return;
     try {
     const W = 1600, pad = 40, gap = 24, headerH = 60, stripH = 60, paletteH = 110, domH = 150;
     const orig = new Image(); const proc = new Image();
     orig.crossOrigin = 'anonymous'; proc.crossOrigin = 'anonymous';
     await Promise.all([
       new Promise<void>((res, rej) => { orig.onload = () => res(); orig.onerror = () => rej(new Error('original image failed to load')); orig.src = activeImage; }),
-      new Promise<void>((res, rej) => { proc.onload = () => res(); proc.onerror = () => rej(new Error('processed image failed to load')); proc.src = processedUrl; }),
+      new Promise<void>((res, rej) => { proc.onload = () => res(); proc.onerror = () => rej(new Error('processed image failed to load')); proc.src = procUrl; }),
     ]);
     const imgAreaW = (W - pad * 2 - gap) / 2;
     const ratio = orig.naturalHeight / orig.naturalWidth;
@@ -667,7 +689,9 @@ export default function ValueTab() {
     ctx.fillText('Value Study', pad, pad + 24);
     ctx.fillStyle = '#888';
     ctx.font = '13px Inter, sans-serif';
-    ctx.fillText(`${mode} • ${levels} values • dominant ${dominantWarmth}`, pad, pad + 44);
+    // English, like everything drawn into exported files.
+    const studyName = mode === 'sketch' ? (sketch.style === 'pencil' ? 'Pencil Study' : 'Clean Outline') : mode;
+    ctx.fillText(`${studyName} • ${levels} values • dominant ${dominantWarmth}`, pad, pad + 44);
     const yImg = pad + headerH;
     ctx.drawImage(orig, pad, yImg, imgAreaW, imgH);
     ctx.drawImage(proc, pad + imgAreaW + gap, yImg, imgAreaW, imgH);
@@ -718,6 +742,8 @@ export default function ValueTab() {
     saveDataUrl(c.toDataURL('image/png'), 'value-study-sheet.png', 'image/png');
     } catch (error) {
       console.error('[ValueTab] Failed to export value study sheet:', error);
+    } finally {
+      if (sketchUrl) URL.revokeObjectURL(sketchUrl);
     }
   };
 
@@ -845,28 +871,23 @@ export default function ValueTab() {
     </div>
   );
 
-  // Words, not numbers. A painter setting Ink is judging the picture, not
-  // reproducing a level — the raw threshold is available under More controls
-  // for anyone who does want to reproduce one.
+  // Words, not numbers: five bands over 0–100, the middle one holding the
+  // default of 50.
   const bandLabel = (v: number, bands: string[]) =>
     bands[Math.min(bands.length - 1, Math.floor((v / 100) * bands.length))];
-  const inkLabel = bandLabel(trace.ink, [
-    t('sketch.ink.minimal'), t('sketch.ink.light'), t('sketch.ink.medium'), t('sketch.ink.heavy'), t('sketch.ink.solid'),
+  const weightLabel = bandLabel(sketchControls.lineWeight, [
+    t('sketch.lineWeight.finest'), t('sketch.lineWeight.fine'), t('sketch.lineWeight.medium'),
+    t('sketch.lineWeight.bold'), t('sketch.lineWeight.heavy'),
   ]);
-  const detailLabel = bandLabel(trace.detail, [
-    t('sketch.detail.everything'), t('sketch.detail.fine'), t('sketch.detail.clean'), t('sketch.detail.simple'), t('sketch.detail.bold'),
+  const detailLabel = bandLabel(sketchControls.detail, [
+    t('sketch.detail.essential'), t('sketch.detail.simple'), t('sketch.detail.balanced'),
+    t('sketch.detail.detailed'), t('sketch.detail.everything'),
   ]);
-  const separationLabel = bandLabel(trace.separation, [
-    t('sketch.separation.off'), t('sketch.separation.gentle'), t('sketch.separation.medium'),
-    t('sketch.separation.strong'), t('sketch.separation.extreme'),
+  const shadingLabel = bandLabel(sketchControls.shading, [
+    t('sketch.shading.whisper'), t('sketch.shading.light'), t('sketch.shading.medium'),
+    t('sketch.shading.deep'), t('sketch.shading.deepest'),
   ]);
-  // The presets come from src/lib/sketch (English labels); named here by id.
-  const presetLabels: Record<string, string> = {
-    balanced: t('presets.balanced'),
-    graphic: t('presets.graphic'),
-    rich: t('presets.rich'),
-    fine: t('presets.fine'),
-  };
+  const sketchStyleName = sketch.style === 'pencil' ? t('sketch.pencil') : t('sketch.outline');
 
   // Names shown on screen follow the studio's language; the exported palette
   // and study sheet keep the English ones (brightnessLabel, dominantLabel).
@@ -881,25 +902,41 @@ export default function ValueTab() {
     return label;
   };
 
-  // A slider that keeps the preview moving with the finger: `onChange` fires on
-  // every pointermove and `onCommit` when it lifts, which is when the
-  // full-quality render happens.
-  const traceSlider = (
-    key: keyof SketchTraceSettings,
-    label: string,
-    readout: string,
-    hint: string,
-  ) => (
+  // The sketch worker coalesces renders, so the picture follows the finger
+  // without queueing up work.
+  const sketchSlider = (key: 'lineWeight' | 'detail' | 'shading', label: string, readout: string, hint: string) => (
     <Slider
       label={label}
-      value={trace[key] as number}
+      value={sketchControls[key]}
       min={0}
-      max={key === 'local' ? 50 : 100}
+      max={100}
       readout={readout}
-      hint={hint}
-      onChange={(v) => { setScrubbing(true); setTrace({ [key]: v } as Partial<SketchTraceSettings>); }}
-      onCommit={() => setScrubbing(false)}
+      // The phone keeps the image large: hints only where there is room.
+      hint={isMobile ? undefined : hint}
+      onChange={(v) => setSketchControl(key, v)}
     />
+  );
+
+  const SketchStylePicker = (
+    <div role="radiogroup" aria-label={t('sketch.styles')} data-testid="sketch-styles"
+      className="flex min-w-0 flex-1 rounded-lg bg-secondary/60 p-0.5">
+      {(['outline', 'pencil'] as const).map((s) => (
+        <button key={s} role="radio" aria-checked={sketch.style === s} onClick={() => setSketchStyle(s)}
+          className={`min-h-[40px] min-w-0 flex-1 truncate rounded-md px-2 text-xs font-semibold transition-colors ${
+            sketch.style === s ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'
+          }`}>
+          {s === 'outline' ? t('sketch.outline') : t('sketch.pencil')}
+        </button>
+      ))}
+    </div>
+  );
+
+  const SketchReset = (
+    <button onClick={resetSketch} disabled={sketchAtDefaults}
+      aria-label={t('sketch.resetLabel', { style: sketchStyleName })}
+      className="flex min-h-[40px] shrink-0 items-center gap-1 rounded-lg px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-40 disabled:hover:bg-transparent">
+      <RotateCcw className="h-3.5 w-3.5" />{t('sketch.reset')}
+    </button>
   );
 
   // Inline controls that live *permanently below the image* — the sliders a
@@ -910,15 +947,21 @@ export default function ValueTab() {
   const InlineImageControls = (
     <div data-onboarding="value-inline" className="w-full px-3 py-2 border-t border-border toolbar-surface shrink-0">
       {mode === 'sketch' ? (
-        // Ink and Detail are the two controls a vector trace is actually
-        // steered with, so they live permanently under the image and never
-        // require opening a panel.
-        <div className="flex flex-col sm:flex-row sm:gap-6">
-          <div className="flex-1 min-w-0">
-            {traceSlider('ink', t('sketch.ink.label'), inkLabel, t('sketch.ink.hint'))}
+        // The style and its controls stay under the image: they are what a
+        // drawing is steered with, so they never hide behind a panel.
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            {SketchStylePicker}
+            {SketchReset}
           </div>
-          <div className="flex-1 min-w-0">
-            {traceSlider('detail', t('sketch.detail.label'), detailLabel, t('sketch.detail.hint'))}
+          <div className={`grid grid-cols-2 gap-x-4 sm:gap-x-6 ${sketch.style === 'pencil' ? 'sm:grid-cols-3' : ''}`}>
+            {sketchSlider('lineWeight', t('sketch.lineWeight.label'), weightLabel, t('sketch.lineWeight.hint'))}
+            {sketchSlider('detail', t('sketch.detail.label'), detailLabel, t('sketch.detail.hint'))}
+            {sketch.style === 'pencil' && (
+              <div className="col-span-2 sm:col-span-1">
+                {sketchSlider('shading', t('sketch.shading.label'), shadingLabel, t('sketch.shading.hint'))}
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -954,74 +997,12 @@ export default function ValueTab() {
           </>
         )}
         {isSketch && (
-          <p className="text-[10px] text-muted-foreground">
-            {t('sketch.about')}
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            {sketch.style === 'pencil' ? t('sketch.aboutPencil') : t('sketch.aboutOutline')}
           </p>
         )}
       </div>
-      {isSketch ? (
-        <>
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{t('presets.title')}</p>
-              <button onClick={() => setTrace(DEFAULT_SKETCH_TRACE)}
-                className="flex items-center gap-1 text-[10px] text-primary hover:underline min-h-[44px] px-1">
-                <RotateCcw className="w-3 h-3" />{t('presets.reset')}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {TRACE_PRESETS.map((preset) => (
-                <button key={preset.id} onClick={() => setTrace(preset.settings)}
-                  className="py-2 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-                  {presetLabels[preset.id] ?? preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <button onClick={() => setShowMoreTrace((v) => !v)}
-              aria-expanded={showMoreTrace}
-              className="w-full flex items-center justify-between py-2 min-h-[44px] text-[11px] font-medium text-foreground">
-              <span>{t('sketch.more')}</span>
-              <ChevronDown className={`w-4 h-4 transition-transform ${showMoreTrace ? 'rotate-180' : ''}`} />
-            </button>
-            {showMoreTrace && (
-              <div className="space-y-2 pt-1">
-                {traceSlider('separation', t('sketch.separation.label'), separationLabel,
-                  t('sketch.separation.hint'))}
-                <button onClick={() => setTrace({ invert: !trace.invert })}
-                  className={`w-full flex items-center justify-center gap-1.5 min-h-[44px] rounded-md text-[11px] font-medium transition-colors ${
-                    trace.invert ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                  }`}>
-                  <Contrast className="w-3.5 h-3.5" />
-                  {trace.invert ? t('sketch.invertOn') : t('sketch.invertOff')}
-                </button>
-                <button onClick={exportSketchSvg}
-                  className="w-full flex items-center justify-center gap-1.5 min-h-[44px] rounded-md text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-                  <Download className="w-3.5 h-3.5" />{t('save.svg')}
-                </button>
-
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold pt-2">{t('sketch.advanced')}</p>
-                {traceSlider('smoothing', t('sketch.smoothing.label'), String(trace.smoothing),
-                  t('sketch.smoothing.hint'))}
-                {traceSlider('local', t('sketch.local.label'), trace.local === 0 ? t('sketch.local.global') : `${trace.local}%`,
-                  t('sketch.local.hint'))}
-                {traceSlider('simplify', t('sketch.simplify.label'), String(trace.simplify),
-                  t('sketch.simplify.hint'))}
-                {traceSlider('corners', t('sketch.corners.label'), String(trace.corners),
-                  t('sketch.corners.hint'))}
-                <p className="text-[9px] text-muted-foreground">
-                  {t(trace.local > 0 ? 'sketch.statsLocal' : 'sketch.stats', {
-                    threshold: String(traceStats.threshold),
-                    minShape: String(traceStats.minShapePx),
-                  })}
-                </p>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
+      {!isSketch && (
         <div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('levels.title')}</p>
           {LevelButtons}
@@ -1035,7 +1016,9 @@ export default function ValueTab() {
       )}
       <div>
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('compare.title')}</p>
-        <div className="flex gap-1.5">
+        {/* Sketch adds Overlay (its lines in red over the photo); the phone
+            offers it among the views under the image instead. */}
+        <div className={isSketch && !isMobile ? 'grid grid-cols-2 gap-1.5' : 'flex gap-1.5'}>
           <button onClick={() => { setShowCompare(true); setCompareMode('slider'); }}
             className={`flex-1 py-1.5 rounded text-[11px] font-medium transition-colors ${
               showCompare && compareMode === 'slider' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
@@ -1044,6 +1027,12 @@ export default function ValueTab() {
             className={`flex-1 py-1.5 rounded text-[11px] font-medium transition-colors ${
               showCompare && compareMode === 'side' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
             }`}>{t('compare.side')}</button>
+          {isSketch && !isMobile && (
+            <button onClick={() => { setShowCompare(true); setCompareMode('overlay'); }}
+              className={`flex-1 py-1.5 rounded text-[11px] font-medium transition-colors ${
+                showCompare && compareMode === 'overlay' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+              }`}>{t('compare.overlay')}</button>
+          )}
           <button onClick={() => setShowCompare(false)}
             className={`flex-1 py-1.5 rounded text-[11px] font-medium transition-colors ${
               !showCompare ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
@@ -1053,13 +1042,13 @@ export default function ValueTab() {
       <div data-onboarding="value-save">
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">{t('save.title')}</p>
         <div className="grid grid-cols-1 gap-1.5">
-          <button onClick={exportProcessed}
-            className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-            <Download className="w-3 h-3" />{t('save.processed')}
+          <button onClick={exportProcessed} disabled={isSketch && (savingSketch || !drawing.working)}
+            className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50">
+            <Download className="w-3 h-3" />{isSketch ? t('save.drawing') : t('save.processed')}
           </button>
-          {isSketch && (
-            <button onClick={exportSketchSvg}
-              className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
+          {isSketch && sketch.style === 'outline' && (
+            <button onClick={exportSketchSvg} disabled={savingSketch || !drawing.working}
+              className="flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50">
               <Download className="w-3 h-3" />{t('save.svg')}
             </button>
           )}
@@ -1198,13 +1187,9 @@ export default function ValueTab() {
   // image, not in an overflow menu. Uses the shared ImageUploader flow (its
   // compact variant is an icon button), so there is exactly one upload
   // implementation in the app.
-  const replaceImage = (dataUrl: string) => {
-    // Drop every cached derivation of the previous photo before the new one is
-    // processed, so nothing stale can survive into the next trace.
-    traceCache.current = null;
-    traceResult.current = null;
-    setLocalImage(dataUrl);
-  };
+  // (Sketch drops its drawing of the previous photo by itself, the moment the
+  // photo changes; see useSketchDrawing.)
+  const replaceImage = (dataUrl: string) => setLocalImage(dataUrl);
   const ReplaceImageButton = (
     <div className="flex items-center justify-center min-h-[44px] min-w-[44px] rounded-full
                     bg-card/90 backdrop-blur-sm border border-border shadow-lg"
@@ -1214,11 +1199,41 @@ export default function ValueTab() {
   );
 
   const maxImgH = fullscreen ? 'max-h-[88vh]' : 'max-h-full';
+  // In Sketch the image on screen comes from the sketch worker.
+  const shownUrl = isSketch ? drawing.url : processedUrl;
+  // Describes what is actually on screen: while a new style or view is being
+  // drawn, the previous image (and its description) stays until it arrives.
+  const shownAlt = !isSketch ? t('image.processed')
+    : drawing.shown?.view === 'overlay' ? t('sketch.altOverlay')
+      : drawing.shown?.style === 'pencil' ? t('sketch.altPencil') : t('sketch.altOutline');
+  // While the first drawing of a photo is computed, the photo stands in,
+  // faded, so the frame does not jump or sit empty.
+  const SketchPlaceholder = isSketch && !drawing.url && !drawing.failed && activeImage ? (
+    <img src={activeImage} alt="" aria-hidden className={`max-w-full ${maxImgH} object-contain rounded opacity-25`} />
+  ) : null;
+  // Progress and errors, announced politely to screen readers.
+  const SketchStatus = isSketch ? (
+    <div role="status" aria-live="polite" className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-14">
+      {drawing.failed ? (
+        <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-2 rounded-xl border border-border bg-card/95 px-4 py-3 text-center shadow-lg backdrop-blur-sm">
+          <p className="text-xs text-foreground">{t('sketch.failed')}</p>
+          <button onClick={drawing.retry}
+            className="min-h-[40px] rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground">{t('sketch.retry')}</button>
+        </div>
+      ) : drawing.busy || savingSketch ? (
+        <span className="flex items-center gap-1.5 rounded-full border border-border bg-card/90 px-3 py-1.5 text-[11px] font-medium text-foreground shadow backdrop-blur-sm">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          {savingSketch ? t('sketch.saving') : t('sketch.drawing')}
+        </span>
+      ) : null}
+    </div>
+  ) : null;
   // The before/after views stay left to right in every language: original on
   // the left, and the slider's divider is positioned from the left edge.
   const ProcessedImage = (
     <div className={`relative w-full h-full flex items-center justify-center ${fullscreen ? 'p-1' : 'p-3'}`}>
-      {showCompare && processedUrl && compareMode === 'side' ? (
+      {SketchStatus}
+      {showCompare && shownUrl && compareMode === 'side' ? (
         <div dir="ltr" className="flex gap-3 w-full h-full items-center justify-center">
           <div className="flex-1 h-full flex flex-col items-center justify-center min-w-0">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t('image.original')}</p>
@@ -1226,23 +1241,25 @@ export default function ValueTab() {
           </div>
           <div className="flex-1 h-full flex flex-col items-center justify-center min-w-0">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t('image.processed')}</p>
-            <img src={processedUrl} alt={t('image.processed')} className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
+            <img src={shownUrl} alt={shownAlt} className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
           </div>
         </div>
-      ) : showCompare && processedUrl && compareMode === 'slider' ? (
+      ) : showCompare && shownUrl && compareMode === 'slider' ? (
         <div dir="ltr" className="relative inline-block max-w-full max-h-full select-none">
           <img src={activeImage} alt={t('image.original')} className={`block max-w-full ${maxImgH} object-contain rounded`} />
           <div className="absolute inset-0 overflow-hidden rounded" style={{ clipPath: `inset(0 0 0 ${compareSlider}%)` }}>
-            <img src={processedUrl} alt={t('image.processed')} className={`block max-w-full ${maxImgH} object-contain rounded`} />
+            <img src={shownUrl} alt={shownAlt} className={`block max-w-full ${maxImgH} object-contain rounded`} />
           </div>
           <div className="absolute top-0 bottom-0 w-px bg-primary/80 pointer-events-none" style={{ left: `${compareSlider}%` }} />
           <input type="range" min={0} max={100} value={compareSlider}
             onChange={(e) => setCompareSlider(Number(e.target.value))}
             className="absolute inset-x-4 bottom-3 accent-primary" />
         </div>
-      ) : (
-        processedUrl && <img src={processedUrl} alt={t('image.alt')}
+      ) : shownUrl ? (
+        <img src={shownUrl} alt={isSketch ? shownAlt : t('image.alt')}
           className={`max-w-full ${maxImgH} object-contain rounded shadow-xl`} />
+      ) : (
+        SketchPlaceholder
       )}
       <div className="absolute top-2 end-2 z-20 flex items-center gap-2">
         {ReplaceImageButton}
@@ -1257,10 +1274,12 @@ export default function ValueTab() {
 
   // === Mobile layout ===
   if (isMobile) {
-    // A colour palette has nothing to say about a strictly black-and-white
-    // trace, so Sketch drops the whole palette surface — the strip, the tab and
-    // the analysis pane — and the preview takes the space back.
-    const mobilePane = isSketch && mobileView === 'palette' ? 'processed' : mobileView;
+    // A colour palette has nothing to say about a drawing, so Sketch drops the
+    // whole palette surface (the strip, the tab and the analysis pane) and
+    // offers the red overlay in its place. Overlay exists only in Sketch.
+    const mobilePane = isSketch
+      ? (mobileView === 'palette' ? 'processed' : mobileView)
+      : (mobileView === 'overlay' ? 'processed' : mobileView);
     return (
       <div className="relative flex-1 flex flex-col min-h-0 canvas-area">
         <ToolHeader tool="value" task={studyTask} />
@@ -1271,8 +1290,11 @@ export default function ValueTab() {
           {mobilePane !== 'palette' && (
             <div className="absolute top-2 end-2 z-20">{ReplaceImageButton}</div>
           )}
+          {isSketch && mobilePane !== 'original' && SketchStatus}
           {mobilePane === 'original' && <img src={activeImage} alt={t('image.original')} className="max-h-full max-w-full object-contain" />}
-          {mobilePane === 'processed' && processedUrl && <img src={processedUrl} alt={t('image.processed')} className="max-h-full max-w-full object-contain" />}
+          {(mobilePane === 'processed' || mobilePane === 'overlay') && (shownUrl
+            ? <img src={shownUrl} alt={shownAlt} className="max-h-full max-w-full object-contain" />
+            : SketchPlaceholder)}
           {mobilePane === 'palette' && (
             <div className="w-full h-full overflow-y-auto p-3 space-y-3">
               <div className="flex items-center justify-between">
@@ -1302,20 +1324,20 @@ export default function ValueTab() {
         {/* View switch, settings and the one primary action. */}
         <div className="flex shrink-0 items-center gap-2 border-t border-border toolbar-surface px-2 py-2">
           <div className="flex min-w-0 flex-1 rounded-lg bg-secondary/60 p-0.5" role="group" aria-label={t('view.group')}>
-            {(isSketch ? (['original', 'processed'] as const) : (['original', 'processed', 'palette'] as const)).map(v => (
+            {(isSketch ? (['original', 'processed', 'overlay'] as const) : (['original', 'processed', 'palette'] as const)).map(v => (
               <button key={v} onClick={() => setMobileView(v)} aria-pressed={mobilePane === v}
-                className={`min-h-[40px] min-w-0 flex-1 rounded-md px-1 text-xs font-medium transition-colors ${
+                className={`min-h-[40px] min-w-0 flex-1 truncate rounded-md px-1 text-xs font-medium transition-colors ${
                   mobilePane === v ? 'bg-card text-foreground shadow' : 'text-muted-foreground'
-                }`}>{v === 'processed' ? t('view.study') : v === 'original' ? t('view.original') : t('view.palette')}</button>
+                }`}>{v === 'processed' ? t('view.study') : v === 'original' ? t('view.original') : v === 'overlay' ? t('view.overlay') : t('view.palette')}</button>
             ))}
           </div>
           <button onClick={() => setShowMobileControls(true)}
             className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-secondary px-3 text-xs font-medium text-foreground">
             <SlidersHorizontal className="h-4 w-4" /> {t('controls.adjust')}
           </button>
-          <button onClick={exportProcessed} data-onboarding="value-save"
-            className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground">
-            <Download className="h-4 w-4" /> {t('save.button')}
+          <button onClick={exportProcessed} data-onboarding="value-save" disabled={isSketch && (savingSketch || !drawing.working)}
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+            {isSketch && savingSketch ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Download className="h-4 w-4" />} {t('save.button')}
           </button>
         </div>
 
@@ -1341,9 +1363,9 @@ export default function ValueTab() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
     <ToolHeader tool="value" task={studyTask} actions={
-      <button onClick={exportProcessed}
-        className="me-1 flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
-        <Download className="h-4 w-4" /> {t('save.study')}
+      <button onClick={exportProcessed} disabled={isSketch && (savingSketch || !drawing.working)}
+        className="me-1 flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60">
+        {isSketch && savingSketch ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Download className="h-4 w-4" />} {t('save.study')}
       </button>
     } />
     <div className="flex-1 flex min-h-0">
