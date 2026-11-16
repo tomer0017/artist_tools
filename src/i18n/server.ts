@@ -30,6 +30,11 @@ export const getRequestLocale = cache(async (): Promise<Locale> => {
   return localeFromAcceptLanguage(requestHeaders.get('accept-language')) ?? DEFAULT_LOCALE;
 });
 
+/** The language of the address itself (`/he/…` or not), whatever the visitor prefers. */
+export async function addressLocale(): Promise<Locale> {
+  return (await headers()).get(LOCALE_HEADER) === 'he' ? 'he' : DEFAULT_LOCALE;
+}
+
 /** A translator for server components and metadata: `(await getT('auth'))('signIn')`. */
 export async function getT<N extends keyof Messages>(namespace: N) {
   const locale = await getRequestLocale();

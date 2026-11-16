@@ -455,3 +455,34 @@ describe('pausing sign-ups after too many new accounts', () => {
     expect(await collections(mongo.db).users.findOne({ email: 'paused-3@example.com' })).toMatchObject({ role: 'user', plan: 'free' });
   });
 });
+
+describe('Google only (email and password off, as on staging)', () => {
+  // `auth` has no email + password: the public sign-in is Google alone.
+  it('has no password endpoints at all, while Google sign-in works', async () => {
+    const body = JSON.stringify({ email: 'someone@example.com', password: 'violet cactus harbor 42', newPassword: 'violet cactus harbor 43', currentPassword: 'x', name: 'Someone', token: 'abcdefgh' });
+    for (const path of ['/sign-up/email', '/sign-in/email', '/request-password-reset', '/reset-password', '/change-password', '/verify-password', '/send-verification-email']) {
+      const response = await auth.handler(
+        new Request(`${BASE}/api/auth${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, 'x-real-ip': nextVisitorIp() }, body }),
+      );
+      expect(response.status, path).toBe(404);
+    }
+    for (const path of ['/verify-email?token=abc', '/reset-password/abcdefgh?callbackURL=%2Freset-password']) {
+      const response = await auth.handler(new Request(`${BASE}/api/auth${path}`, { headers: { 'x-real-ip': nextVisitorIp() } }));
+      expect(response.status, path).toBe(404);
+    }
+    expect(await collections(mongo.db).users.countDocuments({ email: 'someone@example.com' })).toBe(0);
+    expect((await startSignIn()).response.status).toBe(200);
+  });
+
+  it('never makes a second account for the same Google identity, or for the same address', async () => {
+    const first: GoogleUser = { sub: 'google-sub-only-once', email: 'only-once@example.com' };
+    await signInAs(first);
+    await signInAs(first);
+    // Another Google identity claiming the same address is refused, not merged.
+    const { callback } = await signInAs({ sub: 'google-sub-other-identity', email: 'only-once@example.com' });
+    expect(new URL(callback.headers.get('location')!, BASE).searchParams.get('error')).toBe('account_not_linked');
+    expect(await collections(mongo.db).users.countDocuments({ email: 'only-once@example.com' })).toBe(1);
+    expect(await collections(mongo.db).accounts.countDocuments({ accountId: 'google-sub-other-identity' })).toBe(0);
+  });
+});
+

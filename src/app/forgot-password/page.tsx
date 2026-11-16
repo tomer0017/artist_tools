@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import { getT } from '@/i18n/server';
-import { notFound } from 'next/navigation';
+import { localizedPath } from '@/i18n/config';
+import { addressLocale, getT } from '@/i18n/server';
+import { redirect } from 'next/navigation';
 import { ForgotPasswordCard } from '@/components/auth/PasswordResetCards';
 import { emailPasswordAvailable } from '@/server/auth';
 
@@ -11,7 +12,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const dynamic = 'force-dynamic';
 
-export default function ForgotPasswordPage() {
-  if (!emailPasswordAvailable()) notFound();
+// Where passwords are off there is nothing to reset: sign-in instead.
+export default async function ForgotPasswordPage() {
+  if (!emailPasswordAvailable()) redirect(localizedPath('/sign-in', await addressLocale()));
   return <ForgotPasswordCard />;
 }

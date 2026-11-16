@@ -3,7 +3,10 @@
 //   2. signed-in test accounts — sessions created in the database and signed
 //      with this run's random secret, exactly as Better Auth signs them — whose
 //      cookies are written to e2e/.auth/<name>.json for Playwright;
-//   3. the production (standalone) server, pointed at that database.
+//   3. the production (standalone) server, pointed at that database;
+//   4. a second one on port 8081 configured like staging's public sign-in:
+//      Google only, open to every Google-verified account, no mail at all,
+//      with its own database (e2e/google-only.spec.ts).
 // No login bypass exists in the app: tests are signed in the way a real
 // session is, and the server verifies them the same way.
 //
@@ -19,6 +22,8 @@ const PORT = 8080;
 const BASE_URL = `http://localhost:${PORT}`;
 const SECRET = randomBytes(32).toString('base64');
 const DB_NAME = 'studio_e2e';
+const GOOGLE_ONLY_PORT = 8081;
+const GOOGLE_ONLY_DB = 'studio_e2e_google_only';
 
 /** The signed cookie value Better Auth expects: `token.HMAC-SHA256(token)`, URL-encoded. */
 const signedCookie = (token: string) => encodeURIComponent(`${token}.${createHmac('sha256', SECRET).update(token).digest('base64')}`);
@@ -120,41 +125,81 @@ for (const name of ['ivrit-chromium', 'ivrit-iphone-webkit', 'ivrit-switch']) {
   await seedSignedInUser(db, name, 'user', 'free', false, []);
   await db.collection('users').updateOne({ email: `${name}@e2e.test` }, { $set: { locale: 'he', currency: 'ILS' } });
 }
+// The Google-only server's own accounts: one that has just registered with
+// Google (no tool introductions seen yet) and an admin.
+{
+  const googleOnly = client.db(GOOGLE_ONLY_DB);
+  await migrate(googleOnly);
+  await seedSignedInUser(googleOnly, 'google-newcomer', 'user', 'free', false, []);
+  await seedSignedInUser(googleOnly, 'google-admin', 'admin');
+}
 await client.close();
 
-const server = spawn('node', ['.next/standalone/server.js'], {
-  stdio: 'inherit',
-  env: {
-    ...process.env,
-    NODE_ENV: 'production',
-    PORT: String(PORT),
-    // Loopback only, as in production (deploy/studio-companion.service). The
-    // standalone server listens on $HOSTNAME, which Docker sets to the
-    // container's name: in CI's container it never answered on localhost.
-    HOSTNAME: '127.0.0.1',
-    MONGODB_URI: replSet.getUri(),
-    MONGODB_DB: DB_NAME,
-    BETTER_AUTH_URL: BASE_URL,
-    BETTER_AUTH_SECRET: SECRET,
-    GOOGLE_CLIENT_ID: 'e2e-client-id.apps.googleusercontent.com',
-    GOOGLE_CLIENT_SECRET: 'e2e-client-secret',
-    // Email + password with the outbox (read by the admin specs), invite-only
-    // for the addresses the sign-up specs use.
-    APP_ENV: 'test',
-    AUTH_EMAIL_PASSWORD: 'on',
-    MAIL_TRANSPORT: 'outbox',
-    AUTH_SIGNUP_ALLOWLIST: 'newcomer-chromium@e2e.test,phone-chromium@e2e.test,phone-iphone-webkit@e2e.test,hebrew-chromium@e2e.test',
-  },
-});
+/** The production server on `port`, with this run's database and secret; `overrides` change the settings. */
+function startServer(port: number, overrides: Record<string, string | undefined> = {}) {
+  return spawn('node', ['.next/standalone/server.js'], {
+    stdio: 'inherit',
+    // Unset (undefined) values are left out of the child's environment.
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      PORT: String(port),
+      // Loopback only, as in production (deploy/studio-companion.service). The
+      // standalone server listens on $HOSTNAME, which Docker sets to the
+      // container's name: in CI's container it never answered on localhost.
+      HOSTNAME: '127.0.0.1',
+      MONGODB_URI: replSet.getUri(),
+      MONGODB_DB: DB_NAME,
+      BETTER_AUTH_URL: `http://localhost:${port}`,
+      BETTER_AUTH_SECRET: SECRET,
+      GOOGLE_CLIENT_ID: 'e2e-client-id.apps.googleusercontent.com',
+      GOOGLE_CLIENT_SECRET: 'e2e-client-secret',
+      // Email + password with the outbox (read by the admin specs), invite-only
+      // for the addresses the sign-up specs use.
+      APP_ENV: 'test',
+      AUTH_EMAIL_PASSWORD: 'on',
+      MAIL_TRANSPORT: 'outbox',
+      AUTH_SIGNUP_ALLOWLIST: 'newcomer-chromium@e2e.test,phone-chromium@e2e.test,phone-iphone-webkit@e2e.test,hebrew-chromium@e2e.test',
+      ...overrides,
+    },
+  });
+}
 
-const stop = async () => {
-  server.kill('SIGTERM');
-  await replSet.stop();
-  process.exit(0);
-};
-process.on('SIGINT', stop);
-process.on('SIGTERM', stop);
-server.on('exit', async (code) => {
-  await replSet.stop();
-  process.exit(code ?? 0);
+/** Resolves once `port` answers its readiness check (the database is reachable). */
+async function ready(port: number) {
+  for (let attempt = 0; attempt < 240; attempt++) {
+    try {
+      if ((await fetch(`http://localhost:${port}/api/health?ready=1`)).ok) return;
+    } catch {
+      // Not listening yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`The test server on port ${port} did not become ready`);
+}
+
+// The Google-only server first: Playwright waits for the main one only, so
+// by then both answer.
+const googleOnlyServer = startServer(GOOGLE_ONLY_PORT, {
+  MONGODB_DB: GOOGLE_ONLY_DB,
+  AUTH_SIGNUP_MODE: 'open',
+  AUTH_EMAIL_PASSWORD: 'off',
+  MAIL_TRANSPORT: undefined,
+  AUTH_SIGNUP_ALLOWLIST: undefined,
 });
+await ready(GOOGLE_ONLY_PORT);
+const server = startServer(PORT);
+const servers = [server, googleOnlyServer];
+
+let stopping = false;
+const stop = async (code = 0) => {
+  if (stopping) return;
+  stopping = true;
+  for (const child of servers) child.kill('SIGTERM');
+  await replSet.stop();
+  process.exit(code);
+};
+process.on('SIGINT', () => void stop());
+process.on('SIGTERM', () => void stop());
+// If either server stops, the run is over.
+for (const child of servers) child.on('exit', (code) => void stop(code ?? 0));

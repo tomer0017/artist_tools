@@ -19,7 +19,7 @@ sign-off. Each gate is marked:
 | Account page: profile, preferences, devices, data download, deletion | Done (staging) | e2e `accounts`, `password` |
 | Admin two-factor verification (TOTP and recovery codes, for Google sign-in too) | Done (local) | `docs/security/admin-2fa.md`; unit and e2e tests. **Making it required needs the owner's approval** (`ADMIN_MFA_REQUIRED=on`), after the owner has enrolled and tried a recovery code |
 | Email change, profile photo upload, 2FA for regular accounts | Open | |
-| Public registration open | Approved for staging (2026-11-15); waits for real email | Ready in code and tested; the configuration refuses open registration with the outbox, so it opens once delivery is verified (`docs/ops/email.md`) |
+| Public registration open | Staging, **Google only** (2026-11-16); email and password off | Any Google-verified account signs in and gets a free account (e2e `google-only`). **Owner:** set the Google consent screen to *In production*, then test with a Google account that never used the app. Email and password come back once email works (`docs/ops/email.md`) |
 | Real email delivery (domain, provider, SPF/DKIM/DMARC) | Code done; **Owner**: provider account | SMTP over TLS for any provider (`studio-set-mail`, `studio-mail-test`); staging keeps mail in the outbox until the credentials are installed |
 | Production domain | **Owner** | Staging uses `*.sslip.io` |
 

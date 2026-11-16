@@ -6,8 +6,10 @@
 #
 # Checks: health reports the expected commit; public pages answer in English
 # and Hebrew; signed-out visitors are sent to sign-in from the studio and the
-# admin; the security headers are present once each. It never signs in and
-# never changes anything.
+# admin; the security headers are present once each. Where email and
+# password sign-in is off (Google only), the registration and reset pages
+# lead to sign-in, the sign-in page has no password form and the password
+# endpoints do not exist. It never signs in and never changes anything.
 set -uo pipefail
 BASE="${1:?usage: smoke.sh <base-url> <expected-commit>}"
 COMMIT="${2:?usage: smoke.sh <base-url> <expected-commit>}"
@@ -30,14 +32,41 @@ case "$health" in
   *) bad "health: $health" ;;
 esac
 
-for page in / /pricing /sign-in /sign-up /forgot-password; do
+for page in / /pricing /sign-in; do
   code="$(fetch "$page")"
   if [ "$code" = 200 ] && grep -q '<html lang="en" dir="ltr"' "$TMP/body"; then ok "$page: 200, English"; else bad "$page: $code"; fi
 done
-for page in /he /he/pricing /he/sign-in /he/sign-up; do
+for page in /he /he/pricing /he/sign-in; do
   code="$(fetch "$page")"
   if [ "$code" = 200 ] && grep -q '<html lang="he" dir="rtl"' "$TMP/body"; then ok "$page: 200, Hebrew, right to left"; else bad "$page: $code"; fi
 done
+
+# The registration and reset pages: there where email and password sign-in is
+# on, a redirect to sign-in where it is off (Google only).
+google_only=false
+for page in /sign-up /forgot-password /he/sign-up; do
+  code="$(fetch "$page")"
+  location="$(grep -i '^location:' "$TMP/headers" | tr -d '\r' | cut -d' ' -f2-)"
+  case "$page" in /he/*) lang='<html lang="he" dir="rtl"'; signin='*/he/sign-in*' ;; *) lang='<html lang="en" dir="ltr"'; signin='*/sign-in*' ;; esac
+  if [ "$code" = 200 ] && grep -q "$lang" "$TMP/body"; then
+    ok "$page: 200"
+  elif [[ "$code" == 30[1278] ]] && [[ "$location" == $signin ]]; then
+    ok "$page: leads to sign-in (Google only)"
+    google_only=true
+  else
+    bad "$page: $code ${location:-}"
+  fi
+done
+if [ "$google_only" = true ]; then
+  code="$(fetch /sign-in)"
+  if [ "$code" = 200 ] && grep -q 'Continue with Google' "$TMP/body" && ! grep -q 'type="password"' "$TMP/body"; then
+    ok "/sign-in: one Google button, no password form"
+  else
+    bad "/sign-in is not Google only ($code)"
+  fi
+  code="$(curl -s -m 20 -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "origin: $BASE" --data '{}' "$BASE/api/auth/sign-up/email")"
+  if [ "$code" = 404 ]; then ok "password endpoints switched off (404)"; else bad "sign-up/email answered $code"; fi
+fi
 
 for page in /app /app/measure /admin /admin/billing; do
   code="$(fetch "$page")"

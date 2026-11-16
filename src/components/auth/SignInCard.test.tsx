@@ -35,7 +35,7 @@ describe('SignInCard', () => {
 
   it('with open registration, explains that Google creates a free account automatically', () => {
     render(<SignInCard callbackPath="/app" available error={null} registration="open" />);
-    expect(screen.getByRole('heading', { name: 'Sign in or create your free account' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeInTheDocument();
     expect(screen.getByText(/your free account is created automatically; if you already have one, the same button signs you in/)).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'What you get' })).toHaveTextContent('All five tools, free with no time limit');
     expect(screen.queryByText(/invite-only/)).toBeNull();
@@ -69,11 +69,30 @@ describe('SignInCard', () => {
   it('speaks Hebrew on Hebrew pages, with localized links and an email field that stays left-to-right', () => {
     render(<SignInCard callbackPath="/app" available error={null} registration="invite" emailPassword />, 'he');
     expect(screen.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'כניסה עם Google' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'המשך עם Google' })).toBeEnabled();
     expect(screen.getByLabelText('כתובת אימייל')).toHaveAttribute('dir', 'ltr');
     expect(screen.getByRole('link', { name: 'שכחת את הסיסמה?' })).toHaveAttribute('href', '/he/forgot-password');
     expect(screen.getByRole('link', { name: 'יצירת חשבון' })).toHaveAttribute('href', '/he/sign-up?callbackURL=%2Fapp');
     expect(screen.getByRole('link', { name: 'השוואת מסלולים' })).toHaveAttribute('href', '/he/pricing');
     expect(screen.getByRole('group', { name: 'בחירת שפה' })).toBeInTheDocument();
+  });
+
+  it('Google only and open to all: one action, and no password, registration, reset or invitation', () => {
+    const { container } = render(<SignInCard callbackPath="/app" available error={null} registration="open" />);
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeEnabled();
+    expect(screen.queryByRole('form')).toBeNull();
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+    expect(container.querySelector('input[type="password"]')).toBeNull();
+    expect(screen.queryByRole('link', { name: /create an account/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /forgot/i })).toBeNull();
+    expect(container.textContent).not.toMatch(/invite|create an account|forgot/i);
+  });
+
+  it('in Hebrew, the one action reads המשך עם Google', () => {
+    const { container } = render(<SignInCard callbackPath="/app" available error={null} registration="open" />, 'he');
+    expect(screen.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'המשך עם Google' })).toBeEnabled();
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+    expect(container.textContent).not.toMatch(/הזמנה|יצירת חשבון|שכחת/);
   });
 });

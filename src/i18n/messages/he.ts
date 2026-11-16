@@ -362,8 +362,7 @@ export const he: Messages = {
     },
   },
   auth: {
-    titleOpen: 'כניסה או יצירת חשבון חינמי',
-    titleInvite: 'כניסה ל-Studio Companion',
+    title: 'כניסה ל-Studio Companion',
     leadOpen: 'כניסה עם Google: בפעם הראשונה החשבון החינמי נוצר אוטומטית, ואם כבר יש חשבון, אותו כפתור מכניס אליו.',
     leadInvite: 'Studio Companion פתוח בהזמנה בלבד בתקופת הניסיון. כניסה עם Google: אם החשבון הוזמן, החשבון החינמי נוצר אוטומטית בפעם הראשונה.',
     whatYouGet: 'מה מקבלים',
@@ -373,7 +372,7 @@ export const he: Messages = {
     includedPrivacy: 'התמונות נשארות במכשיר',
     notSetUp: 'הכניסה עדיין לא הוגדרה בשרת הזה. כדאי לנסות שוב בקרוב.',
     googleUnreachable: 'לא הצלחנו להגיע ל-Google. כדאי לבדוק את החיבור ולנסות שוב.',
-    continueGoogle: 'כניסה עם Google',
+    continueGoogle: 'המשך עם Google',
     openingGoogle: 'פותחים את Google…',
     or: 'או',
     signInWithEmail: 'כניסה עם אימייל',

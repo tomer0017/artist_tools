@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import { getT } from '@/i18n/server';
-import { notFound, redirect } from 'next/navigation';
+import { localizedPath } from '@/i18n/config';
+import { addressLocale, getT } from '@/i18n/server';
+import { redirect } from 'next/navigation';
 import SignUpCard from '@/components/auth/SignUpCard';
 import { safeCallbackPath } from '@/lib/redirects';
 import { emailPasswordAvailable, registrationMode } from '@/server/auth';
@@ -15,10 +16,12 @@ export const dynamic = 'force-dynamic';
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
-// Email + password registration; does not exist where that sign-in method is off.
+// Email + password registration. Where that method is off there is no
+// separate registration (Google sign-in creates the account), so this address
+// leads to sign-in.
 export default async function SignUpPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if (!emailPasswordAvailable()) notFound();
   const callbackPath = safeCallbackPath(first((await searchParams).callbackURL));
+  if (!emailPasswordAvailable()) redirect(`${localizedPath('/sign-in', await addressLocale())}?callbackURL=${encodeURIComponent(callbackPath)}`);
   if (await getSession()) redirect(callbackPath);
   return <SignUpCard callbackPath={callbackPath} registration={registrationMode()} />;
 }

@@ -31,12 +31,25 @@ export default defineConfig({
         },
       ]
     : [
-        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity/ },
+        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity|google-only/ },
         // Safari/WebKit on iPhone — the mobile navigation, touch and sign-in checks.
         {
           name: "iphone-webkit",
           use: { ...devices["iPhone 13"], ...signedIn },
           testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility)\.spec\.ts/,
+          grep: /mobile/,
+        },
+        // The public sign-in as staging runs it: Google only, open to everyone
+        // (the second test server, scripts/e2e-server.ts).
+        {
+          name: "google-only",
+          use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:8081" },
+          testMatch: /google-only\.spec\.ts/,
+        },
+        {
+          name: "google-only-iphone",
+          use: { ...devices["iPhone 13"], baseURL: "http://localhost:8081" },
+          testMatch: /google-only\.spec\.ts/,
           grep: /mobile/,
         },
       ],

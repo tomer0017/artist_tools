@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import { getT } from '@/i18n/server';
-import { notFound } from 'next/navigation';
+import { localizedPath } from '@/i18n/config';
+import { addressLocale, getT } from '@/i18n/server';
+import { redirect } from 'next/navigation';
 import { ResetPasswordCard } from '@/components/auth/PasswordResetCards';
 import { emailPasswordAvailable } from '@/server/auth';
 
@@ -16,7 +17,8 @@ const first = (value: string | string[] | undefined) => (Array.isArray(value) ? 
 
 // Opened from the reset email: /reset-password?token=…
 export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if (!emailPasswordAvailable()) notFound();
+  // Where passwords are off there is nothing to reset: sign-in instead.
+  if (!emailPasswordAvailable()) redirect(localizedPath('/sign-in', await addressLocale()));
   const token = first((await searchParams).token);
   return <ResetPasswordCard token={token && /^[A-Za-z0-9_-]{8,128}$/.test(token) ? token : null} />;
 }

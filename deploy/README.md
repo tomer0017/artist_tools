@@ -59,6 +59,27 @@ Enter the complete list, comma-separated. It replaces only
 puts the old list back if it is not. Addresses left out can no longer sign
 up; existing accounts always keep working.
 
+### Google-only public sign-in (staging since 2026-11-16)
+
+Anyone whose Google account has a Google-verified address can sign in, and
+the first sign-in creates their free account. There is no separate
+registration and no email at all:
+
+```sh
+AUTH_SIGNUP_MODE="open"
+AUTH_EMAIL_PASSWORD="off"
+MAIL_TRANSPORT="disabled"
+```
+
+With passwords off:
+- the password endpoints answer 404;
+- `/sign-up`, `/forgot-password` and `/reset-password` lead to sign-in;
+- the account page shows no password settings;
+- `deploy/smoke.sh` checks all of this.
+
+The code stays. Turning passwords back on needs real email first
+(`docs/ops/email.md`).
+
 ### Opening public registration (only when approved)
 
 Staging stays invite-only until real email works: the configuration refuses

@@ -72,7 +72,7 @@ export default function SignInCard({
   const createAccount = `${localizedPath('/sign-up', locale)}?callbackURL=${encodeURIComponent(callbackPath)}`;
 
   return (
-    <AuthCard title={registration === 'open' ? t('titleOpen') : t('titleInvite')} lead={registration === 'open' ? t('leadOpen') : t('leadInvite')}>
+    <AuthCard title={t('title')} lead={registration === 'open' ? t('leadOpen') : t('leadInvite')}>
       <ul className="mt-4 space-y-1.5" aria-label={t('whatYouGet')}>
         {included.map((item) => (
           <li key={item} className="flex items-center gap-2 text-sm text-foreground">

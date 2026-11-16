@@ -309,64 +309,67 @@ export function SignInMethodsCard({ account, onChanged }: { account: StudioAccou
             </button>
           )}
         </li>
-        <li className="py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> {t('methods.emailPassword')}
-              </p>
-              <p className="text-xs text-muted-foreground">{hasPassword ? t('methods.passwordSet', { email: account.email }) : t('methods.noPassword')}</p>
+        {/* Where passwords are off, only an account that already has one sees this row. */}
+        {(account.emailPasswordEnabled || hasPassword) && (
+          <li className="py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> {t('methods.emailPassword')}
+                </p>
+                <p className="text-xs text-muted-foreground">{hasPassword ? t('methods.passwordSet', { email: account.email }) : t('methods.noPassword')}</p>
+              </div>
+              {mode === 'idle' && hasPassword && account.emailPasswordEnabled && (
+                <button type="button" onClick={() => { setStatus(null); setMode('change-password'); }} className={SECONDARY_BUTTON}>
+                  {t('methods.changePassword')}
+                </button>
+              )}
+              {mode === 'idle' && !hasPassword && account.emailPasswordEnabled && (
+                <button type="button" onClick={() => { setStatus(null); setMode('add-password'); }} className={SECONDARY_BUTTON}>
+                  {t('methods.addPassword')}
+                </button>
+              )}
             </div>
-            {mode === 'idle' && hasPassword && (
-              <button type="button" onClick={() => { setStatus(null); setMode('change-password'); }} className={SECONDARY_BUTTON}>
-                {t('methods.changePassword')}
-              </button>
-            )}
-            {mode === 'idle' && !hasPassword && account.emailPasswordEnabled && (
-              <button type="button" onClick={() => { setStatus(null); setMode('add-password'); }} className={SECONDARY_BUTTON}>
-                {t('methods.addPassword')}
-              </button>
-            )}
-          </div>
 
-          {mode === 'add-password' && (
-            <form onSubmit={submitAdd} className="mt-3 space-y-3" aria-label={t('methods.addPassword')}>
-              <p className="text-sm text-muted-foreground">{t('methods.addPasswordLead', { email: account.email })}</p>
-              <PasswordField label={t('methods.newPassword')} autoComplete="new-password" hint={ta('passwordHint')} error={error} value={password} onChange={(e) => setPassword(e.target.value)} />
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button type="submit" disabled={busy || password.length < 12} className={PRIMARY_SMALL_BUTTON}>
-                  <Busy busy={busy} label={t('methods.addPasswordSubmit')} busyLabel={t('saving')} />
-                </button>
-                <button type="button" onClick={reset} className={SECONDARY_BUTTON}>
-                  {t('cancel')}
-                </button>
-              </div>
-            </form>
-          )}
-          {mode === 'reauth-add' && (
-            <ReauthPanel
-              email={account.email}
-              hasPassword={false}
-              onConfirmed={() => void submitAdd()}
-              onCancel={reset}
-            />
-          )}
-          {mode === 'change-password' && (
-            <form onSubmit={submitChange} className="mt-3 space-y-3" aria-label={t('methods.changePassword')}>
-              <PasswordField label={t('methods.currentPassword')} autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
-              <PasswordField label={t('methods.newPassword')} autoComplete="new-password" hint={ta('passwordHint')} error={error} value={password} onChange={(e) => setPassword(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{t('methods.changeSignsOut')}</p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button type="submit" disabled={busy || !current || password.length < 12} className={PRIMARY_SMALL_BUTTON}>
-                  <Busy busy={busy} label={t('methods.changePassword')} busyLabel={t('saving')} />
-                </button>
-                <button type="button" onClick={reset} className={SECONDARY_BUTTON}>
-                  {t('cancel')}
-                </button>
-              </div>
-            </form>
-          )}
-        </li>
+            {mode === 'add-password' && (
+              <form onSubmit={submitAdd} className="mt-3 space-y-3" aria-label={t('methods.addPassword')}>
+                <p className="text-sm text-muted-foreground">{t('methods.addPasswordLead', { email: account.email })}</p>
+                <PasswordField label={t('methods.newPassword')} autoComplete="new-password" hint={ta('passwordHint')} error={error} value={password} onChange={(e) => setPassword(e.target.value)} />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button type="submit" disabled={busy || password.length < 12} className={PRIMARY_SMALL_BUTTON}>
+                    <Busy busy={busy} label={t('methods.addPasswordSubmit')} busyLabel={t('saving')} />
+                  </button>
+                  <button type="button" onClick={reset} className={SECONDARY_BUTTON}>
+                    {t('cancel')}
+                  </button>
+                </div>
+              </form>
+            )}
+            {mode === 'reauth-add' && (
+              <ReauthPanel
+                email={account.email}
+                hasPassword={false}
+                onConfirmed={() => void submitAdd()}
+                onCancel={reset}
+              />
+            )}
+            {mode === 'change-password' && (
+              <form onSubmit={submitChange} className="mt-3 space-y-3" aria-label={t('methods.changePassword')}>
+                <PasswordField label={t('methods.currentPassword')} autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+                <PasswordField label={t('methods.newPassword')} autoComplete="new-password" hint={ta('passwordHint')} error={error} value={password} onChange={(e) => setPassword(e.target.value)} />
+                <p className="text-xs text-muted-foreground">{t('methods.changeSignsOut')}</p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button type="submit" disabled={busy || !current || password.length < 12} className={PRIMARY_SMALL_BUTTON}>
+                    <Busy busy={busy} label={t('methods.changePassword')} busyLabel={t('saving')} />
+                  </button>
+                  <button type="button" onClick={reset} className={SECONDARY_BUTTON}>
+                    {t('cancel')}
+                  </button>
+                </div>
+              </form>
+            )}
+          </li>
+        )}
       </ul>
       <StatusLine status={status} />
     </section>

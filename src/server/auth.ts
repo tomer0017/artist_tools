@@ -52,6 +52,23 @@ export const FRESH_SESSION_SECONDS = 10 * 60;
 export type SignupMethod = 'google' | 'email-password';
 
 /**
+ * Every endpoint of email + password sign-in. Where that method is off they
+ * do not exist (404): nobody can sign up, sign in, reset, verify or check a
+ * password. The code stays, for when it is switched back on.
+ */
+export const PASSWORD_ENDPOINTS = [
+  '/sign-up/email',
+  '/sign-in/email',
+  '/request-password-reset',
+  '/reset-password',
+  '/reset-password/:token',
+  '/change-password',
+  '/verify-password',
+  '/send-verification-email',
+  '/verify-email',
+];
+
+/**
  * Whether a brand-new account may be created. Only gates registration: no
  * role or permission is ever derived from an email address, and new accounts
  * are always role `user` on the Free plan. With Google, Google must have
@@ -208,6 +225,9 @@ export function createAuth(deps: AuthDeps) {
           },
         }
       : undefined,
+    // Off means absent: the password endpoints answer 404 before any other
+    // work (the one with a token in its path is caught in the hook below).
+    disabledPaths: deps.emailPassword ? [] : PASSWORD_ENDPOINTS,
     // Tokens kept in `verifications` (resets, OAuth state) are stored as
     // SHA-256 hashes, so reading the database is not enough to use one.
     verification: { storeIdentifier: 'hashed' },
@@ -299,6 +319,7 @@ export function createAuth(deps: AuthDeps) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         const body = (ctx.body ?? {}) as Record<string, unknown>;
+        if (!deps.emailPassword && PASSWORD_ENDPOINTS.includes(ctx.path)) throw new APIError('NOT_FOUND');
         // Sign-ups paused: the same answer for every address, given before
         // the library looks up whether the address already has an account.
         if (ctx.path === '/sign-up/email' && (await signupsPaused())) {

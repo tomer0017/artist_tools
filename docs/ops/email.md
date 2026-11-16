@@ -2,6 +2,8 @@
 
 **Written:** 2026-11-15.
 
+**Since 2026-11-16, staging signs in with Google only.** That needs no email at all. This guide applies when email and password sign-in comes back.
+
 **Status:**
 - The code can send through any email provider's SMTP server, always over TLS.
 - **Staging still uses the outbox.** No email reaches anyone: confirmations and resets wait at `/admin/mail`.

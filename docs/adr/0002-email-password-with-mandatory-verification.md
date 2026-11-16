@@ -44,3 +44,17 @@ enumeration, reset abuse and pre-registration of someone else's address.
   Revisit if R6 materialises.
 - Magic links only: no passwords at all, but every sign-in depends on email
   delivery, which we cannot offer reliably without a domain yet.
+
+## Update (2026-11-16): switched off on staging, kept in the code
+
+The owner chose Google-only public sign-in for now: one button, no separate
+registration, no email. With `AUTH_EMAIL_PASSWORD=off`, this ADR's endpoints
+do not exist (Better Auth `disabledPaths`, plus the hook for
+`/reset-password/:token`): they answer 404. The registration and reset pages
+lead to sign-in.
+
+Nobody was locked out: staging had no password accounts. Had there been
+any, they would have needed a migration path before switching off.
+
+Everything above still holds when the method is switched back on, after real
+email delivery (ADR-0004).

@@ -361,8 +361,7 @@ export const en = {
     },
   },
   auth: {
-    titleOpen: 'Sign in or create your free account',
-    titleInvite: 'Sign in to Studio Companion',
+    title: 'Sign in to Studio Companion',
     leadOpen: 'Continue with Google. If you are new, your free account is created automatically; if you already have one, the same button signs you in.',
     leadInvite: 'Studio Companion is invite-only while we test it. Continue with Google: if your account has been invited, your free account is created automatically the first time.',
     whatYouGet: 'What you get',
