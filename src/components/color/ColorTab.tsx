@@ -1,232 +1,19 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import ToolHeader from '@/components/shell/ToolHeader';
 import { useProject } from '@/hooks/useProjectStore';
-import { Pipette, Copy, Plus, ArrowRight, Flame, Snowflake, Droplet, Ban } from 'lucide-react';
+import { Pipette, Copy, Check, Plus, Flame, Snowflake, Droplet, Ban } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { dirOf } from '@/i18n/config';
 import type { colorEn } from '@/i18n/messages/tools/color';
+import { hexToHsv, hsvToHex, isValidHex } from './colorMath';
+import { harmoniesOf, hueOnWheel, type HarmonyId } from './harmonies';
+import ColorWheel, { type WheelMarker } from './ColorWheel';
+import HarmonyCards, { tagText } from './HarmonyCards';
+import { useCopyHex } from './useCopyHex';
 
 type ColorMessages = typeof colorEn;
 type ColorT = ReturnType<typeof useTranslations<'colorTool'>>;
-
-// ─── Color math ───────────────────────────────────────
-function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
-  s /= 100; v /= 100;
-  const c = v * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = v - c;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) { r = c; g = x; }
-  else if (h < 120) { r = x; g = c; }
-  else if (h < 180) { g = c; b = x; }
-  else if (h < 240) { g = x; b = c; }
-  else if (h < 300) { r = x; b = c; }
-  else { r = c; b = x; }
-  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
-}
-function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  const d = max - min;
-  let h = 0;
-  if (d !== 0) {
-    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
-    else if (max === g) h = ((b - r) / d + 2) * 60;
-    else h = ((r - g) / d + 4) * 60;
-  }
-  const s = max === 0 ? 0 : (d / max) * 100;
-  const v = max * 100;
-  return [Math.round(h), Math.round(s), Math.round(v)];
-}
-function hsvToHex(h: number, s: number, v: number): string {
-  const [r, g, b] = hsvToRgb(h, s, v);
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-}
-function hexToHsv(hex: string): [number, number, number] {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return rgbToHsv(r, g, b);
-}
-function isValidHex(hex: string): boolean { return /^#[0-9a-fA-F]{6}$/.test(hex); }
-
-function shiftHue(hex: string, deg: number): string {
-  const [h, s, v] = hexToHsv(hex);
-  return hsvToHex((h + deg + 360) % 360, s, v);
-}
-function warmer(hex: string): string {
-  // pull hue toward 40° (warm yellow-orange) and slightly boost saturation
-  const [h, s, v] = hexToHsv(hex);
-  const target = 40;
-  const diff = ((target - h + 540) % 360) - 180;
-  const newH = (h + diff * 0.35 + 360) % 360;
-  return hsvToHex(newH, Math.min(100, s + 6), v);
-}
-function cooler(hex: string): string {
-  const [h, s, v] = hexToHsv(hex);
-  const target = 220;
-  const diff = ((target - h + 540) % 360) - 180;
-  const newH = (h + diff * 0.35 + 360) % 360;
-  return hsvToHex(newH, Math.min(100, s + 6), v);
-}
-
-// ─── Interactive Color Wheel ──────────────────────────
-function ColorWheel({
-  hue, sat, val, onHueChange, onSVChange,
-}: {
-  hue: number; sat: number; val: number;
-  onHueChange: (h: number) => void;
-  onSVChange: (s: number, v: number) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const svRef = useRef<HTMLDivElement>(null);
-  const draggingRing = useRef(false);
-  const draggingSV = useRef(false);
-
-  const getHueFromPointer = (clientX: number, clientY: number) => {
-    const el = containerRef.current; if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    let angle = Math.atan2(clientY - cy, clientX - cx) * (180 / Math.PI) + 90;
-    if (angle < 0) angle += 360;
-    return angle % 360;
-  };
-  const getSVFromPointer = (clientX: number, clientY: number) => {
-    const el = svRef.current; if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const s = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-    const v = Math.max(0, Math.min(100, (1 - (clientY - rect.top) / rect.height) * 100));
-    return [Math.round(s), Math.round(v)] as [number, number];
-  };
-
-  const onRingDown = (e: React.PointerEvent) => {
-    const el = containerRef.current; if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const dx = e.clientX - rect.left - rect.width / 2;
-    const dy = e.clientY - rect.top - rect.height / 2;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const outerR = rect.width / 2;
-    const innerR = outerR * 0.68;
-    if (dist >= innerR && dist <= outerR) {
-      draggingRing.current = true;
-      el.setPointerCapture(e.pointerId);
-      const a = getHueFromPointer(e.clientX, e.clientY);
-      if (a !== null) onHueChange(Math.round(a));
-    }
-  };
-  const onRingMove = (e: React.PointerEvent) => {
-    if (!draggingRing.current) return;
-    const a = getHueFromPointer(e.clientX, e.clientY);
-    if (a !== null) onHueChange(Math.round(a));
-  };
-  const onSVDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    draggingSV.current = true;
-    svRef.current?.setPointerCapture(e.pointerId);
-    const sv = getSVFromPointer(e.clientX, e.clientY);
-    if (sv) onSVChange(sv[0], sv[1]);
-  };
-  const onSVMove = (e: React.PointerEvent) => {
-    if (!draggingSV.current) return;
-    const sv = getSVFromPointer(e.clientX, e.clientY);
-    if (sv) onSVChange(sv[0], sv[1]);
-  };
-
-  const ringR = 110;
-  const hueRad = ((hue - 90) * Math.PI) / 180;
-  const hx = Math.cos(hueRad) * ringR;
-  const hy = Math.sin(hueRad) * ringR;
-  const pureHueHex = hsvToHex(hue, 100, 100);
-
-  // Positioned by pointer coordinates: always left to right, in every language.
-  return (
-    <div
-      ref={containerRef}
-      dir="ltr"
-      className="relative w-64 h-64 mx-auto cursor-crosshair touch-none select-none"
-      onPointerDown={onRingDown}
-      onPointerMove={onRingMove}
-      onPointerUp={() => { draggingRing.current = false; }}
-      onPointerCancel={() => { draggingRing.current = false; }}
-    >
-      <div
-        className="w-full h-full rounded-full"
-        style={{
-          background:
-            'conic-gradient(from 0deg, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))',
-        }}
-      >
-        <div className="absolute inset-[16%] rounded-full bg-card" />
-      </div>
-      <div
-        ref={svRef}
-        className="absolute rounded-sm overflow-hidden cursor-crosshair"
-        style={{ top: '26%', left: '26%', right: '26%', bottom: '26%' }}
-        onPointerDown={onSVDown}
-        onPointerMove={onSVMove}
-        onPointerUp={() => { draggingSV.current = false; }}
-        onPointerCancel={() => { draggingSV.current = false; }}
-      >
-        <div className="absolute inset-0" style={{ backgroundColor: pureHueHex }} />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, #fff, transparent)' }} />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #000, transparent)' }} />
-        <div
-          className="absolute w-3.5 h-3.5 rounded-full border-2 pointer-events-none"
-          style={{
-            left: `${sat}%`, top: `${100 - val}%`,
-            transform: 'translate(-50%, -50%)',
-            borderColor: val > 50 ? '#1a1a1a' : '#f5f0e8',
-            boxShadow: '0 0 2px rgba(0,0,0,0.5)',
-          }}
-        />
-      </div>
-      <div
-        className="absolute w-5 h-5 rounded-full border-2 border-foreground shadow-lg pointer-events-none"
-        style={{
-          backgroundColor: pureHueHex,
-          left: `calc(50% + ${hx}px - 10px)`,
-          top: `calc(50% + ${hy}px - 10px)`,
-        }}
-      />
-    </div>
-  );
-}
-
-// ─── Swatch helpers ───────────────────────────────────
-function Swatch({ color, label, labelDir, size = 'md', onClick }: {
-  color: string; label?: string; labelDir?: 'ltr'; size?: 'sm' | 'md' | 'lg'; onClick?: () => void;
-}) {
-  const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-9 h-9';
-  return (
-    <div className="flex flex-col items-center gap-1" onClick={onClick}>
-      <div
-        className={`${dim} rounded-md border border-border/60 ${onClick ? 'cursor-pointer hover:scale-105 transition-transform' : ''}`}
-        style={{ backgroundColor: color }}
-        title={color}
-      />
-      {label && <span dir={labelDir} className="text-[10px] text-muted-foreground leading-none text-center max-w-[64px]">{label}</span>}
-    </div>
-  );
-}
-
-// `ltr` marks a tag that is a value (−30°), kept left to right in every language;
-// a HEX label (no tag) is too.
-function HarmonyBlock({ label, colors, onSelect }: {
-  label: string; colors: { hex: string; tag?: string; ltr?: boolean }[]; onSelect: (hex: string) => void;
-}) {
-  return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">{label}</div>
-      <div className="flex items-center gap-2 flex-wrap">
-        {colors.map((c, i) => (
-          <Swatch key={i} color={c.hex} label={c.tag || c.hex.toUpperCase()} labelDir={c.tag && !c.ltr ? undefined : 'ltr'} onClick={() => onSelect(c.hex)} />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── Recipe data ──────────────────────────────────────
 // Names, notes and group titles are messages (colorTool.recipes / .groups).
@@ -556,9 +343,11 @@ function PainterCheatSheet() {
 
 // ─── Sections ────────────────────────────────────────
 // Each section says what it is *for* — shown under the tool title. Their tab
-// names and purposes are messages (colorTool.sections.<id>).
-type ColorSection = 'wheel' | 'harmony' | 'recipes' | 'skin';
-const COLOR_SECTIONS: ColorSection[] = ['wheel', 'harmony', 'recipes', 'skin'];
+// names and purposes are messages (colorTool.sections.<id>). The wheel and the
+// harmonies share one section, so every harmony is in view while a colour is
+// being chosen.
+type ColorSection = 'wheel' | 'recipes' | 'skin';
+const COLOR_SECTIONS: ColorSection[] = ['wheel', 'recipes', 'skin'];
 
 // ─── Main ────────────────────────────────────────────
 export default function ColorTab() {
@@ -572,6 +361,10 @@ export default function ColorTab() {
   const [hexInput, setHexInput] = useState('#D4827A');
   const [picking, setPicking] = useState(false);
   const [section, setSection] = useState<ColorSection>('wheel');
+  // The harmony shown on the wheel, if any. It belongs to the tool, not to a
+  // card, so it survives a visit to Mixing or Skin Tones.
+  const [shownHarmony, setShownHarmony] = useState<HarmonyId | null>(null);
+  const { copied, copy } = useCopyHex();
   const pickCanvasRef = useRef<HTMLCanvasElement>(null);
   const pickImgRef = useRef<HTMLImageElement>(null);
 
@@ -607,21 +400,23 @@ export default function ColorTab() {
     setSelectedHex(hex); setHexInput(hex);
   }, [hue]);
 
-  const compHex = shiftHue(selectedHex, 180);
-  const split1 = shiftHue(selectedHex, 150);
-  const split2 = shiftHue(selectedHex, 210);
-  const ana1 = shiftHue(selectedHex, -30);
-  const ana2 = shiftHue(selectedHex, 30);
-  const tri1 = shiftHue(selectedHex, 120);
-  const tri2 = shiftHue(selectedHex, 240);
-  const warmHex = warmer(selectedHex);
-  const coolHex = cooler(selectedHex);
+  // Derived from the selected colour on every change: nothing to keep in sync.
+  const harmonies = useMemo(() => harmoniesOf(selectedHex), [selectedHex]);
+  const shown = harmonies.find((h) => h.id === shownHarmony) ?? null;
+  const markers: WheelMarker[] = (shown?.colors ?? []).flatMap((c) => {
+    const at = hueOnWheel(c.hex);
+    if (c.base || at === null) return [];
+    return [{ hex: c.hex, hue: at, label: t('wheel.useAsBase', { name: tagText(c, t), hex: c.hex.toUpperCase() }) }];
+  });
+  const caption = !shown
+    ? t('wheel.idle')
+    : markers.length > 0
+      ? t('wheel.shown', { name: t(`harmonies.${shown.id}`) })
+      : t('wheel.gray', { name: t(`harmonies.${shown.id}`) });
 
-  const copyHex = (hex: string) => {
-    navigator.clipboard?.writeText(hex).catch((error) => {
-      console.warn('[ColorTab] Clipboard copy failed:', error);
-    });
-  };
+  const toggleHarmony = useCallback((id: HarmonyId) => {
+    setShownHarmony((current) => (current === id ? null : id));
+  }, []);
 
   const handlePickClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
     if (!picking || !pickCanvasRef.current) return;
@@ -644,20 +439,7 @@ export default function ColorTab() {
     }
   }, [picking, applyHex]);
 
-  // The selected color travels across every section, so a strip showing it
-  // keeps Harmonies / Mixing / Skin anchored to what the artist picked.
-  const selectedStrip = (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5">
-      <div className="h-10 w-10 shrink-0 rounded-lg border border-border" style={{ backgroundColor: selectedHex }} />
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t('selected.color')}</div>
-        <div className="font-mono text-sm uppercase text-foreground"><span dir="ltr">{selectedHex}</span></div>
-      </div>
-      <button onClick={() => setSection('wheel')} className="min-h-[40px] rounded-lg px-3 text-xs font-semibold text-primary hover:bg-secondary">
-        {t('selected.change')}
-      </button>
-    </div>
-  );
+  const selectedCopied = copied?.key === 'selected' ? copied : null;
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -666,7 +448,7 @@ export default function ColorTab() {
       <div className="max-w-4xl mx-auto p-3 md:p-4 space-y-5">
         {/* Radix Tabs sets `dir` on its root (left to right unless told): the page's direction. */}
         <Tabs dir={dirOf(locale)} value={section} onValueChange={(v) => setSection(v as ColorSection)} className="w-full">
-          <TabsList data-onboarding="color-tabs" className="grid h-auto w-full grid-cols-4 p-1">
+          <TabsList data-onboarding="color-tabs" className="grid h-auto w-full grid-cols-3 p-1">
             {COLOR_SECTIONS.map((c) => (
               <TabsTrigger key={c} value={c} className="min-h-[40px] whitespace-normal px-1 text-xs leading-tight md:text-sm">
                 {t(`sections.${c}.label`)}
@@ -674,57 +456,79 @@ export default function ColorTab() {
             ))}
           </TabsList>
 
-          {/* ── Color Wheel ── */}
-          <TabsContent value="wheel" className="space-y-4 mt-4">
-            <div className="bg-card border border-border rounded-lg p-4">
-              <div data-onboarding="color-wheel">
-                <ColorWheel hue={hue} sat={sat} val={val} onHueChange={onHueChange} onSVChange={onSVChange} />
-              </div>
+          {/* ── Wheel & Harmonies ──
+              Phones: the wheel, then the harmonies two by two. From tablet
+              width: the wheel beside the harmonies, and a photo being sampled
+              across the full width below them. */}
+          <TabsContent value="wheel" className="mt-4 space-y-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[18.5rem_minmax(0,1fr)] md:items-start">
+              <section aria-label={t('wheel.title')} className="bg-card border border-border rounded-lg p-3 sm:p-4">
+                <div data-onboarding="color-wheel">
+                  <ColorWheel
+                    hue={hue} sat={sat} val={val}
+                    onHueChange={onHueChange} onSVChange={onSVChange}
+                    markers={markers} onMarkerSelect={applyHex}
+                  />
+                </div>
+                {/* Two lines kept free, so the controls below never jump as the text changes. */}
+                <p aria-live="polite" className="mt-2 min-h-[30px] text-center text-[11px] leading-[15px] text-muted-foreground">
+                  {caption}
+                </p>
 
-              {/* Selected color */}
-              <div className="mt-4 flex items-center gap-3">
-                <div
-                  className="w-14 h-14 rounded-lg border border-border shrink-0"
-                  style={{ backgroundColor: selectedHex }}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t('selected.label')}</div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      dir="ltr"
-                      aria-label={t('selected.hex')}
-                      value={hexInput}
-                      onChange={(e) => {
-                        setHexInput(e.target.value);
-                        if (isValidHex(e.target.value)) applyHex(e.target.value);
-                      }}
-                      onBlur={() => { if (!isValidHex(hexInput)) setHexInput(selectedHex); }}
-                      className="flex-1 px-2 py-1.5 text-sm font-mono bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary uppercase"
-                    />
-                    <button onClick={() => copyHex(selectedHex)} className="btn-tool p-1.5" title={t('selected.copy')}>
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
+                {/* Selected color */}
+                <div className="mt-2 flex items-center gap-3">
+                  <div
+                    className="w-14 h-14 rounded-lg border border-border shrink-0"
+                    style={{ backgroundColor: selectedHex }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t('selected.label')}</div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        dir="ltr"
+                        aria-label={t('selected.hex')}
+                        value={hexInput}
+                        onChange={(e) => {
+                          setHexInput(e.target.value);
+                          if (isValidHex(e.target.value)) applyHex(e.target.value);
+                        }}
+                        onBlur={() => { if (!isValidHex(hexInput)) setHexInput(selectedHex); }}
+                        className="min-w-0 flex-1 px-2 py-1.5 text-sm font-mono bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary uppercase"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => copy(selectedHex, 'selected')}
+                        className="btn-tool p-1.5"
+                        title={t('selected.copy')}
+                        aria-label={t('selected.copy')}
+                      >
+                        {selectedCopied?.ok
+                          ? <Check className="w-3.5 h-3.5 text-primary" strokeWidth={3} />
+                          : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Pick from image */}
-              {image && (
-                <button
-                  data-onboarding="color-pick"
-                  onClick={() => setPicking(!picking)}
-                  className={`mt-3 flex items-center gap-2 px-3 py-2 rounded text-xs font-medium transition-colors w-full justify-center ${
-                    picking ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                  }`}
-                >
-                  <Pipette className="w-3.5 h-3.5" />
-                  {picking ? t('pick.active') : t('pick.start')}
-                </button>
-              )}
+                {/* Pick from image */}
+                {image && (
+                  <button
+                    data-onboarding="color-pick"
+                    onClick={() => setPicking(!picking)}
+                    className={`mt-3 flex items-center gap-2 px-3 py-2 rounded text-xs font-medium transition-colors w-full justify-center ${
+                      picking ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                    }`}
+                  >
+                    <Pipette className="w-3.5 h-3.5" />
+                    {picking ? t('pick.active') : t('pick.start')}
+                  </button>
+                )}
+              </section>
+
               {/* Sampled by pointer coordinates: left to right in every language. */}
               {image && picking && (
-                <div className="mt-3" dir="ltr">
+                <div className="bg-card border border-border rounded-lg p-3 md:col-span-2 md:row-start-2" dir="ltr">
                   <img
                     ref={pickImgRef}
                     src={image}
@@ -734,61 +538,22 @@ export default function ColorTab() {
                   />
                 </div>
               )}
-            </div>
 
-            <button onClick={() => setSection('harmony')}
-              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 text-sm font-semibold text-primary hover:bg-primary/15">
-              {t('seeHarmonies')}
-            </button>
-          </TabsContent>
-
-          {/* ── Harmonies ── */}
-          <TabsContent value="harmony" className="space-y-4 mt-4">
-            {selectedStrip}
-            {/* Harmonies */}
-            <div data-onboarding="color-harmony" className="grid gap-3 sm:grid-cols-2">
-              <HarmonyBlock
-                label={t('harmonies.complementary')}
-                colors={[{ hex: selectedHex, tag: t('tags.base') }, { hex: compHex, tag: t('tags.comp') }]}
-                onSelect={applyHex}
-              />
-              <HarmonyBlock
-                label={t('harmonies.splitComplementary')}
-                colors={[
-                  { hex: selectedHex, tag: t('tags.base') },
-                  { hex: split1, tag: t('tags.splitA') },
-                  { hex: split2, tag: t('tags.splitB') },
-                ]}
-                onSelect={applyHex}
-              />
-              <HarmonyBlock
-                label={t('harmonies.analogous')}
-                colors={[
-                  { hex: ana1, tag: '−30°', ltr: true },
-                  { hex: selectedHex, tag: t('tags.base') },
-                  { hex: ana2, tag: '+30°', ltr: true },
-                ]}
-                onSelect={applyHex}
-              />
-              <HarmonyBlock
-                label={t('harmonies.triadic')}
-                colors={[
-                  { hex: selectedHex, tag: t('tags.base') },
-                  { hex: tri1, tag: t('tags.triA') },
-                  { hex: tri2, tag: t('tags.triB') },
-                ]}
-                onSelect={applyHex}
-              />
-              <HarmonyBlock
-                label={t('harmonies.warm')}
-                colors={[{ hex: selectedHex, tag: t('tags.base') }, { hex: warmHex, tag: t('tags.warmer') }]}
-                onSelect={applyHex}
-              />
-              <HarmonyBlock
-                label={t('harmonies.cool')}
-                colors={[{ hex: selectedHex, tag: t('tags.base') }, { hex: coolHex, tag: t('tags.cooler') }]}
-                onSelect={applyHex}
-              />
+              <section aria-labelledby="color-harmonies-title" className="min-w-0 md:col-start-2 md:row-start-1">
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-0.5">
+                  <h2 id="color-harmonies-title" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {t('harmoniesTitle')}
+                  </h2>
+                  <p className="text-[11px] text-muted-foreground">{t('copy.hint')}</p>
+                </div>
+                <HarmonyCards
+                  harmonies={harmonies}
+                  active={shownHarmony}
+                  onToggle={toggleHarmony}
+                  copied={copied}
+                  onCopy={copy}
+                />
+              </section>
             </div>
 
             <PainterCheatSheet />
@@ -831,6 +596,11 @@ export default function ColorTab() {
             <PainterCheatSheet />
           </TabsContent>
         </Tabs>
+
+        {/* Read out after a copy: which colour, and whether it worked. */}
+        <p role="status" className="sr-only">
+          {copied ? t(copied.ok ? 'copy.done' : 'copy.failed', { hex: copied.hex.toUpperCase() }) : ''}
+        </p>
 
         <canvas ref={pickCanvasRef} className="hidden" />
       </div>

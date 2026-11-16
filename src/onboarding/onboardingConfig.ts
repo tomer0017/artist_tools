@@ -36,7 +36,7 @@ export const ONBOARDING: Partial<Record<ToolId, OnboardingSpec>> = {
     preview: [{ variant: 'wheel' }, { variant: 'color' }, { variant: 'original' }],
     steps: [
       { key: 'wheel', target: 'color-wheel' },
-      { key: 'harmonies', target: 'color-tabs' },
+      { key: 'harmonies', target: 'color-harmony' },
       { key: 'recipes', target: 'color-tabs' },
       { key: 'pick', target: 'color-pick' },
     ],

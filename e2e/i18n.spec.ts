@@ -137,7 +137,7 @@ test.describe('the studio in Hebrew', () => {
 
     await page.goto('/app/color');
     await expect(page.getByRole('heading', { name: 'צבע וערבוב', level: 1 })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'הרמוניות' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'גלגל והרמוניות' })).toBeVisible();
 
     await page.goto('/app/measure');
     await expect(page.getByRole('heading', { name: 'מדידה ותכנון', level: 1 })).toBeVisible();

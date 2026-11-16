@@ -26,11 +26,13 @@ const VIEWPORTS = [
   { name: '1366', width: 1366, height: 900, mobile: false },
 ];
 
+// Color & Mixing is left out since 2026-11-17: its wheel and harmonies were
+// joined on one screen on purpose, so it no longer matches the old app (its
+// layout is covered by e2e/color.spec.ts instead).
 const HEADINGS: Record<string, string | RegExp> = {
   '': /Your All-in-One/,
   measure: 'Measure & Plan',
   study: 'Study & Simplify',
-  color: 'Color & Mixing',
   grid: 'Create a Grid',
   compare: 'Compare & Correct',
 };

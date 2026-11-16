@@ -10,24 +10,40 @@
 
 export const colorEn = {
   sections: {
-    wheel: { label: 'Color Wheel', purpose: 'Pick a color by hue and shade, or sample it from your photo' },
-    harmony: { label: 'Harmonies', purpose: 'Colors that work with your selected color' },
+    wheel: { label: 'Wheel & Harmonies', purpose: 'Pick a color and see every harmony at once' },
     recipes: { label: 'Mixing', purpose: 'Step-by-step paint recipes for common colors' },
     skin: { label: 'Skin Tones', purpose: 'Base, shadow and highlight mixes for skin' },
   },
   selected: {
-    color: 'Selected color',
-    change: 'Change',
     label: 'Selected',
     hex: 'Selected color (HEX)',
     copy: 'Copy HEX',
+  },
+  wheel: {
+    title: 'Color wheel',
+    hue: 'Hue',
+    shade: 'Saturation and brightness',
+    shadeValue: 'Saturation {s}%, brightness {v}%',
+    idle: 'Choose a harmony to see it on the wheel',
+    shown: '{name}: tap a dot to make it the base color',
+    gray: '{name}: a gray has no hue to show on the wheel',
+    useAsBase: 'Make {name} ({hex}) the base color',
+  },
+  copy: {
+    hint: 'Tap a color to copy its HEX',
+    verb: 'Copy',
+    copied: 'Copied',
+    notCopied: 'Not copied',
+    done: 'Copied {hex}',
+    failed: 'Could not copy {hex}',
   },
   pick: {
     start: 'Pick from image',
     active: 'Tap on image below ↓',
     alt: 'Pick color',
   },
-  seeHarmonies: 'See harmonies for this color →',
+  harmoniesTitle: 'Harmonies',
+  harmonyCard: 'Shows its colors on the wheel',
   harmonies: {
     complementary: 'Complementary',
     splitComplementary: 'Split Complementary',
@@ -109,24 +125,40 @@ export const colorEn = {
 
 export const colorHe: typeof colorEn = {
   sections: {
-    wheel: { label: 'גלגל צבעים', purpose: 'לבחור צבע לפי גוון ובהירות, או לדגום אותו מהתצלום' },
-    harmony: { label: 'הרמוניות', purpose: 'צבעים שמתאימים לצבע שנבחר' },
+    wheel: { label: 'גלגל והרמוניות', purpose: 'לבחור צבע ולראות מיד את כל ההרמוניות שלו' },
     recipes: { label: 'ערבוב', purpose: 'מתכוני ערבוב צעד אחר צעד לצבעים נפוצים' },
     skin: { label: 'גווני עור', purpose: 'תערובות בסיס, צל ואור לגווני עור' },
   },
   selected: {
-    color: 'הצבע הנבחר',
-    change: 'שינוי',
     label: 'נבחר',
     hex: 'הצבע הנבחר (HEX)',
     copy: 'העתקת HEX',
+  },
+  wheel: {
+    title: 'גלגל צבעים',
+    hue: 'גוון',
+    shade: 'רוויה ובהירות',
+    shadeValue: 'רוויה {s}%, בהירות {v}%',
+    idle: 'לבחור הרמוניה כדי לראות אותה על הגלגל',
+    shown: '{name}: הקשה על נקודה הופכת אותה לצבע הבסיס',
+    gray: '{name}: לאפור אין גוון שאפשר להראות על הגלגל',
+    useAsBase: 'להפוך את {name} ({hex}) לצבע הבסיס',
+  },
+  copy: {
+    hint: 'הקשה על צבע מעתיקה את קוד ה-HEX שלו',
+    verb: 'העתקת',
+    copied: 'הועתק',
+    notCopied: 'לא הועתק',
+    done: 'הועתק {hex}',
+    failed: 'לא ניתן היה להעתיק את {hex}',
   },
   pick: {
     start: 'דגימה מהתצלום',
     active: 'להקיש על התצלום למטה ↓',
     alt: 'דגימת צבע',
   },
-  seeHarmonies: 'לראות הרמוניות לצבע הזה ←',
+  harmoniesTitle: 'הרמוניות',
+  harmonyCard: 'מציג את הצבעים שלו על הגלגל',
   harmonies: {
     complementary: 'משלים',
     splitComplementary: 'משלים מפוצל',

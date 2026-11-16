@@ -36,7 +36,7 @@ export default defineConfig({
         {
           name: "iphone-webkit",
           use: { ...devices["iPhone 13"], ...signedIn },
-          testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch)\.spec\.ts/,
+          testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch|color)\.spec\.ts/,
           grep: /mobile/,
         },
         // The public sign-in as staging runs it: Google only, open to everyone

@@ -82,7 +82,7 @@ export const commonEn = {
       preview: { wheel: 'Pick', color: 'Harmonies', original: 'From a photo' },
       steps: {
         wheel: { title: 'Pick a color', body: 'Drag the ring for hue and the square for shade.' },
-        harmonies: { title: 'Build harmonies', body: 'Open Harmonies for complementary, analogous and triadic sets of your color.' },
+        harmonies: { title: 'Build harmonies', body: 'Every harmony of your color updates as you pick. Tap one to see it on the wheel.' },
         recipes: { title: 'Recipes & skin tones', body: 'Mixing and Skin Tones give step-by-step paint recipes.' },
         pick: { title: 'Sample from a photo', body: 'Load a reference and pick colors straight off the image.' },
       },
@@ -185,7 +185,7 @@ export const commonHe: typeof commonEn = {
       preview: { wheel: 'בחירה', color: 'הרמוניות', original: 'מתצלום' },
       steps: {
         wheel: { title: 'בחירת צבע', body: 'גוררים את הטבעת לבחירת הגוון, ואת הריבוע לבחירת הבהירות והרוויה.' },
-        harmonies: { title: 'בניית הרמוניות', body: 'בלשונית הרמוניות: סטים משלימים, אנלוגיים וטריאדיים של הצבע.' },
+        harmonies: { title: 'בניית הרמוניות', body: 'כל ההרמוניות של הצבע מתעדכנות תוך כדי בחירה. הקשה על אחת מהן מציגה אותה על הגלגל.' },
         recipes: { title: 'מתכונים וגווני עור', body: 'ערבוב וגווני עור נותנים מתכוני צבע צעד אחר צעד.' },
         pick: { title: 'דגימה מתצלום', body: 'אפשר לטעון תמונת ייחוס ולדגום צבעים ישירות מהתמונה.' },
       },

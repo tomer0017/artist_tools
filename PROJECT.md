@@ -76,7 +76,8 @@ GitHub Pages (`/artist_tools/`, hash routes), deployed from
     │   ├── common/ImageUploader.tsx   File picker / drag-drop → data URL
     │   ├── measure/            Measure tool (canvas, toolbar, panel, mobile, tab)
     │   ├── value/ValueTab.tsx  Value study + palette extraction + Sketch mode
-    │   ├── color/ColorTab.tsx  Color wheel, recipes, skin tones
+    │   ├── color/              Color & Mixing: ColorTab (wheel & harmonies, recipes, skin tones),
+    │   │                       ColorWheel, HarmonyCards, colorMath + harmonies (the colour rules), useCopyHex
     │   ├── grid/GridTab.tsx    Drawing grid overlay + export
     │   └── ui/                 shadcn/ui (Radix) primitives — vendored, mostly unused
     ├── hooks/
@@ -479,10 +480,21 @@ Staging on the VPS (details and commands in `deploy/README.md`):
 
 ### Color tool
 - **ColorTab** (`color/ColorTab.tsx`) — Three sub-tabs:
-  - **Color Wheel** — interactive hue ring + saturation/value square, hex
-    input/copy, harmonies (complementary, split-complementary, analogous,
-    triadic, warm/cool variants), and "pick from image" eyedropper. Picks up a
-    hex handed off from the Measure tab via `sessionStorage`.
+  - **Wheel & Harmonies** (one screen since 2026-11-17; before, Color Wheel
+    and Harmonies were two tabs) — the wheel (`ColorWheel.tsx`: hue ring +
+    saturation/brightness square, also sliders for the keyboard), HEX
+    input/copy and the "pick from image" eyedropper, beside (from 768 px) or
+    above (phones) all six harmonies as cards (`HarmonyCards.tsx`:
+    complementary, split-complementary, analogous, triadic, warm and cool
+    versions), two per row. Every change of the selected colour updates every
+    card at once: the harmonies are derived from it (`harmoniesOf`), never
+    stored. A card shows its colours as dots on the wheel's ring, at their
+    hues (one card at a time; press again to hide); a dot makes that colour
+    the base (what clicking a harmony swatch used to do). A swatch copies its
+    HEX (`useCopyHex`: Clipboard API, or the copy command on plain http), shows
+    "Copied" on itself and a status line reads it out. Picks up a hex handed
+    off from the Measure tab via `sessionStorage`. While sampling a photo on
+    wide screens, the photo spans the full width below the wheel and cards.
   - **Mixing Recipes** — curated paint recipes grouped by family (greens,
     purples, oranges, pinks, browns, neutrals) with ingredient swatches,
     percentages, and notes.
@@ -525,8 +537,9 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   sliders; dominant-color palette extraction with warm/cool classification and
   paint-mixing hints; value isolation; before/after compare; fullscreen; export
   processed image, palette, or a composed study sheet.
-- **Color:** interactive HSV wheel; hex input/copy; 6 color harmonies;
-  warm/cool nudging; pick a color from the image; ~24 paint-mixing recipes;
+- **Color:** interactive HSV wheel (pointer, touch and keyboard); hex
+  input/copy; all 6 color harmonies on the same screen as the wheel, shown on
+  the wheel on request; copy any swatch's HEX with feedback; warm/cool nudging; pick a color from the image; ~24 paint-mixing recipes;
   skin-tone mix cards; painter cheat sheet; hand a chosen color to the wheel
   from a sampled swatch in Measure.
 - **Grid:** configurable canvas ratio (cm/in) with presets; adjustable
@@ -535,15 +548,17 @@ Staging on the VPS (details and commands in `deploy/README.md`):
 
 ## Color Logic & Processing
 
-This is the heart of the project and lives in two files.
+This is the heart of the project and lives in two places.
 
-### ColorTab — generative color theory (`components/color/ColorTab.tsx`)
+### Color & Mixing — generative color theory (`components/color/colorMath.ts`, `harmonies.ts`)
 - **HSV ⇄ RGB ⇄ Hex** conversions (`hsvToRgb`, `rgbToHsv`, `hsvToHex`,
   `hexToHsv`) drive the interactive wheel. The hue ring maps pointer angle to
   hue; the inner square maps x/y to saturation/value.
 - **Harmonies** are computed by rotating hue: `shiftHue(hex, deg)` produces
   complementary (180°), split-complementary (150°/210°), analogous (±30°), and
-  triadic (120°/240°) sets.
+  triadic (120°/240°) sets. `harmoniesOf(hex)` lists all six harmonies in their
+  display order; `colorMath.test.ts` checks it against a frozen copy of the
+  original code over 18,616 colours.
 - **Warm/cool nudging** (`warmer`, `cooler`) eases the hue ~35% toward 40°
   (warm) or 220° (cool) and nudges saturation, mimicking how a painter shifts a
   mixture's temperature.
@@ -726,7 +741,8 @@ such a project opens in Sketch as Clean Outline at the defaults.
   directly so undo never restores lines onto a layer that no longer exists.
 - **Local component state** handles transient UI: drafts and tool modes in the
   Measure components, processing results and view toggles in `ValueTab`, the
-  selected color and sub-tab in `ColorTab`, and drag/pinch state in `GridTab`.
+  selected color, sub-tab and the harmony shown on the wheel in `ColorTab`, and
+  drag/pinch state in `GridTab`.
 - **Cross-tool handoff** uses `sessionStorage` key `use-color-in-tab`: a sampled
   swatch in Measure stashes a hex and switches to the Color tab, which reads and
   clears it on mount.
@@ -805,7 +821,8 @@ existing logic.
   wrapped + `img.onerror`; `exportPalette` / `exportStudySheet` wrapped (and the
   study-sheet image promises now reject on error instead of hanging forever).
 - **`components/color/ColorTab.tsx`** — eyedropper (`handlePickClick`) wrapped;
-  clipboard copy and the `sessionStorage` color handoff now log on failure.
+  clipboard copy (`useCopyHex.ts`, which also shows "Not copied") and the
+  `sessionStorage` color handoff now log on failure.
 - **`components/measure/MeasureCanvas.tsx`** — `prepareEyedropper` /
   `sampleColorAt` canvas reads wrapped.
 - **`components/measure/MeasurePanel.tsx`** — `handleExportPNG` (+ `img.onerror`)
@@ -1098,3 +1115,4 @@ This file is the brain of the project. It must always stay up to date.
 | 2026-11-11 | **Studio zoom limit narrowed to iOS.** The studio no longer sends `maximum-scale=1`; on iPhone and iPad only, `useIosNoInputZoom` (StudioClient) adds it after load, where Safari ignores it for pinch-zoom but stops zooming into small fields. Android and desktop can zoom the page; every tool canvas already handles its own pinch (`touch-action: none`). The accessibility spec's documented exception now applies to WebKit iPhone emulation only, and a test checks both cases. | src/components/shell/StudioClient.tsx, src/app/app/layout.tsx, e2e/accessibility.spec.ts, docs/accessibility/README.md, PROJECT.md |
 | 2026-11-11 | **Phase 3b-2 — the five tools in Hebrew.** Measure (138 messages), Study (139), Color (103) and Grid (36), Compare (263), translated in parallel by four agents in isolated worktrees from one brief (English verbatim, gender-neutral Hebrew, canvases and coordinate-based controls kept left to right, nothing drawn or exported changed), each checked by its agent against the original components' English output in jsdom, then merged; plus the shared parts (header, upload, save sheet, Pro notice — `PRO_FEATURE_INFO` moved into the messages —, tours restructured into structure + messages, illustrations). `ToolFrame` removed. New e2e: the five tools in Hebrew (photo loaded, Hebrew controls, canvases left to right) and on a Hebrew phone without sideways scrolling; visual review of the Hebrew phone screenshots. English unchanged: visual parity 36/36. | src/components/{measure,value,color,grid}/*, src/features/compare-art/*, src/components/common/{ImageUploader,SaveMedia,ProFeature}.tsx, src/components/shell/{Studio,ToolHeader,ToolArt}.tsx, src/onboarding/*, src/i18n/messages/tools/*, src/lib/plans.ts, src/app/app/layout.tsx, e2e/i18n.spec.ts, docs/adr/0009, PROJECT.md |
 | 2026-11-16 | **Sketch: Clean Outline and Pencil Study replace the black-and-white trace.** Chosen in a visual review (lab/sketch, untracked; Outline A flow lines + Pencil A graphite, approved by the owner). New engine in `src/lib/sketch/` (flow-based DoG on an edge-preserving, shadow-lifted lightness plane; soft-boundary ridges; graphite tone and grain), byte-identical to the approved review images at the default controls. Runs in a Web Worker with staged caches (a control change recomputes only what depends on it; slider changes coalesced), a `PlanePool` memory budget checked in tests, compact mode on phones, and limits: on screen ≤ 1.6 MP; saved outline PNG drawn from the vector paths (≤ 3200 px, 2400 on phones); saved pencil recomputed in a short-lived worker (≤ 4.2 MP, 2.5 on phones); SVG for Clean Outline only, real paths and no raster. Controls: Line thickness, Detail, Shading (Pencil), Reset per style, English and Hebrew. Red outline overlay as a Compare option (desktop) and a view (phone). The old trace's code and strings removed; its saved settings still load and stay untouched. Color and Values verified unchanged: 75 of 75 captured states identical to the previous release (5 photos × 15 control states). An independent code review found one real bug before release (a late result for a style switched away from could replace the drawing on screen), fixed with the reviewer's other points (export holds on-screen renders, worker queue survives a failed request, no old-photo frame, no URL after unmount). Tests: 36 new unit tests (determinism and golden hashes, geometry, no solid black, controls, caching, memory, overlay, SVG vs raster, sizes, settings migration, worker client, and the hook: stale results, photo change, unmount mid-encode, export hold; each hook fix checked to fail without it); 11 new e2e (Chromium, WebKit iPhone emulation: worker, controls, Reset, overlay, PNG/SVG saves at full size, legacy project, Hebrew, axe). Totals: 280 unit/integration, 171 e2e. | src/lib/sketch/* (rewritten), src/components/value/{ValueTab.tsx,useSketchDrawing.ts}, src/types/project.ts, src/i18n/messages/tools/study.ts, e2e/{sketch.spec.ts (new),fixtures/photo.ts}, playwright.config.ts, PROJECT.md |
+| 2026-11-17 | **Color & Mixing: the wheel and the harmonies on one screen.** The Color Wheel and Harmonies tabs are joined into one, "Wheel & Harmonies" (tabs: Wheel & Harmonies, Mixing, Skin Tones). The wheel, its saturation/brightness square and the HEX field sit beside all six harmony cards on tablets and desktops (all in view at 1280×720) and above them on phones (two cards per row, nothing wider than a 320 px screen). Every change of the colour (ring, square, keyboard, HEX, eyedropper, a Mixing or Skin Tones swatch, the hand-off from Measure) updates every card at once; the harmonies are derived, never stored. A card shows its colours as dots on the wheel at their hues, with a small ring on each card showing the same; tapping a dot makes that colour the base, which is what clicking a harmony swatch used to do. A click on a swatch now copies its HEX (before, it changed the base and nothing copied; only the Copy HEX button did, silently), with "Copied" on the swatch and a status line for screen readers; the Copy HEX button shows a check. The wheel's ring and square are now also keyboard sliders. Colour arithmetic moved unchanged to `colorMath.ts` and `harmonies.ts`. The tour's harmony step points at the cards. The "Selected color / Change" strip and the "See harmonies" button are gone with the Harmonies tab. Visual parity with the pre-migration app no longer covers Color. Tests: 23 new unit tests (results identical to a frozen copy of the original code over 18,616 colours; reactive updates; keyboard; dots; copying, its fallback and failure; Hebrew; Mixing, Skin Tones, Measure hand-off, eyedropper), 13 new e2e runs (Chromium desktop and phone, WebKit iPhone: layout, dragging, dots at their hues, clipboard, Hebrew, 320 px, axe). Totals: 303 unit/integration, 184 e2e. | src/components/color/{ColorTab.tsx,ColorWheel.tsx (new),HarmonyCards.tsx (new),colorMath.ts (new),harmonies.ts (new),useCopyHex.ts (new)}, src/i18n/messages/tools/{color,common}.ts, src/onboarding/onboardingConfig.ts, e2e/{color.spec.ts (new),i18n.spec.ts,visual-parity.spec.ts}, playwright.config.ts, PROJECT.md |
