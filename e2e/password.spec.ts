@@ -187,6 +187,41 @@ test.describe('sensitive changes after a while', () => {
   });
 });
 
+test.describe('forms filled before the page finished loading', () => {
+  test.use({ storageState: signedOut, ...ip(5) });
+
+  /** Hold the page's scripts until the returned function is called: a slow phone, before React takes over. */
+  async function holdScripts(page: Page) {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.unroute('**/_next/static/chunks/**');
+    await page.route('**/_next/static/chunks/**', async (route) => {
+      await held;
+      await route.continue();
+    });
+    return release;
+  }
+
+  test('typing, or a password manager, before the page is ready still counts', async ({ page }) => {
+    let release = await holdScripts(page);
+    await page.goto('/sign-up', { waitUntil: 'commit' });
+    await page.getByLabel('Your name').fill('Early Artist');
+    await page.getByLabel('Email address').fill('early-fill@e2e.test');
+    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+    release();
+    await page.getByRole('button', { name: 'Create account' }).click();
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+
+    release = await holdScripts(page);
+    await page.goto('/sign-in', { waitUntil: 'commit' });
+    const form = page.getByRole('form', { name: 'Sign in with email' });
+    await form.getByLabel('Email address').fill('early-fill@e2e.test');
+    await form.getByLabel('Password', { exact: true }).fill(PASSWORD);
+    release();
+    await expect(form.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+  });
+});
+
 test.describe('mobile', () => {
   test.use({ ...phone, storageState: signedOut, ...ip(4) });
 

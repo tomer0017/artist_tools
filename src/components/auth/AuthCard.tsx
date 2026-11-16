@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState, type RefObject } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import { Eye, EyeOff } from 'lucide-react';
 import { LanguageSwitch } from '@/components/common/LanguageSwitch';
@@ -11,6 +11,23 @@ import { localizedPath } from '@/i18n/config';
 // Shared pieces of the sign-in, sign-up and password pages: the card, labelled
 // fields sized for phones (16 px text, so iOS does not zoom on focus), and
 // plain-language messages for the server's error codes.
+
+/**
+ * Text typed, or filled in by a password manager, before the page finished
+ * loading is in the fields but not in React's state, so a submit button that
+ * waits for the fields would stay disabled. Once the form is live, this takes
+ * it in: `fields` maps each input's name to its state setter.
+ */
+export function useEarlyInput(form: RefObject<HTMLFormElement | null>, fields: Record<string, (value: string) => void>) {
+  useEffect(() => {
+    for (const [name, set] of Object.entries(fields)) {
+      const input = form.current?.elements.namedItem(name);
+      if (input instanceof HTMLInputElement && input.value) set(input.value);
+    }
+    // Only once, when the form first becomes live.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
 
 export function AuthCard({ title, lead, children }: { title: string; lead?: React.ReactNode; children: React.ReactNode }) {
   const t = useTranslations('common');

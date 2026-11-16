@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import { Check, Loader2 } from 'lucide-react';
 import { localizedPath } from '@/i18n/config';
 import { authClient } from '@/lib/auth-client';
-import { AuthCard, Notice, PasswordField, TextField } from './AuthCard';
+import { AuthCard, Notice, PasswordField, TextField, useEarlyInput } from './AuthCard';
 import { PRIMARY_BUTTON, authErrorKey, verifiedReturn } from './ui';
 
 function GoogleLogo() {
@@ -43,6 +43,8 @@ export default function SignInCard({
   const [state, setState] = useState<'idle' | 'redirecting' | 'failed'>('idle');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const emailForm = useRef<HTMLFormElement>(null);
+  useEarlyInput(emailForm, { email: setEmail, password: setPassword });
   const [emailState, setEmailState] = useState<{ status: 'idle' | 'busy' } | { status: 'error'; message: string } | { status: 'unverified'; email: string }>({ status: 'idle' });
 
   async function signIn() {
@@ -99,7 +101,7 @@ export default function SignInCard({
           <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-wider text-muted-foreground" aria-hidden="true">
             <span className="h-px flex-1 bg-border" /> {t('or')} <span className="h-px flex-1 bg-border" />
           </div>
-          <form onSubmit={signInWithEmail} aria-label={t('signInWithEmail')} className="space-y-4" noValidate>
+          <form ref={emailForm} onSubmit={signInWithEmail} aria-label={t('signInWithEmail')} className="space-y-4" noValidate>
             <TextField
               label={t('email')}
               type="email"

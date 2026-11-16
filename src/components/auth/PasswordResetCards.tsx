@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import { Loader2, MailCheck } from 'lucide-react';
 import { localizedPath } from '@/i18n/config';
 import { authClient } from '@/lib/auth-client';
-import { AuthCard, Notice, PasswordField, TextField } from './AuthCard';
+import { AuthCard, Notice, PasswordField, TextField, useEarlyInput } from './AuthCard';
 import { PRIMARY_BUTTON, authErrorKey, isPasswordError } from './ui';
 
 // Forgotten password: ask for a link (the answer is the same whether or not
@@ -17,6 +17,8 @@ export function ForgotPasswordCard() {
   const t = useTranslations('auth');
   const locale = useLocale();
   const [email, setEmail] = useState('');
+  const form = useRef<HTMLFormElement>(null);
+  useEarlyInput(form, { email: setEmail });
   const [state, setState] = useState<{ status: 'idle' | 'busy' } | { status: 'sent'; email: string } | { status: 'error'; message: string }>({ status: 'idle' });
 
   async function submit(event: React.FormEvent) {
@@ -46,7 +48,7 @@ export function ForgotPasswordCard() {
 
   return (
     <AuthCard title={t('forgotCard.title')} lead={t('forgotCard.lead')}>
-      <form onSubmit={submit} aria-label={t('forgotCard.title')} className="mt-6 space-y-4" noValidate>
+      <form ref={form} onSubmit={submit} aria-label={t('forgotCard.title')} className="mt-6 space-y-4" noValidate>
         <TextField
           label={t('email')}
           type="email"
@@ -81,6 +83,8 @@ export function ResetPasswordCard({ token }: { token: string | null }) {
   const t = useTranslations('auth');
   const locale = useLocale();
   const [password, setPassword] = useState('');
+  const form = useRef<HTMLFormElement>(null);
+  useEarlyInput(form, { 'new-password': setPassword });
   const [state, setState] = useState<{ status: 'idle' | 'busy' | 'done' } | { status: 'error'; message: string; field: 'password' | null; expired: boolean }>({
     status: 'idle',
   });
@@ -124,7 +128,7 @@ export function ResetPasswordCard({ token }: { token: string | null }) {
   const passwordError = state.status === 'error' && state.field === 'password' ? state.message : null;
   return (
     <AuthCard title={t('resetCard.title')} lead={t('resetCard.lead')}>
-      <form onSubmit={submit} aria-label={t('resetCard.title')} className="mt-6 space-y-4" noValidate>
+      <form ref={form} onSubmit={submit} aria-label={t('resetCard.title')} className="mt-6 space-y-4" noValidate>
         <PasswordField
           label={t('resetCard.newPassword')}
           name="new-password"
