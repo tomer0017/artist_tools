@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-16 10:46:37 | `b22a510` | Google-only public sign-in: one button, no separate registration, password endpoints switched off (`b22a510`, after docs `23ff423`). **Settings changed after the release, 10:47Z:** `AUTH_SIGNUP_MODE=open`, `AUTH_EMAIL_PASSWORD=off`, `MAIL_TRANSPORT=disabled`; previous file in `/root/backups/google-only-20261116T104716Z/` | 42 indexes ensured; no data changed | yes (release step, 10:46:29) |
 | 2026-11-15 13:34:35 | `8ce4860` | Since `6033016`: CI fixes (`b5eaa19` `3e3f5b4` `80bbc06`), docs (`5b60feb` `5907f9f`), and the SMTP transport, the registration guards and the sign-up pause (`8ce4860`). Registration stays invite-only and mail stays in the outbox: no provider yet | 42 indexes ensured; no data changed | yes (release step, 13:34:31) |
 | 2026-11-11 14:01:44 | `6033016` | Since `3782e2c`: the dependency fixes (`f3120ba`), admin two-factor verification (`6fb6022`), CI (`056c79f`), error monitoring (`4405a76`), restore drill, off-site backup job and the missing auth indexes (`58fda2f`), the iOS-only zoom limit (`de2851b`), the five tools in Hebrew (`41dc7ae` `f22ac10` `1cec672` `43e51de` `bba5ec1` `c03f8cc` `ce96c15` `6033016`) | 42 indexes ensured, including the new **unique `users.email` and `sessions.token`**; new empty collections `admin_mfa`, `admin_mfa_sessions`, `error_reports`; no data changed | `mongodb-20261111T140139Z` (release step) |
 | 2026-11-11 10:27–10:57 (built 10:26:40) | `3782e2c` | Everything since `56b9629`: CSP with nonces and body limits (`2785aa9`), billing core and `/admin/billing` (`9e046a2`), Hebrew studio frame (`56d5f3c`), accessibility fixes (`a58baa9`), retention in nightly maintenance (`c41c978`), docs | New empty billing collections and indexes (additive) | By the release script, which switches only after the dump, migration and health check succeed. Its log was not read: the VPS was unreachable over SSH afterwards. |
@@ -34,6 +35,25 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Verification of `b22a510` and Google-only sign-in (2026-11-16, ~10:50Z)
+
+- **Before switching:** staging had 1 user (the owner: admin, Google) and **no password accounts**, no unconfirmed sign-ups and no pending verifications. Turning email and password off locked nobody out.
+- **The release log:**
+  - dependencies 10:43:54, build 10:45:11, dump 10:46:29;
+  - migration 10:46:30 ("42 indexes ensured", no data changed);
+  - healthy 10:46:37.
+- **The settings,** switched at 10:47Z: `AUTH_SIGNUP_MODE=open`, `AUTH_EMAIL_PASSWORD=off`, `MAIL_TRANSPORT=disabled`. The file kept its owner, mode and other keys. After the restart, health was ok (config and database ok) on `b22a510`.
+- **Over HTTPS:**
+  - `deploy/smoke.sh` 20/20, including the Google-only checks;
+  - `/sign-in` and `/he/sign-in` have one action ("Continue with Google" / "המשך עם Google"), no input fields, and no mention of invitations, account creation or passwords;
+  - all 9 password endpoints answer 404.
+- **The Google sign-in start:**
+  - goes to `accounts.google.com/o/oauth2/v2/auth` with `redirect_uri=https://staging.185-176-255-3.sslip.io/api/auth/callback/google`, `openid email profile`, PKCE S256, a state value and `prompt=select_account`;
+  - **Google accepted the client and the redirect address** (302 to its sign-in page, no error).
+  - Whether the consent screen is in "Testing" cannot be seen without signing in.
+- **The owner account:** admin, active, Free, verified, still the only user, with 4 live sessions (none signed out).
+- **Not verified yet:** a first sign-in by a Google account that has never used the app. The owner checks this after confirming the consent screen is *In production*.
 
 ## Verification of `8ce4860` (2026-11-15, ~13:37Z)
 
@@ -109,4 +129,4 @@ every migration was additive).
 
 ## Awaiting deployment
 
-Nothing: `8ce4860` is live.
+Nothing: `b22a510` is live, Google only.
