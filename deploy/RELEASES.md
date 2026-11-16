@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-16 19:56:33 | `225ba58` | Sketch: Clean Outline and Pencil Study replace the black-and-white trace, drawn in a Web Worker (approved by the owner after a visual review; Color and Values unchanged). Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 19:56:29) |
 | 2026-11-16 11:08:59 | `186d2a4` | Email forms keep what was typed, or filled in by a password manager, before the page finished loading (`186d2a4`; it caused CI run 12's one failure), after docs `d240cb5`. Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 11:08:55) |
 | 2026-11-16 10:46:37 | `b22a510` | Google-only public sign-in: one button, no separate registration, password endpoints switched off (`b22a510`, after docs `23ff423`). **Settings changed after the release, 10:47Z:** `AUTH_SIGNUP_MODE=open`, `AUTH_EMAIL_PASSWORD=off`, `MAIL_TRANSPORT=disabled`; previous file in `/root/backups/google-only-20261116T104716Z/` | 42 indexes ensured; no data changed | yes (release step, 10:46:29) |
 | 2026-11-15 13:34:35 | `8ce4860` | Since `6033016`: CI fixes (`b5eaa19` `3e3f5b4` `80bbc06`), docs (`5b60feb` `5907f9f`), and the SMTP transport, the registration guards and the sign-up pause (`8ce4860`). Registration stays invite-only and mail stays in the outbox: no provider yet | 42 indexes ensured; no data changed | yes (release step, 13:34:31) |
@@ -36,6 +37,24 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Verification of `225ba58` (2026-11-16, ~19:57Z)
+
+- **Before the release:** CI run 15 green on `225ba58`:
+  - type check, lint, unit and integration 18:53–18:54Z;
+  - end-to-end (Chromium, WebKit iPhone emulation) 18:54–18:58Z.
+  Locally the same: 280 unit/integration and 171 e2e tests.
+- **The release log** (`studio-release-225ba58`, result success):
+  - dependencies 19:54:27, build 19:55:26, dump 19:56:29;
+  - migration ("42 indexes ensured", no data changed);
+  - healthy 19:56:33.
+- **Over HTTPS:**
+  - `deploy/smoke.sh` 20/20;
+  - health ok on `225ba58`, built 19:55:27Z;
+  - the Sketch worker entry (`turbopack-worker-1hrsqshz0gfey.js`, 927 B) and the engine chunk (`1eq8xo7i18hcm.js`, 22.9 KB) served as JavaScript;
+  - `/app/study` sends signed-out visitors to sign-in.
+- **Not checked here:** Sketch in a signed-in session on staging. Sign-in is Google only, with the owner's account, so this is the owner's iPhone check.
+- **Releases kept:** `225ba58 186d2a4 b22a510 8ce4860 6033016` (`3782e2c` pruned). To roll back instantly, point `current` at `186d2a4` and restart.
 
 ## Verification of `186d2a4` (2026-11-16, ~11:10Z)
 
@@ -142,4 +161,4 @@ every migration was additive).
 
 ## Awaiting deployment
 
-Nothing: `186d2a4` is live, Google only.
+Nothing: `225ba58` is live, Google only.
