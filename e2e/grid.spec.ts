@@ -160,7 +160,8 @@ test.describe('Create a Grid', () => {
     const [left, right] = await samples(page, bytes, [[1000, 1300], [1400, 1300]]);
     expect(left[0]).toBeGreaterThan(180);
     expect(right[0]).toBeLessThan(100);
-    expect((await stored(page)).gridSettings).toEqual({ ...old, rotation: 0, cellMode: 'divisions', cellSize: 3 });
+    // Written back by the project's auto-save (300 ms after a change), with the new settings' defaults.
+    await expect.poll(() => stored(page).then((p) => p.gridSettings)).toEqual({ ...old, rotation: 0, cellMode: 'divisions', cellSize: 3 });
   });
 
   test('every save asks the server first (Create a Grid, saving images); with no answer nothing is saved', async ({ page }) => {
