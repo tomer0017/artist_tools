@@ -1,9 +1,10 @@
 import 'server-only';
 import type { Db, IndexSpecification, CreateIndexesOptions } from 'mongodb';
 import { DEFAULT_CURRENCY, DEFAULT_LOCALE } from '@/lib/locale';
-import { catalogSpec, syncPlans } from '@/server/config/catalog';
+import { catalogReadNotes, catalogSpec, initialCatalog, readCatalog, syncPlans } from '@/server/config/catalog';
 import { pricingSpec } from '@/server/config/pricing';
-import { publishedDocument, seedDefaults } from '@/server/config/versions';
+import { getPublished, seedDefaults } from '@/server/config/versions';
+import { log } from '@/server/log';
 import { collections } from './collections';
 
 // Idempotent schema setup: safe to run on every deploy (`npm run db:migrate`).
@@ -102,6 +103,12 @@ export interface MigrationReport {
   plansUpdated: number;
   usersBackfilled: number;
   preferencesBackfilled: number;
+  /**
+   * How this release read the published catalog. `unreadable`: `plans` was
+   * left exactly as it was. `partial`: features it cannot apply are withheld.
+   * `notes`: what it kept without applying, or why it could not read it.
+   */
+  catalog: { version: number | null; status: 'ok' | 'partial' | 'unreadable'; notes: string[] };
 }
 
 export async function migrate(db: Db): Promise<MigrationReport> {
@@ -110,13 +117,29 @@ export async function migrate(db: Db): Promise<MigrationReport> {
   }
 
   // Configuration starts as the code's defaults (version 1), so a deploy never
-  // changes behaviour; after that, admins own it (docs/adr/0006).
-  const configSeeded = Number(await seedDefaults(db, catalogSpec)) + Number(await seedDefaults(db, pricingSpec));
+  // changes behaviour; after that, admins own it (docs/adr/0006). A database
+  // with plans but no catalog (its history lost) starts from the plans in
+  // force, never from the defaults, which can grant more (ADR-0014).
+  const catalogSeed = (await getPublished(db, catalogSpec)) ? undefined : await initialCatalog(db);
+  const configSeeded = Number(await seedDefaults(db, catalogSpec, catalogSeed)) + Number(await seedDefaults(db, pricingSpec));
 
   // `plans` follows the published catalog: missing plans are inserted, and a
   // plan whose stored features, quotas or name differ is brought back in step.
+  // Rolling back is safe (ADR-0014): what a newer release added is kept in the
+  // catalog and not applied here; a catalog this release cannot read at all
+  // leaves `plans` exactly as it is, the last plans applied.
   const { users } = collections(db);
-  const { inserted: plansInserted, updated: plansUpdated } = await syncPlans(db, await publishedDocument(db, catalogSpec));
+  const published = await getPublished(db, catalogSpec);
+  const read = readCatalog(published?.document);
+  const catalog: MigrationReport['catalog'] = { version: published?.version ?? null, status: read.status, notes: catalogReadNotes(read) };
+  let plansInserted = 0;
+  let plansUpdated = 0;
+  if (read.status === 'unreadable') {
+    log.error('catalog.unreadable', { version: catalog.version, issues: catalog.notes });
+  } else {
+    if (catalog.notes.length > 0) log.warn('catalog.not_applied', { version: catalog.version, status: read.status, notes: catalog.notes });
+    ({ inserted: plansInserted, updated: plansUpdated } = await syncPlans(db, read.catalog));
+  }
 
   // Accounts created before plans existed are on Free.
   const { modifiedCount: usersBackfilled } = await users.updateMany({ plan: { $exists: false } }, { $set: { plan: 'free' } });
@@ -132,5 +155,6 @@ export async function migrate(db: Db): Promise<MigrationReport> {
     plansUpdated,
     usersBackfilled,
     preferencesBackfilled: Math.max(locale.modifiedCount, currency.modifiedCount),
+    catalog,
   };
 }

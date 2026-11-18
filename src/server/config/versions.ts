@@ -14,22 +14,56 @@ import { collections, isDuplicateKeyError, type ConfigKind, type ConfigVersionDo
 
 export interface ConfigSpec<T> {
   kind: ConfigKind;
+  /** The stored form: how a version is read and what is written. */
   schema: ZodType<T>;
   /** What applies when nothing was ever published (today's behaviour). */
   defaults: () => T;
+  /**
+   * Why a document that reads fine must still not be written or published by
+   * this release (it could not apply it in full); empty when it may be.
+   */
+  check?: (document: T) => string[];
   /** Runs after a version is published, e.g. to bring dependent data in step. */
   onPublish?: (db: Db, document: T) => Promise<void>;
+}
+
+/** A published version this release cannot read. It is never replaced by the defaults (ADR-0014). */
+export class UnreadableConfigError extends Error {
+  constructor(
+    readonly kind: ConfigKind,
+    readonly version: number,
+    readonly issues: string[],
+  ) {
+    super(`The published ${kind} (version ${version}) cannot be read by this release: ${issues.slice(0, 3).join('; ')}`);
+    this.name = 'UnreadableConfigError';
+  }
 }
 
 export async function getPublished<T>(db: Db, spec: ConfigSpec<T>): Promise<ConfigVersionDoc<T> | null> {
   return (await collections(db).configVersions.findOne({ kind: spec.kind, status: 'published' })) as ConfigVersionDoc<T> | null;
 }
 
-/** The published document, or the defaults when none was ever published. */
+/**
+ * The published document, or the defaults when none was ever published. A
+ * published version that cannot be read throws UnreadableConfigError: it is
+ * never silently replaced by the defaults, which can grant more (ADR-0014).
+ */
 export async function publishedDocument<T>(db: Db, spec: ConfigSpec<T>): Promise<T> {
   const published = await getPublished(db, spec);
-  const parsed = published ? spec.schema.safeParse(published.document) : null;
-  return parsed?.success ? parsed.data : spec.defaults();
+  if (!published) return spec.defaults();
+  const parsed = spec.schema.safeParse(published.document);
+  if (!parsed.success) throw new UnreadableConfigError(spec.kind, published.version, issueList(parsed.error.issues));
+  return parsed.data;
+}
+
+const issueList = (issues: { path: (string | number)[]; message: string }[]) => issues.map((i) => `${i.path.join('.') || 'document'}: ${i.message}`);
+
+/** Parse a document to store, then the spec's own check: the issues that stop it from being written. */
+function validate<T>(spec: ConfigSpec<T>, document: unknown): { data: T } | { issues: string[] } {
+  const parsed = spec.schema.safeParse(document);
+  if (!parsed.success) return { issues: issueList(parsed.error.issues) };
+  const blocked = spec.check?.(parsed.data) ?? [];
+  return blocked.length > 0 ? { issues: blocked } : { data: parsed.data };
 }
 
 export async function getDraft<T>(db: Db, spec: ConfigSpec<T>): Promise<ConfigVersionDoc<T> | null> {
@@ -47,16 +81,20 @@ async function nextVersion(db: Db, kind: ConfigKind): Promise<number> {
   return (latest?.version ?? 0) + 1;
 }
 
-/** Publish the defaults as version 1 when this kind has never been published (migration). */
-export async function seedDefaults<T>(db: Db, spec: ConfigSpec<T>, now = new Date()): Promise<boolean> {
+/**
+ * Publish version 1 when this kind has never been published (migration): the
+ * defaults, or `seed` (the catalog starts from the plans in force when its
+ * history was lost, never from more generous defaults).
+ */
+export async function seedDefaults<T>(db: Db, spec: ConfigSpec<T>, seed?: { document: T; note: string }, now = new Date()): Promise<boolean> {
   if (await collections(db).configVersions.findOne({ kind: spec.kind, status: 'published' }, { projection: { _id: 1 } })) return false;
   try {
     await collections(db).configVersions.insertOne({
       kind: spec.kind,
       version: await nextVersion(db, spec.kind),
       status: 'published',
-      document: spec.defaults(),
-      note: 'Defaults from the code',
+      document: seed?.document ?? spec.defaults(),
+      note: seed?.note ?? 'Defaults from the code',
       createdBy: 'system',
       createdAt: now,
       updatedAt: now,
@@ -74,8 +112,8 @@ export type SaveResult = { status: 'saved'; version: number } | { status: 'inval
 
 /** Create or replace the draft with `document` (validated). */
 export async function saveDraft<T>(db: Db, spec: ConfigSpec<T>, document: unknown, actor: string, note: string | null = null, now = new Date()): Promise<SaveResult> {
-  const parsed = spec.schema.safeParse(document);
-  if (!parsed.success) return { status: 'invalid', issues: parsed.error.issues.map((i) => `${i.path.join('.') || 'document'}: ${i.message}`) };
+  const parsed = validate(spec, document);
+  if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
   const { configVersions } = collections(db);
   const existing = await getDraft(db, spec);
   if (existing) {
@@ -103,8 +141,8 @@ export async function publishDraft<T>(db: Db, spec: ConfigSpec<T>, actor: string
   const { configVersions } = collections(db);
   const draft = await getDraft(db, spec);
   if (!draft) return { status: 'no_draft' };
-  const parsed = spec.schema.safeParse(draft.document);
-  if (!parsed.success) return { status: 'invalid', issues: parsed.error.issues.map((i) => `${i.path.join('.') || 'document'}: ${i.message}`) };
+  const parsed = validate(spec, draft.document);
+  if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
   const previous = await getPublished(db, spec);
   if (previous) await configVersions.updateOne({ _id: previous._id, status: 'published' }, { $set: { status: 'archived', updatedAt: now } });
   try {
@@ -155,8 +193,8 @@ export async function publishIfUnchanged<T>(
   note: string,
   now = new Date(),
 ): Promise<GuardedPublishResult> {
-  const parsed = spec.schema.safeParse(document);
-  if (!parsed.success) return { status: 'invalid', issues: parsed.error.issues.map((i) => `${i.path.join('.') || 'document'}: ${i.message}`) };
+  const parsed = validate(spec, document);
+  if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
   const { configVersions } = collections(db);
   const live = await getPublished(db, spec);
   if ((live?.version ?? null) !== expected.version) return { status: 'changed', live: live?.version ?? null };

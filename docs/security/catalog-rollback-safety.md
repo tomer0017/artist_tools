@@ -1,7 +1,9 @@
 # Rolling back must never reset the published plans
 
-**State: proposed fix, awaiting the owner's approval. Not implemented.**
-Found 2026-11-18 while planning Learn. Severity: **high, latent.**
+**State: implemented** ([ADR-0014](../adr/0014-catalog-rollback-safety.md)),
+approved by the owner on 2026-11-18 as a separate change. Staging
+verification is recorded in `deploy/RELEASES.md`. Found 2026-11-18 while
+planning Learn. Severity: **high, latent.**
 
 - **Latent:** it cannot happen with today's data.
 - **High:** once triggered, it silently undoes the owner's published Free/Pro
@@ -99,7 +101,15 @@ No data change and no visible change for anyone.
 - Rolling back this fix itself is harmless while no new feature ID exists,
   because it changes no data.
 
-## Decision needed
+## Decision
 
-Approve this fix as a separate change: implement, test, release to staging,
-report, before any Learn milestone.
+Approved on 2026-11-18 as a separate change: implemented, tested, released to
+staging and reported before any Learn milestone. What was built is in
+[ADR-0014](../adr/0014-catalog-rollback-safety.md). It also covers:
+
+- settings this release knows but cannot apply (fail closed);
+- malformed `plans` documents;
+- a lost catalog history;
+- a read-only `catalog-status` command for rollbacks.
+
+The tests are in `src/server/catalog-rollback.test.ts`.

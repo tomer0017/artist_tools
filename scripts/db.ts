@@ -29,6 +29,9 @@
 //                                             checks the live content equals the record; refuses to start while
 //                                             a catalog draft exists; --hold keeps the temporary version up to
 //                                             600 s, or until a line arrives on standard input
+//   npm run db -- catalog-status              read only: the published catalog (version, content fingerprint), how
+//                                             this release reads it (what it keeps without applying, anything it
+//                                             withholds or cannot read) and whether `plans` is in step with it
 //   npm run db -- temp-testers create|remove  temporary username accounts (Free, Pro, Free in Hebrew) for a browser check
 //                                             of this server; `create` writes their passwords to standard
 //                                             output, which must be a pipe or a file, never a terminal;
@@ -44,7 +47,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { EXPORT_FEATURE_IDS, FEATURES, TOOL_FEATURE_IDS, isPlanId, type FeatureId, type PlanId, type PlanOffer } from '@/lib/plans';
 import { findUserByEmail, getUserDetail, listUsers, setUserPlan, setUserRole, setUserStatus } from '@/server/admin';
 import { authFromEnvironment } from '@/server/auth';
-import { CatalogSchema, catalogSpec, type Catalog } from '@/server/config/catalog';
+import { catalogReadNotes, catalogSpec, defaultCatalog, mergeKnown, planDocMatches, planDocsFor, readCatalog, type Catalog } from '@/server/config/catalog';
 import { getDraft, getPublished, publishIfUnchanged } from '@/server/config/versions';
 import { closeMongo, getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
@@ -67,7 +70,7 @@ import {
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | temp-testers create|remove';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -98,6 +101,12 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
     case 'migrate': {
       const r = await migrate(db);
       console.log(`Migration done: ${r.indexes} indexes ensured, ${r.configSeeded} configuration kinds published with defaults, ${r.plansInserted} plans inserted, ${r.plansUpdated} plans updated, ${r.usersBackfilled} accounts set to Free, ${r.preferencesBackfilled} given default language and currency.`);
+      const c = r.catalog;
+      if (c.status === 'unreadable') {
+        console.error(`WARNING: this release cannot read the published catalog (version ${c.version}), so plans were left exactly as they were: ${c.notes.join('; ')}`);
+      } else {
+        console.log(`Catalog version ${c.version}: ${c.status === 'ok' ? 'applied' : 'applied, with features withheld (fail closed)'}${c.notes.length ? `; ${c.notes.join(' ')}` : ''}`);
+      }
       return;
     }
     case 'list-users': {
@@ -247,6 +256,9 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       process.exitCode = await entitlementTest(db, arg === '--publish-check', hold);
       return;
     }
+    case 'catalog-status':
+      process.exitCode = await catalogStatus(db);
+      return;
     case 'temp-testers':
       if (arg === 'create') return createTempTesters(db);
       if (arg === 'remove') return removeTempTesters(db);
@@ -436,12 +448,23 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     console.log('A catalog draft exists: publishing a test version would publish it. Nothing was done; publish or discard the draft first.');
     return 1;
   }
-  // The exact live configuration, recorded before anything changes.
+  const read = readCatalog(live?.document ?? defaultCatalog());
+  if (read.status !== 'ok') {
+    console.log(`This release cannot apply the published catalog (version ${live?.version ?? '—'}) in full (${read.status}): ${catalogReadNotes(read).join(' ')}`);
+    if (publishCheck || read.status === 'unreadable') {
+      console.log('Nothing was done: run the test from the release that published it.');
+      return 1;
+    }
+  }
+  // The exact live configuration, recorded before anything changes: as stored
+  // (what this release does not know included, to publish it again exactly)
+  // and as this release applies it.
   const snapshot = {
     version: live?.version ?? null,
     publishedAt: live?.publishedAt ?? null,
     publishedBy: live?.publishedBy ?? null,
-    document: CatalogSchema.parse(live?.document ?? catalogSpec.defaults()),
+    stored: read.stored,
+    document: read.catalog,
     plans: await plansState(db),
   };
   const base = new URL(baseURL).origin;
@@ -494,7 +517,7 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
   console.log(`Plan enforcement test against ${base}, published catalog version ${live?.version ?? '(defaults)'}, temporary accounts:`);
   if (publishCheck) {
     const d = snapshot.document;
-    console.log(`  …   recorded the live configuration: version ${snapshot.version}, published ${snapshot.publishedAt?.toISOString() ?? '—'} by ${snapshot.publishedBy ?? '—'}, content ${fingerprint(d)}`);
+    console.log(`  …   recorded the live configuration: version ${snapshot.version}, published ${snapshot.publishedAt?.toISOString() ?? '—'} by ${snapshot.publishedBy ?? '—'}, content ${fingerprint(snapshot.stored)}`);
     console.log(`        Free: ${d.plans.free.features.join(', ') || 'nothing'}; quotas ${JSON.stringify(d.plans.free.quotas)}`);
     console.log(`        Pro: ${d.plans.pro.features.join(', ') || 'nothing'}; quotas ${JSON.stringify(d.plans.pro.quotas)}`);
     console.log(`        off for everyone: ${d.disabled.join(', ') || 'nothing'}; plans documents ${fingerprint(snapshot.plans)}`);
@@ -530,7 +553,8 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
       const freePlan = changed.plans.free;
       freePlan.features = FEATURES.filter((f) => (freePlan.features.includes(f) || f === 'tool.measure' || f === 'tool.compare' || f === 'export.gif') && f !== 'export.image');
       delete freePlan.quotas['export.image'];
-      const published = await publishIfUnchanged(db, catalogSpec, changed, { version: snapshot.version }, 'cli',
+      // Only what this release knows is changed; anything else in the live version is kept as it is.
+      const published = await publishIfUnchanged(db, catalogSpec, mergeKnown(snapshot.stored, changed), { version: snapshot.version }, 'cli',
         'Entitlement test (temporary): Create a Grid off for everyone; Free gains Measure & Plan, Compare & Correct and GIFs, loses saved images');
       if (published.status !== 'published') throw new Error(`the temporary version was not published (${published.status}): the live configuration changed before it could be`);
       temporaryVersion = published.version;
@@ -558,13 +582,13 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
       let restoredOk = false;
       try {
         // Over the temporary version only: if an admin published or opened a draft meanwhile, theirs stays.
-        const published = await publishIfUnchanged(db, catalogSpec, snapshot.document, { version: temporaryVersion }, 'cli', `Version ${snapshot.version ?? 'defaults'} again, after the entitlement test`);
+        const published = await publishIfUnchanged(db, catalogSpec, snapshot.stored, { version: temporaryVersion }, 'cli', `Version ${snapshot.version ?? 'defaults'} again, after the entitlement test`);
         if (published.status === 'published') {
           const now = await getPublished(db, catalogSpec);
-          const sameContent = fingerprint(CatalogSchema.parse(now?.document)) === fingerprint(snapshot.document);
+          const sameContent = fingerprint(now?.document) === fingerprint(snapshot.stored);
           const samePlans = fingerprint(await plansState(db)) === fingerprint(snapshot.plans);
           restoredOk = sameContent && samePlans;
-          check(`published the recorded configuration again (version ${published.version}): content ${fingerprint(CatalogSchema.parse(now?.document))} ${sameContent ? 'identical to' : 'DIFFERENT FROM'} version ${snapshot.version}, plans documents ${samePlans ? 'identical' : 'DIFFERENT'}`, restoredOk);
+          check(`published the recorded configuration again (version ${published.version}): content ${fingerprint(now?.document)} ${sameContent ? 'identical to' : 'DIFFERENT FROM'} version ${snapshot.version}, plans documents ${samePlans ? 'identical' : 'DIFFERENT'}`, restoredOk);
         } else {
           check(
             published.status === 'changed'
@@ -600,6 +624,39 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
   const failed = results.filter(([, ok]) => !ok).length;
   console.log(failed === 0 ? 'All checks passed.' : `${failed} check(s) failed.`);
   return failed === 0 ? 0 : 1;
+}
+
+/**
+ * Read only: the published catalog as stored (version, who published it, a
+ * fingerprint of its content), how this release reads it, and whether
+ * `plans` says what this release would write from it. For rollbacks
+ * (deploy/README.md): after going back to an older release, `plans` must
+ * still match, and nothing may be unreadable. Exit code 1 if it is not so.
+ */
+async function catalogStatus(db: ReturnType<typeof getDb>): Promise<number> {
+  const live = await getPublished(db, catalogSpec);
+  const draft = await getDraft(db, catalogSpec);
+  const read = readCatalog(live?.document ?? defaultCatalog());
+  console.log(`Published catalog: version ${live?.version ?? '— (none: the defaults apply)'}, published ${when(live?.publishedAt ?? null)} by ${live?.publishedBy ?? '—'}, content ${fingerprint(live?.document ?? null)}`);
+  console.log(`Draft: ${draft ? `version ${draft.version}` : 'none'}`);
+  console.log(`Read by this release: ${read.status}${read.status === 'ok' && catalogReadNotes(read).length === 0 ? ' (everything known and applied)' : ''}`);
+  for (const note of catalogReadNotes(read)) console.log(`  - ${note}`);
+  const stored = await plansState(db);
+  console.log(`Plans documents: ${fingerprint(stored)}`);
+  if (read.status === 'unreadable') {
+    console.log('Plans were left as they were (this release changes nothing it cannot read).');
+    return 1;
+  }
+  const wanted = planDocsFor(read.catalog);
+  const docs = await collections(db).plans.find({}).toArray();
+  let inStep = true;
+  for (const planId of ['free', 'pro'] as const) {
+    const doc = docs.find((p) => p._id === planId) ?? null;
+    const matches = planDocMatches(doc, wanted[planId]);
+    inStep &&= matches;
+    console.log(`  ${planId}: ${matches ? 'in step' : 'DIFFERS from what this release would apply'} — ${wanted[planId].features.join(', ') || 'nothing'}`);
+  }
+  return inStep ? 0 : 1;
 }
 
 const TEMP_TESTER_PREFIX = 'qa_tmp_';

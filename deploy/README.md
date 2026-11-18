@@ -234,6 +234,30 @@ sudo systemctl restart studio-companion-<env>
 Or release an older commit or tag with `release.sh`. Migrations are additive,
 so older releases run against the newer schema.
 
+**The plan catalog (ADR-0014).** From the release that added rollback safety
+on, an older release keeps what a newer one published that it does not know
+(feature IDs, sections) and applies none of it. It never replaces an
+unreadable catalog with the defaults: `plans` stays exactly as it is.
+
+- **Never roll back below that release** once a later release has published
+  a new feature ID or catalog section. Releases before it reset every plan
+  to the code defaults on such a catalog.
+- **After any rollback, check the catalog** with the release now live (read
+  only):
+
+  ```sh
+  npm run db -- catalog-status   # as the site user, see "Operating" below
+  ```
+
+  It must say `ok` (or `partial`, if features are withheld on purpose) and
+  `in step` for both plans. `unreadable` means the release cannot read the
+  published catalog: `plans` was left as it was, and Admin → Plans is
+  read-only. Go forward again, or restore an earlier version from Admin →
+  Plans.
+- **After an instant rollback** (no migration), `plans` still holds what the
+  newer release wrote. The older release ignores what it does not know, and
+  the next migration brings `plans` back in step.
+
 ## Operating
 
 - Logs: `journalctl -u studio-companion-<env> -f` (JSON lines from the app).

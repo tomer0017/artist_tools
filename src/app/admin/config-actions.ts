@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { catalogSpec } from '@/server/config/catalog';
+import { catalogSpec, saveCatalogEdit } from '@/server/config/catalog';
 import { pricingSpec } from '@/server/config/pricing';
 import { discardDraft, getPublished, publishDraft, restoreAsDraft, saveDraft, type ConfigSpec } from '@/server/config/versions';
 import { createCoupon, setCouponStatus } from '@/server/coupons';
@@ -31,9 +31,11 @@ export async function startDraft(input: { kind: string }): Promise<ActionResult>
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
   const spec = specs[kind.data] as ConfigSpec<unknown>;
   const published = await getPublished(getDb(), spec);
+  // The live document as stored (for the catalog, also what a newer release added: kept, not applied).
   const result = await saveDraft(getDb(), spec, published?.document ?? spec.defaults(), `admin:${admin.id.toHexString()}`);
   revalidatePath(pathOf(kind.data));
-  return result.status === 'saved' ? { ok: true, message: `Draft version ${result.version} started from what is live.` } : { ok: false, message: result.issues.join('; ') };
+  if (result.status === 'saved') return { ok: true, message: `Draft version ${result.version} started from what is live.` };
+  return { ok: false, message: `No draft started: this version of the app cannot edit version ${published?.version ?? '—'} safely (${result.issues.slice(0, 3).join('; ')}).` };
 }
 
 export async function saveConfigDraft(input: { kind: string; document: unknown; note?: string }): Promise<ActionResult> {
@@ -42,7 +44,12 @@ export async function saveConfigDraft(input: { kind: string; document: unknown; 
   const kind = Kind.safeParse(input.kind);
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
   const note = typeof input.note === 'string' ? input.note.trim().slice(0, 200) || null : null;
-  const result = await saveDraft(getDb(), specs[kind.data] as ConfigSpec<unknown>, input.document, `admin:${admin.id.toHexString()}`, note);
+  const actor = `admin:${admin.id.toHexString()}`;
+  // The catalog form edits only the features this release knows; the rest of the draft is kept (ADR-0014).
+  const result =
+    kind.data === 'catalog'
+      ? await saveCatalogEdit(getDb(), input.document, actor, note)
+      : await saveDraft(getDb(), specs[kind.data] as ConfigSpec<unknown>, input.document, actor, note);
   revalidatePath(pathOf(kind.data));
   if (result.status === 'invalid') return { ok: false, message: `Not saved: ${result.issues.slice(0, 3).join('; ')}` };
   return { ok: true, message: `Draft version ${result.version} saved. Nothing changes until you publish it.` };
@@ -80,7 +87,7 @@ export async function restoreConfig(input: { kind: string; version: number }): P
   const result = await restoreAsDraft(getDb(), specs[parsed.data.kind] as ConfigSpec<unknown>, parsed.data.version, `admin:${admin.id.toHexString()}`);
   revalidatePath(pathOf(parsed.data.kind));
   if (result.status === 'not_found') return { ok: false, message: 'That version does not exist.' };
-  if (result.status === 'invalid') return { ok: false, message: result.issues.join('; ') };
+  if (result.status === 'invalid') return { ok: false, message: `Not restored: this version of the app cannot apply version ${parsed.data.version} in full (${result.issues.slice(0, 3).join('; ')}).` };
   return { ok: true, message: `Draft version ${result.version} holds version ${parsed.data.version}'s settings. Publish it to go back.` };
 }
 

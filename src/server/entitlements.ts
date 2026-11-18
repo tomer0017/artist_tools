@@ -62,7 +62,7 @@ export interface Entitlements {
 }
 
 type SubscriptionState = Pick<SubscriptionDoc, 'planId' | 'status' | 'currentPeriodEnd'>;
-type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits' | 'dailyLimits'>;
+export type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits' | 'dailyLimits'>;
 
 /** What each plan includes, from the plan documents (a plan that is switched off includes nothing). */
 export function offerOf(plans: Partial<Record<PlanId, PlanState>>): PlanOffer {
@@ -179,14 +179,65 @@ export function remaining(entitlements: Entitlements, feature: FeatureId): numbe
   return left.length === 0 ? null : Math.max(0, Math.min(...left));
 }
 
+/** Problems already logged by this process (a malformed plan would otherwise be logged on every request). */
+const reported = new Set<string>();
+function reportOnce(key: string, fields: Record<string, unknown>) {
+  if (reported.has(key)) return;
+  reported.add(key);
+  log.error('plans.malformed', fields);
+}
+
+const isCapMap = (value: unknown) => value === undefined || value === null || (typeof value === 'object' && !Array.isArray(value));
+
+/** Caps of the features this release knows; a cap it cannot read allows no use at all (fail closed). */
+function capsOf(value: unknown, planId: string, field: string): Partial<Record<FeatureId, number>> {
+  const caps: Partial<Record<FeatureId, number>> = {};
+  if (!value) return caps;
+  for (const feature of FEATURES) {
+    const cap = (value as Record<string, unknown>)[feature];
+    if (cap === undefined) continue;
+    if (typeof cap === 'number' && Number.isInteger(cap) && cap >= 0) {
+      caps[feature] = cap;
+    } else {
+      caps[feature] = 0;
+      reportOnce(`${planId}.${field}.${feature}`, { plan: planId, field, feature });
+    }
+  }
+  return caps;
+}
+
+/**
+ * A `plans` document as entitlements use it (ADR-0014): only the features
+ * this release knows (a newer release's are ignored), and anything malformed
+ * counts against access, never for it — a plan without a readable shape
+ * includes nothing.
+ */
+export function planStateOf(doc: { _id: unknown; active?: unknown; features?: unknown; limits?: unknown; dailyLimits?: unknown }): PlanState {
+  const planId = String(doc._id);
+  if (!Array.isArray(doc.features) || !isCapMap(doc.limits) || !isCapMap(doc.dailyLimits)) {
+    reportOnce(`${planId}.shape`, { plan: planId });
+    return { active: false, features: [], limits: {}, dailyLimits: {} };
+  }
+  const listed = doc.features as unknown[];
+  return {
+    active: doc.active === true,
+    features: FEATURES.filter((f) => listed.includes(f)),
+    limits: capsOf(doc.limits, planId, 'limits'),
+    dailyLimits: capsOf(doc.dailyLimits, planId, 'dailyLimits'),
+  };
+}
+
 // Read on every request (two small documents), never cached: a cache here was
 // per process, and with Next.js even per bundle layer, so an admin's server
 // action could clear one copy while pages and API routes kept answering from
 // another for up to a minute after a publication.
 async function loadPlans(db: Db): Promise<Partial<Record<PlanId, PlanState>>> {
   const docs = await collections(db).plans.find({}, { projection: { active: 1, features: 1, limits: 1, dailyLimits: 1 } }).toArray();
-  return Object.fromEntries(docs.map((p) => [p._id, p])) as Partial<Record<PlanId, PlanState>>;
+  return Object.fromEntries(docs.filter((p) => isPlanId(p._id)).map((p) => [p._id, planStateOf(p)])) as Partial<Record<PlanId, PlanState>>;
 }
+
+/** The plans in force, as entitlements read them (the admin page shows them when the catalog cannot be read). */
+export const getPlanStates = loadPlans;
 
 /** What each plan includes as published, for pages that compare plans (public, no account needed). */
 export async function getPlanOffer(db: Db): Promise<PlanOffer> {

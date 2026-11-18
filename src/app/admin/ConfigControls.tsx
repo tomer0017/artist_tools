@@ -35,6 +35,7 @@ export function DraftBar({
   draftVersion,
   publishedVersion,
   changes,
+  blocked = null,
   viewer,
 }: {
   kind: 'catalog' | 'pricing';
@@ -42,6 +43,8 @@ export function DraftBar({
   publishedVersion: number | null;
   /** What publishing the draft would change, in words. */
   changes: string[];
+  /** Why this release must not start or publish a draft here (it cannot apply the version in full); discarding stays possible. */
+  blocked?: string | null;
   viewer: Viewer;
 }) {
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -60,7 +63,8 @@ export function DraftBar({
         <p className="text-sm text-foreground">
           Live: <strong>version {publishedVersion ?? '—'}</strong>. To change anything, start a draft: nothing applies until you publish it.
         </p>
-        <button type="button" disabled={pending} onClick={() => run(() => startDraft({ kind }))} className="mt-3 h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+        {blocked && <p className="mt-2 text-sm text-destructive">{blocked}</p>}
+        <button type="button" disabled={pending || blocked !== null} onClick={() => run(() => startDraft({ kind }))} className="mt-3 h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
           Start a draft
         </button>
         <Result result={result} />
@@ -85,8 +89,9 @@ export function DraftBar({
           </ul>
         )}
       </div>
+      {blocked && <p className="mt-3 text-sm text-destructive">{blocked}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" disabled={pending || changes.length === 0} onClick={() => setConfirm(true)} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+        <button type="button" disabled={pending || changes.length === 0 || blocked !== null} onClick={() => setConfirm(true)} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
           Publish version {draftVersion}
         </button>
         <button type="button" disabled={pending} onClick={() => run(() => discardConfigDraft({ kind }))} className="h-10 rounded-lg border border-border px-4 text-sm text-foreground hover:bg-secondary disabled:opacity-60">

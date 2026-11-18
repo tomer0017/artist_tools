@@ -22,7 +22,15 @@ afterAll(async () => {
 describe('migration', () => {
   it('creates every index and seeds Free and Pro from the plan definitions', async () => {
     const report = await migrate(mongo.db);
-    expect(report).toEqual({ indexes: INDEXES.length, configSeeded: 2, plansInserted: 2, plansUpdated: 0, usersBackfilled: 0, preferencesBackfilled: 0 });
+    expect(report).toEqual({
+      indexes: INDEXES.length,
+      configSeeded: 2,
+      plansInserted: 2,
+      plansUpdated: 0,
+      usersBackfilled: 0,
+      preferencesBackfilled: 0,
+      catalog: { version: 1, status: 'ok', notes: [] },
+    });
 
     for (const index of INDEXES) {
       const names = (await mongo.db.collection(index.collection).listIndexes().toArray()).map((i) => i.name);

@@ -19,5 +19,6 @@ change its decision; a new record supersedes it.
 | [0011](0011-first-party-privacy-preserving-analytics.md) | First-party, privacy-preserving analytics | Accepted |
 | [0012](0012-username-accounts-for-invited-testers.md) | Username accounts for invited testers, created only by administrators | Accepted |
 | [0013](0013-plan-enforcement-everywhere.md) | What a plan includes is enforced on every route and every save | Accepted |
+| [0014](0014-catalog-rollback-safety.md) | Rolling back never resets or widens the published plans | Accepted |
 
 Format: Context · Decision · Consequences · Alternatives considered.
