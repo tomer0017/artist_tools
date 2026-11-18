@@ -268,7 +268,7 @@ Also in the section:
 
 | # | Decision | Recommendation |
 |---|---|---|
-| — | The rollback-safety fix as a separate change: implement, test, release to staging, report ([catalog-rollback-safety.md](../security/catalog-rollback-safety.md)) | Approve first |
+| — | The rollback-safety fix as a separate change: implement, test, release to staging, report ([catalog-rollback-safety.md](../security/catalog-rollback-safety.md)) | Done: approved, then released to staging on 2026-11-18 (`224bb65`, ADR-0014) |
 | A1 | This plan and its order, M1 to M9 (07) | Approve |
 | A2 | The curriculum scope: 12 core exercises and 8 next steps | Approve; produce and publish the core first, and the next steps after the core has been used |
 | A3 | The 50 challenges | Review the list above |

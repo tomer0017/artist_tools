@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-18 15:52:59 | `224bb65` | **Rolling back never resets or widens the published plans** (ADR-0014; approved by the owner as a separate security fix; includes `9c38661`). An older release keeps the feature IDs and sections a newer one published, and applies none of them. A setting it cannot apply withholds that feature (fail closed). An unreadable catalog leaves `plans` as it is, never the defaults. Admin → Plans says so and turns editing off. New read-only `npm run db -- catalog-status`. No feature ID added. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 15:52:54, `mongodb-20261118T155254Z`) |
 | 2026-11-18 12:49:17 | `be6890c` | The staging checks (`login-test`, `entitlement-test`) try a request again, up to five times, when it could not be made: the server's resolver sometimes takes 5–15 s for staging's own sslip.io name. App unchanged | 44 indexes ensured; no data changed | yes (release step, 12:49:12) |
 | 2026-11-18 12:34:24 | `cc98437` | The publication check never overwrites an admin: it records the live version and content first, and publishes the temporary version and the restore only over the version it expects (`publishIfUnchanged`); scripts are type-checked in CI. App unchanged | 44 indexes ensured; no data changed | yes (release step, 12:34:18) |
 | 2026-11-18 11:57:07 | `3161d2c` | The operator check `entitlement-test` always removes its temporary accounts and retries requests that could not be made (the server failed for a moment to resolve its own sslip.io name, and one temporary account was left behind: removed with `remove-tester`). App unchanged since `cccced6` | 44 indexes ensured; no data changed | yes (release step, 11:57:01) |
@@ -43,6 +44,83 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Rollback safety on staging, `224bb65` (2026-11-18, 15:50–16:01Z)
+
+Approved by the owner as a standalone security fix, with this instruction:
+the published plan settings must not change without explicit approval. So
+nothing was published on staging: the publication check
+(`entitlement-test --publish-check`) and the browser test that publishes were
+not run. Production and GitHub Pages are untouched.
+
+- **Before:**
+  - CI run 30 (`224bb65`) green: type check, lint, unit/integration and
+    end-to-end.
+  - Read-only capture of the live database: catalog version 6 live
+    (versions 1–5 archived), content `f8a1a43e4cedbed7` (the owner's
+    version 2 plans), no draft; `plans` fingerprint `48f75a1f7925d6c5`, both
+    updated 12:53:43.807Z.
+- **The release:**
+  - the dump `mongodb-20261118T155254Z`;
+  - the migration printed "0 plans updated", then "Catalog version 6:
+    applied";
+  - healthy at 15:52:59.
+- **After, on real staging:**
+  - The capture is identical: catalog document, version history, and
+    `plans` byte for byte, update times included.
+  - `catalog-status`: "ok (everything known and applied)", both plans
+    "in step".
+  - Smoke 22/22.
+  - `login-test` 13/13.
+  - `entitlement-test` (read only) 11/11: Free and Pro over HTTPS, every
+    tool and export (GIFs included) exactly as version 6 publishes them, and
+    a plan switch on the same session.
+- **Real browsers** (temporary username accounts, removed afterwards;
+  passwords only in a 0600 file, deleted): 6/6 passed. Covered:
+  - Free cannot use Measure & Plan or Compare & Correct by any route, and
+    the server refuses them;
+  - Free's other tools work, saving included;
+  - Pro's Measure & Plan and Compare & Correct work, GIF exports included;
+  - saving fails closed;
+  - Hebrew, and iPhone emulation.
+
+  The test that publishes was skipped, as above. No `qa_tmp_`, `enttest_`
+  or `logintest_` account is left.
+- **Rollback, on real staging data:**
+  - **Setup:**
+    - the release's dump was restored into a throwaway database;
+    - a throwaway MongoDB user held `readWrite` on that database only, so no
+      command could reach the live one;
+    - the releases' own `npm run db` ran against it.
+  - **The new release's migration** on the data as restored changed nothing.
+  - **A simulated newer release** published version 7 with `learn.curriculum`,
+    `export.pdf`, `learn.color` and three unknown sections, and synced
+    `plans` with them. Rolling back to `224bb65` (its migration):
+    - kept every published permission: `plans` fingerprint
+      `48f75a1f7925d6c5` again;
+    - kept version 7 as it was.
+  - **`be6890c`'s migration on the same data** reproduced the hazard: Free
+    had Measure & Plan, Compare & Correct and GIFs. `224bb65` again: none of
+    them.
+  - **An unreadable version 8:** `plans` stayed byte for byte, with the
+    warning.
+  - The database and the user were dropped.
+- **The rollback procedure itself** (deploy/README.md):
+  - Instant switch to `be6890c` at 15:59:26: health `be6890c`, smoke 22/22,
+    `be6890c`'s own `entitlement-test` passed, data identical.
+  - Back to `224bb65` at 16:00:30: health `224bb65`, smoke 22/22,
+    `catalog-status` ok and in step.
+  - The final capture is identical to the one before the release.
+- **Locally:**
+  - 384 unit/integration and 210 e2e tests.
+  - Admin → Plans in a real browser on the local e2e server, with three
+    catalogs written as another release would: a newer one, one with a
+    setting it cannot apply, and an unreadable one. It found two problems,
+    fixed in `224bb65`:
+    - a readable version restored over an unreadable one could not be
+      published;
+    - the notice's colour contrast.
+  - axe passes on all three.
 
 ## Real-browser verification on staging, `be6890c` (2026-11-18, 12:49–12:57Z)
 

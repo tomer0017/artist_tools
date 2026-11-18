@@ -87,7 +87,8 @@ with:
 
 **What is needed from the owner:**
 
-- the rollback-safety fix's approval;
+- the rollback-safety fix: approved, then released to staging on 2026-11-18
+  (`224bb65`, ADR-0014);
 - the 19 decisions in [07-phases-qa-approvals.md](07-phases-qa-approvals.md)
   § Approval checkpoints, summarised in [00-review.md](00-review.md).
 

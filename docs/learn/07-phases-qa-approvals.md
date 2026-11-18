@@ -21,6 +21,8 @@ implemented or tested yet: no Learn code exists.
   has the defect, the reproduction, the fix, its tests and its rollout.
 - **Approval:** its own. It is implemented, tested, released to staging and
   reported on its own.
+- **Status:** approved, then released to staging on 2026-11-18 (`224bb65`,
+  ADR-0014).
 - **Order:** no milestone below that adds a feature ID or a catalog section
   (M2 onwards) starts before it is released.
 

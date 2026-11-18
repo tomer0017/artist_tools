@@ -1,8 +1,10 @@
 # Rolling back must never reset the published plans
 
-**State: implemented** ([ADR-0014](../adr/0014-catalog-rollback-safety.md)),
-approved by the owner on 2026-11-18 as a separate change. Staging
-verification is recorded in `deploy/RELEASES.md`. Found 2026-11-18 while
+**State: implemented and on staging** since 2026-11-18 15:52Z (`224bb65`,
+[ADR-0014](../adr/0014-catalog-rollback-safety.md)). Approved by the owner on
+2026-11-18 as a separate change. Verified on real staging (deploy/RELEASES.md),
+including the rollback scenario on a throwaway copy of staging's data. Not in
+production: production does not run this app yet. Found 2026-11-18 while
 planning Learn. Severity: **high, latent.**
 
 - **Latent:** it cannot happen with today's data.
