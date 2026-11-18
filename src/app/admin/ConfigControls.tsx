@@ -63,7 +63,7 @@ export function DraftBar({
         <p className="text-sm text-foreground">
           Live: <strong>version {publishedVersion ?? '—'}</strong>. To change anything, start a draft: nothing applies until you publish it.
         </p>
-        {blocked && <p className="mt-2 text-sm text-destructive">{blocked}</p>}
+        {blocked && <p className="mt-2 text-sm font-medium text-foreground">{blocked}</p>}
         <button type="button" disabled={pending || blocked !== null} onClick={() => run(() => startDraft({ kind }))} className="mt-3 h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
           Start a draft
         </button>
@@ -89,7 +89,7 @@ export function DraftBar({
           </ul>
         )}
       </div>
-      {blocked && <p className="mt-3 text-sm text-destructive">{blocked}</p>}
+      {blocked && <p className="mt-3 text-sm font-medium text-foreground">{blocked}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" disabled={pending || changes.length === 0 || blocked !== null} onClick={() => setConfirm(true)} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
           Publish version {draftVersion}

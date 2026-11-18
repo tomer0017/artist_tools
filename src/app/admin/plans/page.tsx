@@ -40,6 +40,8 @@ export default async function AdminPlansPage() {
   const live: Catalog = liveRead.status === 'unreadable' ? catalogFromPlans(await getPlanStates(db)) : liveRead.catalog;
   const working = draftRead && draftRead.status !== 'unreadable' ? draftRead.catalog : live;
   const liveLabel = `version ${published?.version ?? '—'} (live)`;
+  // A draft this release can apply (an earlier version restored) may replace a live version it cannot: say so, even when the plans stay the same.
+  const replaces = published && liveRead.status !== 'ok' ? [`Replaces version ${published.version}, which this version of the app ${liveRead.status === 'unreadable' ? 'cannot read' : 'cannot apply in full'}`] : [];
   const blocked =
     draftRead && draftRead.status !== 'ok'
       ? `Draft version ${draft!.version} has settings this version of the app cannot edit or publish. Discard it here, or finish it with the release that wrote it.`
@@ -60,7 +62,7 @@ export default async function AdminPlansPage() {
           kind="catalog"
           draftVersion={draft?.version ?? null}
           publishedVersion={published?.version ?? null}
-          changes={draft ? describeCatalogChanges(live, working) : []}
+          changes={draft ? [...replaces, ...describeCatalogChanges(live, working)] : []}
           blocked={blocked}
           viewer={{ email: admin.user.email, hasPassword: methods.password !== null, returnTo: '/admin/plans' }}
         />
