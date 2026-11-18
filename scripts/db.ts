@@ -341,9 +341,25 @@ async function loginTest(db: ReturnType<typeof getDb>): Promise<number> {
   return failed === 0 ? 0 : 1;
 }
 
+/**
+ * fetch, tried again (up to three times, two seconds apart) when the request
+ * could not be made at all — e.g. this server failing for a moment to resolve
+ * its own public name — but never after an answer, whatever it is.
+ */
+async function fetchRetrying(url: string, init?: RequestInit): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+  }
+}
+
 /** Sign in over this server's public address; the session cookie (in memory only), or null. */
 async function httpsSignIn(base: string, username: string, password: string): Promise<string | null> {
-  const response = await fetch(`${base}/api/auth/sign-in/username`, {
+  const response = await fetchRetrying(`${base}/api/auth/sign-in/username`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: base },
     body: JSON.stringify({ username, password }),
@@ -384,12 +400,12 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${label}`);
   };
   const usage = async (cookie: string, body: { tool?: FeatureId; features?: FeatureId[] }) => {
-    const response = await fetch(`${base}/api/usage`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie }, body: JSON.stringify(body) });
+    const response = await fetchRetrying(`${base}/api/usage`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie }, body: JSON.stringify(body) });
     const answer = (await response.json().catch(() => ({}))) as { features?: string[] };
     return { status: response.status, refused: answer.features ?? [] };
   };
   const meFeatures = async (cookie: string) => {
-    const response = await fetch(`${base}/api/me?check=1`, { headers: { cookie } });
+    const response = await fetchRetrying(`${base}/api/me?check=1`, { headers: { cookie } });
     return response.ok ? (((await response.json()) as { user: { features: string[] } }).user.features) : null;
   };
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -429,7 +445,10 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     for (const planId of ['free', 'pro'] as const) {
       const account = await createUsernameAccount(db, auth, { username: `enttest_${planId}_${suffix}`, plan: planId, locale: 'en', test: true, actor: 'cli' });
       if (account.status !== 'created') throw new Error(`could not create the temporary ${planId} account (${account.status})`);
-      created.push({ userId: account.userId, planId, cookie: await httpsSignIn(base, account.username, account.password) });
+      // Held for the clean-up before anything else can fail.
+      const entry: { userId: import('mongodb').ObjectId; planId: PlanId; cookie: string | null } = { userId: account.userId, planId, cookie: null };
+      created.push(entry);
+      entry.cookie = await httpsSignIn(base, account.username, account.password);
     }
     check('both temporary accounts sign in over HTTPS', created.every((c) => c.cookie));
     const [free, pro] = created.map((c) => ({ cookie: c.cookie ?? '' }));
@@ -467,26 +486,33 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     check(`unexpected error: ${error instanceof Error ? error.message : String(error)}`, false);
   } finally {
     if (restore) {
+      let restoredOk = false;
       try {
         const saved = await saveDraft(db, catalogSpec, restore, 'cli', `Version ${live?.version ?? 'defaults'} again, after the entitlement test`);
         const published = saved.status === 'saved' ? await publishDraft(db, catalogSpec, 'cli') : null;
-        const back = await getPlanOffer(db);
-        const restoredOk = published?.status === 'published' && same(CatalogSchema.parse((await getPublished(db, catalogSpec))?.document), restore);
+        restoredOk = published?.status === 'published' && same(CatalogSchema.parse((await getPublished(db, catalogSpec))?.document), restore);
         check(`published the previous content again (${published?.status === 'published' ? `version ${published.version}` : 'FAILED'})`, restoredOk);
-        const [free, pro] = created;
-        if (free?.cookie && pro?.cookie) {
-          await checkPlan('Free, after restoring', free.cookie, 'free', back);
-          await checkPlan('Pro, after restoring', pro.cookie, 'pro', back);
-        }
       } catch (error) {
         check(`RESTORING THE CATALOG FAILED: ${error instanceof Error ? error.message : String(error)} — publish version ${live?.version} again from /admin/plans`, false);
+      }
+      if (restoredOk) {
+        try {
+          const back = await getPlanOffer(db);
+          const [free, pro] = created;
+          if (free?.cookie && pro?.cookie) {
+            await checkPlan('Free, after restoring', free.cookie, 'free', back);
+            await checkPlan('Pro, after restoring', pro.cookie, 'pro', back);
+          }
+        } catch (error) {
+          check(`checking after restoring (the catalog itself is restored): ${error instanceof Error ? error.message : String(error)}`, false);
+        }
       }
     }
     for (const account of created) {
       const removed = await removeUsernameAccount(db, { userId: account.userId, actor: 'cli' });
       if (removed !== 'removed') results.push([`cleanup ${account.planId}`, false]);
     }
-    console.log(`  ${created.length > 0 && results.every(([label]) => !label.startsWith('cleanup')) ? 'ok  ' : 'FAIL'}  the temporary accounts were removed`);
+    console.log(`  ${results.every(([label]) => !label.startsWith('cleanup')) ? 'ok  ' : 'FAIL'}  the temporary accounts (${created.length}) were removed`);
   }
   const failed = results.filter(([, ok]) => !ok).length;
   console.log(failed === 0 ? 'All checks passed.' : `${failed} check(s) failed.`);
