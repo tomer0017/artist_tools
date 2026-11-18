@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-18 02:14:25 | `887a41e` | Username accounts for invited testers (ADR-0012): a username and a password beside Google, for accounts only admins create (no sign-up, no email); in the admin dashboard, New tester account, Reset password, Reveal initial password (once), Sign out everywhere, search by username. **Settings changed after the release, 02:14:47Z:** `AUTH_USERNAME_PASSWORD=on` with `studio-set-username-login` (previous file in `/root/backups/username-login-20261118T021447Z/`); Google, `AUTH_SIGNUP_MODE=open`, `AUTH_EMAIL_PASSWORD=off` and `MAIL_TRANSPORT=disabled` unchanged. **Data added 02:16Z,** after a second dump: QA accounts `Tomerfree` (Free) and `Tomerpay` (Pro), role user, test accounts, initial passwords sealed for one reveal until 2026-11-21 02:16Z | 44 indexes ensured (new: unique partial `users.username`, TTL `password_handoffs.expiresAt`); no existing data changed | yes (release step, 02:14:19) and again before the accounts were created (`mongodb-20261118T021507Z`) |
 | 2026-11-16 22:24:33 | `675d8de` | Color & Mixing: the wheel and all six harmonies on one screen ("Wheel & Harmonies"); a swatch click copies its HEX with feedback; a harmony's dots on the wheel make its colours the base. Study, Measure, Grid, Compare unchanged. Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 22:24:29) |
 | 2026-11-16 19:56:33 | `225ba58` | Sketch: Clean Outline and Pencil Study replace the black-and-white trace, drawn in a Web Worker (approved by the owner after a visual review; Color and Values unchanged). Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 19:56:29) |
 | 2026-11-16 11:08:59 | `186d2a4` | Email forms keep what was typed, or filled in by a password manager, before the page finished loading (`186d2a4`; it caused CI run 12's one failure), after docs `d240cb5`. Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 11:08:55) |
@@ -38,6 +39,26 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Verification of `887a41e` (2026-11-18, ~02:20Z)
+
+- **Before the release:** CI run 19 green on `887a41e` (completed by 02:11Z). Locally the same: 336 unit/integration and 200 e2e tests (the e2e ones include a staging-like server: Google plus usernames, desktop Chrome and WebKit iPhone emulation).
+- **The release log** (`studio-release-887a41e`, result success):
+  - dependencies 02:12:09, build 02:13:21, dump 02:14:19;
+  - migration ("44 indexes ensured", no data changed: 0 accounts set to Free, 0 given defaults);
+  - healthy 02:14:25.
+- **Settings:** `studio-set-username-login staging on` at 02:14:47Z (the whole previous file kept in `/root/backups/username-login-20261118T021447Z/` and as `staging.env.previous`); the app restarted healthy.
+- **The QA accounts** (created 02:16Z with `npm run db -- create-tester`, after the dump `mongodb-20261118T021507Z`):
+  - `Tomerfree` (`6afd0a74f56282f5c4b07173`): role user, plan Free, active, test account, one sign-in method (password, scrypt hash), no email (placeholder);
+  - `Tomerpay` (`6afd0a7787c67f3cc212b206`): the same with plan Pro;
+  - their initial passwords were never printed: each is sealed in `password_handoffs` for one reveal in the dashboard until 2026-11-21 02:16Z;
+  - running `create-tester` again (`TOMERFREE pro`) changed nothing.
+- **Existing accounts unchanged:** a read-only snapshot before and after (role, plan, status, sign-in methods, live sessions and a SHA-256 fingerprint of each user's documents) is identical for the owner's admin account (4 sessions kept) and for the other Google account.
+- **On the server, end to end over HTTPS** (`npm run db -- login-test`, a temporary account, removed afterwards): sign-in by username; Secure, HttpOnly, SameSite=Lax cookie; user role, Free, all five tools, no Pro features; `/admin` and the admin export 404; a plan change to Pro and back applies on the next request; a wrong password gets the one generic answer; a reset signs out at once, the old password stops working and the new one works; a suspension ends the session and refuses sign-in (403). 13/13. Its audit entries remain under a bare id (ADR-0010).
+- **Over HTTPS:** `deploy/smoke.sh` 22/22 (now also: the username form on `/sign-in` and `/he/sign-in`, the username endpoint answering, no username lookup, no password sign-up); the server-only account endpoints 404 over HTTP.
+- **Also checked:** MongoDB still listens on 127.0.0.1 only; the app's log since the release has no errors (two "Invalid password" warnings from the deliberate wrong-password checks, with no username or password in them).
+- **Not checked here:** the dashboard flows with the owner's Google admin session (revealing the initial passwords, plan switches, resets) and a real iPhone. They are covered by the e2e tests on the staging-like server and are the owner's check here.
+- **Releases kept:** `887a41e 675d8de 225ba58 186d2a4 b22a510` (`8ce4860` pruned). Rollback: `sudo studio-set-username-login staging off` turns username sign-in off (accounts kept); to go back to the previous code, point `current` at `675d8de` and restart (it ignores the new fields).
 
 ## Verification of `675d8de` (2026-11-16, ~22:25Z)
 
@@ -177,4 +198,4 @@ every migration was additive).
 
 ## Awaiting deployment
 
-Nothing: `675d8de` is live, Google only.
+Nothing: `887a41e` is live: Google, plus username sign-in for accounts admins create.
