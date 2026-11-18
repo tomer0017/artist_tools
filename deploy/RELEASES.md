@@ -12,6 +12,8 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-18 11:57:07 | `3161d2c` | The operator check `entitlement-test` always removes its temporary accounts and retries requests that could not be made (the server failed for a moment to resolve its own sslip.io name, and one temporary account was left behind: removed with `remove-tester`). App unchanged since `cccced6` | 44 indexes ensured; no data changed | yes (release step, 11:57:01) |
+| 2026-11-18 11:33:59 | `cccced6` | **What a plan includes is enforced everywhere** (ADR-0013), after QA found a Free account using Measure & Plan although the published catalog (version 2) removed it from Free: a tool opens only if the plan includes it (locked screen otherwise, English and Hebrew, by every route), every save and export is authorized by the server first and fails closed, plan changes and publications reach open studios, plans pages follow the published catalog. Settings unchanged | 44 indexes ensured; no data changed (0 plans updated: the published version 2 was already in `plans`) | yes (release step, 11:33:54) and again before the publication check (`mongodb-20261118T113628Z`) |
 | 2026-11-18 02:14:25 | `887a41e` | Username accounts for invited testers (ADR-0012): a username and a password beside Google, for accounts only admins create (no sign-up, no email); in the admin dashboard, New tester account, Reset password, Reveal initial password (once), Sign out everywhere, search by username. **Settings changed after the release, 02:14:47Z:** `AUTH_USERNAME_PASSWORD=on` with `studio-set-username-login` (previous file in `/root/backups/username-login-20261118T021447Z/`); Google, `AUTH_SIGNUP_MODE=open`, `AUTH_EMAIL_PASSWORD=off` and `MAIL_TRANSPORT=disabled` unchanged. **Data added 02:16Z,** after a second dump: QA accounts `Tomerfree` (Free) and `Tomerpay` (Pro), role user, test accounts, initial passwords sealed for one reveal until 2026-11-21 02:16Z | 44 indexes ensured (new: unique partial `users.username`, TTL `password_handoffs.expiresAt`); no existing data changed | yes (release step, 02:14:19) and again before the accounts were created (`mongodb-20261118T021507Z`) |
 | 2026-11-16 22:24:33 | `675d8de` | Color & Mixing: the wheel and all six harmonies on one screen ("Wheel & Harmonies"); a swatch click copies its HEX with feedback; a harmony's dots on the wheel make its colours the base. Study, Measure, Grid, Compare unchanged. Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 22:24:29) |
 | 2026-11-16 19:56:33 | `225ba58` | Sketch: Clean Outline and Pencil Study replace the black-and-white trace, drawn in a Web Worker (approved by the owner after a visual review; Color and Values unchanged). Settings unchanged: Google only | 42 indexes ensured; no data changed | yes (release step, 19:56:29) |
@@ -39,6 +41,20 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Verification of `cccced6` and `3161d2c` (2026-11-18, 11:34–12:00Z)
+
+- **Before the releases:** CI run 21 green on `cccced6` and run 22 on `3161d2c`. Locally: 355 unit/integration and 210 e2e tests, including 10 on a third staging-like server with staging's published catalog (Free/Pro/admin, direct URLs, reloads, plan switches, a publication while a tool is open, two tabs, revoked sessions, exports, Hebrew, WebKit iPhone emulation).
+- **The release logs** (`studio-release-cccced6`, `studio-release-3161d2c`, result success): dump, then "44 indexes ensured" with no data changed, healthy at 11:33:59 and 11:57:07.
+- **Over HTTPS:** `deploy/smoke.sh` 22/22 after each release.
+- **On the server, end to end over HTTPS with temporary accounts** (removed afterwards):
+  - `npm run db -- entitlement-test` (11:35Z): Free gets exactly the published Free plan (Study & Simplify, Color & Mixing, Create a Grid, saving images); Measure & Plan and Compare & Correct are refused (403 naming the tool), and so are their exports; GIFs are refused to Free; Pro gets all nine features; Free → Pro on the same session opens Measure & Plan at once, and back to Free refuses it again. All checks passed.
+  - `npm run db -- login-test`: 13/13 (its Free check now compares with the published Free plan).
+  - `npm run db -- entitlement-test --publish-check` (11:58Z, after the dump `mongodb-20261118T113628Z`): published a temporary **version 3** (Create a Grid off for everyone, Measure & Plan added to Free): both accounts lost Create a Grid and Free gained Measure & Plan on their existing sessions, every tool and export as published; then published version 2's content again as **version 4**: both back exactly as before. 30/30. Version 4 is live and identical to version 2 (`plans` too).
+  - A first `--publish-check` attempt (11:38Z, `cccced6`) stopped before publishing anything: the server could not resolve its own name for a moment. It left one temporary account (`enttest_free_6873d4`), removed at once with `remove-tester`; `3161d2c` fixes that.
+- **Unchanged:** before/after snapshots (roles, plans, status, sign-in methods, live sessions, SHA-256 fingerprints of each user's documents) are identical for the owner's admin account, the other Google account, `Tomerfree` and `Tomerpay`. MongoDB listens on 127.0.0.1 only; the app's log since the release has no errors.
+- **Not checked here:** a real browser on staging (the temporary-account browser check was blocked by the session's permission policy before any account was made: it needs the owner's go-ahead), the owner's own accounts (`Tomerfree`, `Tomerpay`: their passwords are the owner's; nothing was reset) and a real iPhone. The same build and catalog are covered by the e2e tests on the staging-like server.
+- **Open tabs from before the release** run the old studio code until they reload or navigate.
 
 ## Verification of `887a41e` (2026-11-18, ~02:20Z)
 
@@ -198,4 +214,4 @@ every migration was additive).
 
 ## Awaiting deployment
 
-Nothing: `887a41e` is live: Google, plus username sign-in for accounts admins create.
+Nothing: `3161d2c` is live (plan enforcement, ADR-0013, since `cccced6`): Google, plus username sign-in for accounts admins create; the plan catalog's live version is 4 (version 2's content).
