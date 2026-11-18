@@ -5,7 +5,7 @@ import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mo
 import { PLAN_FEATURES, TOOL_FEATURES, featureRows, hasAllTools, isDefaultSplit, type FeatureId } from '@/lib/plans';
 import { getAccountSummary } from './account';
 import { CatalogSchema, catalogSpec, defaultCatalog, type Catalog } from './config/catalog';
-import { publishDraft, saveDraft } from './config/versions';
+import { discardDraft, getDraft, getPublished, publishDraft, publishIfUnchanged, saveDraft } from './config/versions';
 import { collections } from './db/collections';
 import { migrate } from './db/migrate';
 import { authorizeToolUse, getEntitlements, getPlanOffer, includes } from './entitlements';
@@ -152,6 +152,33 @@ describe('published plans decide, on the next request', () => {
       asOf: now.toISOString(),
     });
     await publish(defaultCatalog());
+  });
+});
+
+describe('operator tools publish only over the version they expect (never over an admin)', () => {
+  it('refuses when another version went live, or a draft is open (left untouched), and otherwise publishes and restores', async () => {
+    await publish(defaultCatalog());
+    const live = (await getPublished(db, catalogSpec))!;
+    const temporary: Catalog = { ...defaultCatalog(), disabled: ['tool.grid'] };
+
+    expect(await publishIfUnchanged(db, catalogSpec, temporary, { version: live.version - 1 }, 'cli', 'test')).toEqual({ status: 'changed', live: live.version });
+    expect((await getPublished(db, catalogSpec))!.version).toBe(live.version);
+
+    await saveDraft(db, catalogSpec, STAGING_V2, 'admin:someone', 'an admin is editing');
+    const draft = await getDraft(db, catalogSpec);
+    expect(await publishIfUnchanged(db, catalogSpec, temporary, { version: live.version }, 'cli', 'test')).toEqual({ status: 'draft_exists' });
+    expect(await getDraft(db, catalogSpec)).toEqual(draft);
+    expect((await getPublished(db, catalogSpec))!.version).toBe(live.version);
+    expect(await discardDraft(db, 'catalog', 'admin:someone')).toBe(true);
+
+    const published = await publishIfUnchanged(db, catalogSpec, temporary, { version: live.version }, 'cli', 'test');
+    expect(published).toEqual({ status: 'published', version: live.version + 1 });
+    expect((await getPlanOffer(db)).free).not.toContain('tool.grid');
+    // Back from the temporary version, over that version only.
+    expect(await publishIfUnchanged(db, catalogSpec, defaultCatalog(), { version: live.version }, 'cli', 'restore')).toEqual({ status: 'changed', live: live.version + 1 });
+    expect(await publishIfUnchanged(db, catalogSpec, defaultCatalog(), { version: live.version + 1 }, 'cli', 'restore')).toEqual({ status: 'published', version: live.version + 2 });
+    expect(CatalogSchema.parse((await getPublished(db, catalogSpec))!.document)).toEqual(defaultCatalog());
+    expect((await getPlanOffer(db)).free).toEqual(PLAN_FEATURES.free);
   });
 });
 

@@ -1,0 +1,6 @@
+{
+  "//": "The operator CLI and the e2e server (scripts/*.ts), type-checked like the app (they import it); CI runs it after the app's check.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false, "types": ["node"] },
+  "include": ["next-env.d.ts", "src/i18n/types.d.ts", "scripts/*.ts"]
+}

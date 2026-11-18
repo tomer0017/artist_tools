@@ -9,7 +9,7 @@
     "build": "next build && node scripts/prepare-standalone.mjs",
     "start": "PORT=8080 node .next/standalone/server.js",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

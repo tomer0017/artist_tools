@@ -82,15 +82,21 @@ a temporary Free account and a temporary Pro account get exactly what the
 published plan catalog gives them: every tool allowed or refused, every
 export, what the studio is told, and a plan change on the same session. The
 accounts are removed afterwards; nothing secret is printed. With
-`--publish-check` it also publishes a temporary catalog version (Create a
-Grid off for everyone, Measure & Plan added to Free), checks both accounts
-against it, and publishes the previous content again as a new version (both
-are audited and listed in Admin → Plans). It refuses to start while a
-catalog draft exists, because publishing would publish that draft.
+`--publish-check` it changes published entitlements for real: it records the
+live version and its exact content (printed with a fingerprint), publishes a
+temporary version over exactly that version (Create a Grid off for everyone;
+Free gains Measure & Plan, Compare & Correct and GIFs, and loses saving
+images), checks both accounts against it, and then publishes the recorded
+content again as a new version, over the temporary one only. If an admin
+published or opened a draft in the meantime, nothing of theirs is
+overwritten: the restore stops and says what to do. At the end the live
+content and the `plans` documents must equal the record. Both versions are
+audited and listed in Admin → Plans. It refuses to start while a catalog
+draft exists.
 
-`--hold <seconds>` (at most 300) keeps the temporary version that long
-before restoring, so a studio left open in a browser can be watched following
-it.
+`--hold <seconds>` (at most 600) keeps the temporary version that long, or
+until a line arrives on standard input, so a studio left open in a browser
+can be watched following it.
 
 For a check in a real browser, `npm run db -- temp-testers create` makes
 temporary username accounts (Free, Pro, and Free in Hebrew) and writes their

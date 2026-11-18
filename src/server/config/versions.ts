@@ -128,6 +128,76 @@ export async function publishDraft<T>(db: Db, spec: ConfigSpec<T>, actor: string
   return { status: 'published', version: draft.version };
 }
 
+export type GuardedPublishResult =
+  | { status: 'published'; version: number }
+  /** What is live is no longer the version expected (someone published meanwhile): nothing was written. */
+  | { status: 'changed'; live: number | null }
+  /** Someone has a draft open: it was not touched, and nothing was published. */
+  | { status: 'draft_exists' }
+  | { status: 'invalid'; issues: string[] };
+
+/**
+ * Publish `document` as a new version only if what is live is still exactly
+ * version `expected` and no draft exists — a compare-and-swap for operator
+ * tools, which must never overwrite an admin's draft or publication. Its own
+ * draft is inserted (the one-draft index refuses it if a draft appeared
+ * meanwhile, where saveDraft would have taken that draft over), and the
+ * expected version is archived only if it is still the published one;
+ * otherwise everything is undone and nothing changes. Audited like a publish
+ * from the dashboard.
+ */
+export async function publishIfUnchanged<T>(
+  db: Db,
+  spec: ConfigSpec<T>,
+  document: unknown,
+  expected: { version: number | null },
+  actor: string,
+  note: string,
+  now = new Date(),
+): Promise<GuardedPublishResult> {
+  const parsed = spec.schema.safeParse(document);
+  if (!parsed.success) return { status: 'invalid', issues: parsed.error.issues.map((i) => `${i.path.join('.') || 'document'}: ${i.message}`) };
+  const { configVersions } = collections(db);
+  const live = await getPublished(db, spec);
+  if ((live?.version ?? null) !== expected.version) return { status: 'changed', live: live?.version ?? null };
+  if (await getDraft(db, spec)) return { status: 'draft_exists' };
+
+  const version = await nextVersion(db, spec.kind);
+  let draftId;
+  try {
+    draftId = (
+      await configVersions.insertOne({ kind: spec.kind, version, status: 'draft', document: parsed.data, note, createdBy: actor, createdAt: now, updatedAt: now, publishedBy: null, publishedAt: null })
+    ).insertedId;
+  } catch (error) {
+    // A draft (or this version number) appeared since the check: leave it alone.
+    if (isDuplicateKeyError(error)) return { status: 'draft_exists' };
+    throw error;
+  }
+  await recordAudit(db, { type: 'admin.config_saved', userId: null, actor, metadata: { kind: spec.kind, version } });
+  if (live) {
+    const { modifiedCount } = await configVersions.updateOne({ _id: live._id, status: 'published' }, { $set: { status: 'archived', updatedAt: now } });
+    if (modifiedCount === 0) {
+      await configVersions.deleteOne({ _id: draftId, status: 'draft' });
+      return { status: 'changed', live: (await getPublished(db, spec))?.version ?? null };
+    }
+  }
+  try {
+    // Only this draft as written here: if anyone edited it meanwhile, nothing is published.
+    const { modifiedCount } = await configVersions.updateOne(
+      { _id: draftId, status: 'draft', updatedAt: now },
+      { $set: { status: 'published', publishedBy: actor, publishedAt: new Date(), updatedAt: new Date() } },
+    );
+    if (modifiedCount === 0) throw new Error('draft changed while publishing');
+  } catch (error) {
+    // Put the previous version back rather than leave nothing published.
+    if (live) await configVersions.updateOne({ _id: live._id }, { $set: { status: 'published', updatedAt: now } });
+    throw error;
+  }
+  await spec.onPublish?.(db, parsed.data);
+  await recordAudit(db, { type: 'admin.config_published', userId: null, actor, metadata: { kind: spec.kind, version, previous: live?.version ?? null } });
+  return { status: 'published', version };
+}
+
 /** Start a draft from an earlier version's content (going back is publishing it again). */
 export async function restoreAsDraft<T>(db: Db, spec: ConfigSpec<T>, version: number, actor: string): Promise<SaveResult | { status: 'not_found' }> {
   const source = await collections(db).configVersions.findOne({ kind: spec.kind, version, status: { $ne: 'draft' } });

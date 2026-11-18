@@ -33,6 +33,8 @@ jobs:
       - run: npm ci
       - name: Type check
         run: npx tsc --noEmit -p .
+      - name: Type check the scripts (operator CLI, e2e server)
+        run: npx tsc --noEmit -p tsconfig.scripts.json
       - name: Lint
         run: npm run lint
       - name: Cache the MongoDB binary used by the integration tests

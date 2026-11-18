@@ -20,11 +20,15 @@
 //                                             check over this server's own URL that each plan gets exactly what
 //                                             the published catalog gives it (every tool and export, refusals
 //                                             included), and a plan change, with temporary accounts removed
-//                                             afterwards; --publish-check also publishes a temporary version
-//                                             (Create a Grid off for everyone, Measure & Plan added to Free),
-//                                             checks it, and publishes the previous content again (refuses to
-//                                             start while a catalog draft exists); --hold keeps the temporary
-//                                             version up to 300 s first, for a browser check to watch
+//                                             afterwards; --publish-check also records the live version and
+//                                             content, publishes a temporary version over exactly that version
+//                                             (Create a Grid off for everyone; Free gains Measure & Plan, Compare
+//                                             & Correct and GIFs, loses saving images), checks it, then publishes
+//                                             the recorded content again over the temporary version only (never
+//                                             over an admin's draft or publication: it stops and says so) and
+//                                             checks the live content equals the record; refuses to start while
+//                                             a catalog draft exists; --hold keeps the temporary version up to
+//                                             600 s, or until a line arrives on standard input
 //   npm run db -- temp-testers create|remove  temporary username accounts (Free, Pro, Free in Hebrew) for a browser check
 //                                             of this server; `create` writes their passwords to standard
 //                                             output, which must be a pipe or a file, never a terminal;
@@ -36,12 +40,12 @@
 //
 // Runs with the react-server condition so `server-only` modules can be imported.
 import { existsSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { EXPORT_FEATURE_IDS, FEATURES, TOOL_FEATURE_IDS, isPlanId, type FeatureId, type PlanId, type PlanOffer } from '@/lib/plans';
 import { findUserByEmail, getUserDetail, listUsers, setUserPlan, setUserRole, setUserStatus } from '@/server/admin';
 import { authFromEnvironment } from '@/server/auth';
 import { CatalogSchema, catalogSpec, type Catalog } from '@/server/config/catalog';
-import { getDraft, getPublished, publishDraft, saveDraft } from '@/server/config/versions';
+import { getDraft, getPublished, publishIfUnchanged } from '@/server/config/versions';
 import { closeMongo, getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
@@ -184,7 +188,7 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       console.log(`Transport: ${mail.transport}. Sender: ${mail.from}.${mail.smtp ? ` Server: ${mail.smtp.host}:${mail.smtp.port} (TLS).` : ''}`);
       if (mail.transport === 'smtp') {
         const check = await mailer.check();
-        if (!check.ok) throw new Error(`The mail server refused the connection or the sign-in: ${check.reason}`);
+        if (!check.ok) throw new Error(`The mail server refused the connection or the sign-in: ${'reason' in check ? check.reason : 'no reason given'}`);
         console.log('Connected and signed in to the mail server.');
       }
       const result = await mailer.deliver(mailTemplates(arg2).deliveryTest(), { address: arg, userId: null });
@@ -239,7 +243,7 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       if (arg !== undefined && arg !== '--publish-check') throw new Error(USAGE);
       const holdAt = process.argv.indexOf('--hold');
       const hold = holdAt > 0 ? Number(process.argv[holdAt + 1]) : 0;
-      if (!Number.isInteger(hold) || hold < 0 || hold > 300 || (hold > 0 && arg !== '--publish-check')) throw new Error(USAGE);
+      if (!Number.isInteger(hold) || hold < 0 || hold > 600 || (hold > 0 && arg !== '--publish-check')) throw new Error(USAGE);
       process.exitCode = await entitlementTest(db, arg === '--publish-check', hold);
       return;
     }
@@ -369,16 +373,56 @@ async function httpsSignIn(base: string, username: string, password: string): Pr
   return response.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
 }
 
+/** A catalog version's content as one comparable fingerprint (key order does not matter). */
+function fingerprint(value: unknown): string {
+  const canonical = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical((v as Record<string, unknown>)[k])])) : v;
+  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex').slice(0, 16);
+}
+
+/** What `plans` holds per plan, without timestamps (an absent daily limit and an empty one are the same). */
+async function plansState(db: ReturnType<typeof getDb>) {
+  const docs = await collections(db).plans.find({}, { sort: { _id: 1 } }).toArray();
+  return docs.map((p) => ({ id: p._id, active: p.active, features: p.features, limits: p.limits ?? {}, dailyLimits: p.dailyLimits ?? {} }));
+}
+
+/** Waits up to `seconds`, or until a line arrives on standard input (a browser check that is done says so). */
+function holdFor(seconds: number): Promise<'line' | 'time'> {
+  return new Promise((resolve) => {
+    const finish = (how: 'line' | 'time') => {
+      clearTimeout(timer);
+      process.stdin.off('data', onData);
+      // Done with standard input: an open pipe would keep the process from exiting.
+      process.stdin.destroy();
+      resolve(how);
+    };
+    const onData = (chunk: Buffer | string) => {
+      if (String(chunk).includes('\n')) finish('line');
+    };
+    const timer = setTimeout(() => finish('time'), seconds * 1000);
+    process.stdin.on('data', onData);
+    process.stdin.on('error', () => undefined);
+    process.stdin.resume();
+  });
+}
+
 /**
  * What each plan may use, end to end through this server's public address
  * (nginx, TLS, the app), compared with the published catalog: for a
  * temporary Free account and a temporary Pro account, every tool (allowed or
  * refused with the tool named), every export from a tool the plan includes,
- * what /api/me reports, and a plan change on the same session. With
- * `publishCheck`, a temporary catalog version is published (Create a Grid off
- * for everyone, Measure & Plan added to Free) and checked, then the previous
- * content is published again, whatever happens. Nothing secret is printed;
- * the temporary accounts are removed at the end.
+ * what /api/me reports, and a plan change on the same session.
+ *
+ * With `publishCheck`, a real change of published entitlements: the live
+ * version and its exact content are recorded first; a temporary version is
+ * published over exactly that version (Create a Grid off for everyone; Free
+ * gains Measure & Plan, Compare & Correct and GIFs, and loses saving images)
+ * and checked; after `holdSeconds` (or a line on standard input) the recorded
+ * content is published again, over the temporary version only. If anyone
+ * published or opened a draft meanwhile, nothing of theirs is overwritten:
+ * the restore stops and says so. At the end the live content must equal the
+ * recorded one. Nothing secret is printed; the temporary accounts (and their
+ * sessions) are removed at the end.
  */
 async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boolean, holdSeconds = 0): Promise<number> {
   const { baseURL, usernamePassword } = authConfig();
@@ -391,6 +435,14 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     console.log('A catalog draft exists: publishing a test version would publish it. Nothing was done; publish or discard the draft first.');
     return 1;
   }
+  // The exact live configuration, recorded before anything changes.
+  const snapshot = {
+    version: live?.version ?? null,
+    publishedAt: live?.publishedAt ?? null,
+    publishedBy: live?.publishedBy ?? null,
+    document: CatalogSchema.parse(live?.document ?? catalogSpec.defaults()),
+    plans: await plansState(db),
+  };
   const base = new URL(baseURL).origin;
   const auth = authFromEnvironment({ nextjs: false });
   const suffix = randomBytes(3).toString('hex');
@@ -439,8 +491,16 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
   };
 
   console.log(`Plan enforcement test against ${base}, published catalog version ${live?.version ?? '(defaults)'}, temporary accounts:`);
+  if (publishCheck) {
+    const d = snapshot.document;
+    console.log(`  …   recorded the live configuration: version ${snapshot.version}, published ${snapshot.publishedAt?.toISOString() ?? '—'} by ${snapshot.publishedBy ?? '—'}, content ${fingerprint(d)}`);
+    console.log(`        Free: ${d.plans.free.features.join(', ') || 'nothing'}; quotas ${JSON.stringify(d.plans.free.quotas)}`);
+    console.log(`        Pro: ${d.plans.pro.features.join(', ') || 'nothing'}; quotas ${JSON.stringify(d.plans.pro.quotas)}`);
+    console.log(`        off for everyone: ${d.disabled.join(', ') || 'nothing'}; plans documents ${fingerprint(snapshot.plans)}`);
+  }
   const created: { userId: import('mongodb').ObjectId; planId: PlanId; cookie: string | null }[] = [];
-  let restore: Catalog | null = null;
+  /** The temporary version, once published over the recorded one. */
+  let temporaryVersion: number | null = null;
   try {
     for (const planId of ['free', 'pro'] as const) {
       const account = await createUsernameAccount(db, auth, { username: `enttest_${planId}_${suffix}`, plan: planId, locale: 'en', test: true, actor: 'cli' });
@@ -464,36 +524,58 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     }
 
     if (publishCheck) {
-      const current = CatalogSchema.parse(live?.document ?? catalogSpec.defaults());
-      const changed: Catalog = structuredClone(current);
+      const changed: Catalog = structuredClone(snapshot.document);
       changed.disabled = [...new Set([...changed.disabled, 'tool.grid' as const])];
-      if (!changed.plans.free.features.includes('tool.measure')) changed.plans.free.features = FEATURES.filter((f) => f === 'tool.measure' || changed.plans.free.features.includes(f));
-      restore = current;
-      const saved = await saveDraft(db, catalogSpec, changed, 'cli', 'Entitlement test (temporary): Create a Grid off for everyone, Measure & Plan in Free');
-      const published = saved.status === 'saved' ? await publishDraft(db, catalogSpec, 'cli') : null;
-      check(`published a temporary version (${published?.status === 'published' ? `version ${published.version}` : 'FAILED'})`, published?.status === 'published');
+      const freePlan = changed.plans.free;
+      freePlan.features = FEATURES.filter((f) => (freePlan.features.includes(f) || f === 'tool.measure' || f === 'tool.compare' || f === 'export.gif') && f !== 'export.image');
+      delete freePlan.quotas['export.image'];
+      const published = await publishIfUnchanged(db, catalogSpec, changed, { version: snapshot.version }, 'cli',
+        'Entitlement test (temporary): Create a Grid off for everyone; Free gains Measure & Plan, Compare & Correct and GIFs, loses saved images');
+      if (published.status !== 'published') throw new Error(`the temporary version was not published (${published.status}): the live configuration changed before it could be`);
+      temporaryVersion = published.version;
+      check(`published a temporary version (version ${published.version}, over version ${snapshot.version} only)`, true);
       const temporary = await getPlanOffer(db);
       check('Free and Pro lose Create a Grid at once (403 on the same sessions)', (await usage(free.cookie, { tool: 'tool.grid' })).status === 403 && (await usage(pro.cookie, { tool: 'tool.grid' })).status === 403);
-      check('Free gains Measure & Plan at once', (await usage(free.cookie, { tool: 'tool.measure' })).status === 200);
+      check('Free gains Measure & Plan and Compare & Correct at once', (await usage(free.cookie, { tool: 'tool.measure' })).status === 200 && (await usage(free.cookie, { tool: 'tool.compare' })).status === 200);
+      check('Free saves GIFs from Compare & Correct, never the Pro ones', (await usage(free.cookie, { tool: 'tool.compare', features: ['export.gif'] })).status === 200 &&
+        same(await usage(free.cookie, { tool: 'tool.compare', features: ['export.gif', 'export.gif_large'] }), { status: 403, refused: ['export.gif_large'] }) &&
+        same(await usage(free.cookie, { tool: 'tool.compare', features: ['export.gif', 'export.gif_difference'] }), { status: 403, refused: ['export.gif_difference'] }));
+      check('Free can no longer save images; Pro still can', same(await usage(free.cookie, { tool: 'tool.study', features: ['export.image'] }), { status: 403, refused: ['export.image'] }) &&
+        (await usage(pro.cookie, { tool: 'tool.study', features: ['export.image'] })).status === 200);
       await checkPlan('Free, temporary version', free.cookie, 'free', temporary);
       await checkPlan('Pro, temporary version', pro.cookie, 'pro', temporary);
       if (holdSeconds > 0) {
-        console.log(`  …   keeping the temporary version for ${holdSeconds} s (a browser check is watching)`);
-        await new Promise((resolve) => setTimeout(resolve, holdSeconds * 1000));
+        console.log(`  …   keeping the temporary version up to ${holdSeconds} s, or until a line arrives on standard input (a browser check is watching)`);
+        const how = await holdFor(holdSeconds);
+        console.log(`  …   ${how === 'line' ? 'the browser check is done' : 'the time is up'}: restoring`);
       }
     }
   } catch (error) {
     check(`unexpected error: ${error instanceof Error ? error.message : String(error)}`, false);
   } finally {
-    if (restore) {
+    if (temporaryVersion !== null) {
       let restoredOk = false;
       try {
-        const saved = await saveDraft(db, catalogSpec, restore, 'cli', `Version ${live?.version ?? 'defaults'} again, after the entitlement test`);
-        const published = saved.status === 'saved' ? await publishDraft(db, catalogSpec, 'cli') : null;
-        restoredOk = published?.status === 'published' && same(CatalogSchema.parse((await getPublished(db, catalogSpec))?.document), restore);
-        check(`published the previous content again (${published?.status === 'published' ? `version ${published.version}` : 'FAILED'})`, restoredOk);
+        // Over the temporary version only: if an admin published or opened a draft meanwhile, theirs stays.
+        const published = await publishIfUnchanged(db, catalogSpec, snapshot.document, { version: temporaryVersion }, 'cli', `Version ${snapshot.version ?? 'defaults'} again, after the entitlement test`);
+        if (published.status === 'published') {
+          const now = await getPublished(db, catalogSpec);
+          const sameContent = fingerprint(CatalogSchema.parse(now?.document)) === fingerprint(snapshot.document);
+          const samePlans = fingerprint(await plansState(db)) === fingerprint(snapshot.plans);
+          restoredOk = sameContent && samePlans;
+          check(`published the recorded configuration again (version ${published.version}): content ${fingerprint(CatalogSchema.parse(now?.document))} ${sameContent ? 'identical to' : 'DIFFERENT FROM'} version ${snapshot.version}, plans documents ${samePlans ? 'identical' : 'DIFFERENT'}`, restoredOk);
+        } else {
+          check(
+            published.status === 'changed'
+              ? `NOT RESTORED: another version went live while the test ran (now version ${published.live}); nothing of it was overwritten. Version ${temporaryVersion} was the temporary one; once that change is settled, publish version ${snapshot.version}'s content again from /admin/plans if needed`
+              : published.status === 'draft_exists'
+                ? `NOT RESTORED: an admin opened a draft while the test ran; it was not touched. Version ${temporaryVersion} (temporary) is still live: publish version ${snapshot.version}'s content again from /admin/plans once the draft is done`
+                : `NOT RESTORED: ${published.issues.join('; ')}`,
+            false,
+          );
+        }
       } catch (error) {
-        check(`RESTORING THE CATALOG FAILED: ${error instanceof Error ? error.message : String(error)} — publish version ${live?.version} again from /admin/plans`, false);
+        check(`RESTORING THE CATALOG FAILED: ${error instanceof Error ? error.message : String(error)} — publish version ${snapshot.version} again from /admin/plans`, false);
       }
       if (restoredOk) {
         try {
