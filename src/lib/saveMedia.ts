@@ -66,9 +66,14 @@ export function makeShareFile(blob: Blob, filename: string, mime = mimeForFilena
 
 /** Whether the platform can share this file via the Web Share API. */
 export function canShareFile(file: File, nav: Navigator = navigator): boolean {
+  return canShareFiles([file], nav);
+}
+
+/** Whether the platform can share these files together, in one share sheet. */
+export function canShareFiles(files: File[], nav: Navigator = navigator): boolean {
   const n = nav as ShareCapableNavigator;
   try {
-    return !!(n.share && n.canShare && n.canShare({ files: [file] }));
+    return files.length > 0 && !!(n.share && n.canShare && n.canShare({ files }));
   } catch {
     return false;
   }
@@ -95,10 +100,15 @@ export function isTouchDevice(): boolean {
  * throwing so callers can distinguish cancel from real failure.
  */
 export async function shareFile(file: File, nav: Navigator = navigator): Promise<ShareResult> {
+  return shareFiles([file], nav);
+}
+
+/** Several files in one share sheet (on iPhone: "Save N Images", Print, Save to Files). As shareFile. */
+export async function shareFiles(files: File[], nav: Navigator = navigator): Promise<ShareResult> {
   const n = nav as ShareCapableNavigator;
-  if (!n.share || !n.canShare || !n.canShare({ files: [file] })) return 'unsupported';
+  if (files.length === 0 || !n.share || !n.canShare || !n.canShare({ files })) return 'unsupported';
   try {
-    await n.share({ files: [file] });
+    await n.share({ files });
     return 'shared';
   } catch (err) {
     const name = (err as Error)?.name;

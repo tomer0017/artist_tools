@@ -47,10 +47,10 @@ implemented or tested yet: no Learn code exists.
 - **Value:** immediately useful to painters and teachers, with no new data.
 
 ### M2 — Print foundation and the Grid PDF
-- **Status:** approved 2026-11-18 and implemented (ADR-0015); on staging
-  since 2026-11-18 (`d261013`, deploy/RELEASES.md), with `export.pdf` in no
-  plan (admins only). Open: the owner's print check. M3 waits for the
-  owner's approval.
+- **Status:** approved by the owner on 2026-11-18 (`d261013`, ADR-0015).
+  Afterwards the owner found the PNG grid image is what is needed: the "Save
+  PDF (A4)" button is hidden since M3, and the PDF code and `export.pdf` are
+  kept (ADR-0016 §5).
 - **Scope:**
   - the chosen PDF library, loaded on demand;
   - `src/lib/print` (A4 geometry, margins, scale bar);
@@ -66,7 +66,15 @@ implemented or tested yet: no Learn code exists.
   - **owner check:** print at 100% and measure the scale bar.
 
 ### M3 — Prepare Worksheets from any image (before any curriculum exists)
-- **Scope:**
+- **Status:** approved 2026-11-18 and implemented (ADR-0016). M4 waits for
+  the owner's approval.
+- **Changed by the owner (2026-11-18):** the sheets are saved as **PNG
+  images**, not one multipage PDF. Each is the size of Create a Grid's
+  saved image with the photo in the same place, so they line up. Canvas,
+  grid and framing come from Create a Grid; Study & Simplify's Clean Outline
+  and Values algorithm make the outline and values sheets. No scale bar or
+  footer on the sheets.
+- **Scope as planned:**
   - move the Values algorithm into `src/lib/values` unchanged (golden
     tests);
   - the worksheet composer with five pages (original, outline, reference
@@ -230,7 +238,7 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
 | A9 | What locked items show in lists | Title and thumbnail | M5 |
 | A10 | Class mode: its name and the 12-hour automatic end | Approve | M5 |
 | A11 | Grid scope: rotation, A4, square cells, blank grid now; fine rotation later | Approve | M1 |
-| A12 | Moving the Values algorithm into a module, unchanged, with golden tests | Approve | M3 |
+| A12 | Moving the Values algorithm into a module, unchanged, with golden tests | **Done in M3:** `src/lib/values/posterize.ts`; 1,920 golden combinations and 21 saved files byte-identical before and after (ADR-0016 §2) | M3 |
 | A13 | Analytics for Learn: none, or ids-only "opened" events | None at first | M5 |
 | A14 | Who reviews the content and the Hebrew | The owner names reviewers | M7 |
 | A15 | Real-staging verification with temporary accounts at every milestone | Approve as standing practice | M1 |

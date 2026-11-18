@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   dataUrlToBlob,
   canShareFile,
+  canShareFiles,
   downloadBlob,
   extForMime,
   isGif,
   makeShareFile,
   mimeForFilename,
   shareFile,
+  shareFiles,
 } from './saveMedia';
 
 function pngFile(name = 'x.png') {
@@ -86,6 +88,29 @@ describe('saveMedia — shareFile', () => {
 
   it('reports "unsupported" when the Web Share API is missing', async () => {
     expect(await shareFile(pngFile(), {} as Navigator)).toBe('unsupported');
+  });
+});
+
+describe('saveMedia — several files at once (Prepare Worksheets)', () => {
+  it('shares all of them in one sheet, files only, when the platform can', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    const canShare = vi.fn(() => true);
+    const nav = { share, canShare } as unknown as Navigator;
+    const files = [pngFile('a.png'), pngFile('b.png'), pngFile('c.png')];
+    expect(canShareFiles(files, nav)).toBe(true);
+    expect(await shareFiles(files, nav)).toBe('shared');
+    expect(share).toHaveBeenCalledWith({ files });
+    expect(canShare).toHaveBeenCalledWith({ files });
+  });
+
+  it('none, or a platform that cannot share them together: unsupported, never a throw', async () => {
+    const nav = { share: vi.fn(), canShare: vi.fn(() => false) } as unknown as Navigator;
+    expect(canShareFiles([], nav)).toBe(false);
+    expect(await shareFiles([], nav)).toBe('unsupported');
+    expect(canShareFiles([pngFile()], nav)).toBe(false);
+    expect(await shareFiles([pngFile()], nav)).toBe('unsupported');
+    const throwing = { share: vi.fn(), canShare: vi.fn(() => { throw new Error('bad'); }) } as unknown as Navigator;
+    expect(canShareFiles([pngFile()], throwing)).toBe(false);
   });
 });
 

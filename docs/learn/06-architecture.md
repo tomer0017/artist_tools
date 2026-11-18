@@ -255,6 +255,13 @@ must be extended and tested.
 
 ## 6. Worksheets: one image, several aligned pages, one PDF
 
+> **As built in M3 (ADR-0016):** the owner chose **PNG images** over one PDF.
+> Every sheet has Create a Grid's export size and the photo where
+> `imageRect` puts it; the grid sheets are Create a Grid's own images; the
+> outline is the sketch engine's Clean Outline drawn from its paths
+> (`drawPaths`); the values are `src/lib/values` (moved, golden-tested). The
+> print layout below (A4 pages, scale bar, footer) is kept for a later PDF.
+
 Everything is generated on the device: photos never leave it, as the app
 promises, and the server only authorizes and counts.
 

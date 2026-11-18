@@ -9,8 +9,8 @@ import type { ToolId } from './account';
 //
 // By default Free keeps all five tools and every existing save; Pro adds the
 // two heavier GIF options. Admins get every feature, whatever their plan.
-// Features added later (the grid PDF) are in no default plan: they reach Free
-// or Pro only when an admin publishes them (dark launch, ADR-0006).
+// Features added later (the grid PDF, worksheets) are in no default plan: they
+// reach Free or Pro only when an admin publishes them (dark launch, ADR-0006).
 
 export const FEATURES = [
   'tool.measure',
@@ -24,6 +24,8 @@ export const FEATURES = [
   'export.gif_difference',
   // Since M2 (2026-11): Create a Grid's A4 PDF (the reference with its grid, and the blank grid).
   'export.pdf',
+  // Since M3 (2026-11): Prepare Worksheets, aligned practice sheets (PNG) from one photo.
+  'export.worksheets',
 ] as const;
 export type FeatureId = (typeof FEATURES)[number];
 
@@ -36,7 +38,7 @@ export const PLAN_NAMES: Record<PlanId, string> = { free: 'Free', pro: 'Pro' };
 export const PRO_FEATURES: readonly FeatureId[] = ['export.gif_large', 'export.gif_difference'];
 
 /** Capabilities in no plan until an admin publishes a catalog that includes them (admins have them already). */
-export const UNPUBLISHED_FEATURES: readonly FeatureId[] = ['export.pdf'];
+export const UNPUBLISHED_FEATURES: readonly FeatureId[] = ['export.pdf', 'export.worksheets'];
 
 export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
   free: FEATURES.filter((feature) => !PRO_FEATURES.includes(feature) && !UNPUBLISHED_FEATURES.includes(feature)),
@@ -48,7 +50,7 @@ export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
  * marked `whenOffered` appears only once some plan (or the account) has it,
  * so nobody is shown a capability no plan includes.
  */
-export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'difference' | 'pdf'; label: string; detail: string; features: FeatureId[]; whenOffered?: boolean }[] = [
+export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'difference' | 'pdf' | 'worksheets'; label: string; detail: string; features: FeatureId[]; whenOffered?: boolean }[] = [
   {
     id: 'tools',
     label: 'All five tools',
@@ -60,6 +62,7 @@ export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'diff
   { id: 'large', label: 'Large GIFs', detail: 'Up to 800 px, for sharing and printing', features: ['export.gif_large'] },
   { id: 'difference', label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs', features: ['export.gif_difference'] },
   { id: 'pdf', label: 'Print-ready PDFs', detail: 'A4: the reference with its grid and a matching blank grid, to scale', features: ['export.pdf'], whenOffered: true },
+  { id: 'worksheets', label: 'Worksheets', detail: 'Practice sheets from your photo: the original, an outline, the grid and the values, aligned', features: ['export.worksheets'], whenOffered: true },
 ];
 
 /** Short names for usage counts and admin screens. */
@@ -74,6 +77,7 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   'export.gif_large': 'Large GIFs',
   'export.gif_difference': 'Compare + Difference GIFs',
   'export.pdf': 'Grid PDFs (A4)',
+  'export.worksheets': 'Worksheets',
 };
 
 /** The feature each tool needs (the studio's tool ids → catalog features). */
@@ -90,7 +94,7 @@ export const TOOL_FEATURE_IDS = ['tool.measure', 'tool.study', 'tool.color', 'to
 export type ToolFeatureId = (typeof TOOL_FEATURE_IDS)[number];
 
 /** Everything that saves or exports something; each use is authorized (and counted) by the server. */
-export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_large', 'export.gif_difference', 'export.pdf'] as const satisfies readonly FeatureId[];
+export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_large', 'export.gif_difference', 'export.pdf', 'export.worksheets'] as const satisfies readonly FeatureId[];
 export type ExportFeatureId = (typeof EXPORT_FEATURE_IDS)[number];
 
 export const isToolFeature = (feature: FeatureId): feature is ToolFeatureId => (TOOL_FEATURE_IDS as readonly FeatureId[]).includes(feature);

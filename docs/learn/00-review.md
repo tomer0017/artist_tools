@@ -286,7 +286,7 @@ Also in the section:
 | A9 | What locked items show | The title and a thumbnail | M5 |
 | A10 | Class mode | Its name, and the 12-hour automatic end | M5 |
 | A11 | Grid scope | Rotation, A4, square cells and a blank grid now; fine rotation later | M1 |
-| A12 | Moving the Values algorithm | Unchanged, with golden tests | M3 |
+| A12 | Moving the Values algorithm | Done in M3, unchanged, with golden tests (ADR-0016) | M3 |
 | A13 | Analytics | None at first | M5 |
 | A14 | Who reviews the content and the Hebrew | You name the reviewers | M7 |
 | A15 | Real-staging tests at every milestone | Approve as standing practice | M1 |

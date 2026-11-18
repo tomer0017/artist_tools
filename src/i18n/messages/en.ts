@@ -4,6 +4,7 @@ import { colorEn } from './tools/color';
 import { gridEn } from './tools/grid';
 import { compareEn } from './tools/compare';
 import { commonEn } from './tools/common';
+import { worksheetsEn } from './tools/worksheets';
 
 // English messages: the source of truth for every key. Other languages must
 // provide exactly the same keys (enforced by the type in ./types and by the
@@ -18,6 +19,7 @@ export const en = {
   gridTool: gridEn,
   compareTool: compareEn,
   toolsCommon: commonEn,
+  worksheets: worksheetsEn,
   meta: {
     siteDescription: "A painter's toolkit for measuring, value studies, color mixing, and grid drawing.",
     pricingTitle: 'Plans · Studio Companion',
@@ -154,6 +156,7 @@ export const en = {
       large: { label: 'Large GIFs', detail: 'Up to 800 px, for sharing and printing' },
       difference: { label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs' },
       pdf: { label: 'Print-ready PDFs', detail: 'A4: the reference with its grid and a matching blank grid, to scale' },
+      worksheets: { label: 'Worksheets', detail: 'Practice sheets from your photo: the original, an outline, the grid and the values, aligned' },
     },
     faq: {
       freeQ: 'Is Studio Companion free?',
@@ -264,6 +267,7 @@ export const en = {
       exportGifLarge: 'Large GIFs',
       exportGifDifference: 'Compare + Difference GIFs',
       exportPdf: 'Grid PDFs (A4)',
+      exportWorksheets: 'Worksheets',
     },
     intros: {
       title: 'Tool introductions',

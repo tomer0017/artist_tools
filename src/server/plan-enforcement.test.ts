@@ -213,6 +213,56 @@ describe('what pages show comes from the same published plans', () => {
   });
 });
 
+describe('worksheets (M3): in no plan until an admin publishes it', () => {
+  // As Prepare Worksheets asks: the other tool its sheets use, checked alone
+  // (nothing counted), then the tool it was opened from with Worksheets and
+  // Saved images (both counted).
+  type Who = Awaited<ReturnType<typeof account>>;
+  const askForSet = (who: Who, from: 'tool.grid' | 'tool.study') => authorizeToolUse(db, who, { tool: from, features: ['export.worksheets', 'export.image'] });
+  const checkTool = (who: Who, tool: 'tool.grid' | 'tool.study') => authorizeToolUse(db, who, { tool, features: [] });
+
+  it('is refused to Free and Pro on the default and the staging catalogs, allowed to admins, and counted with the saved images', async () => {
+    for (const catalog of [defaultCatalog(), STAGING_V2]) {
+      await publish(catalog);
+      const [free, pro, admin] = [await account(), await account({ plan: 'pro' }), await account({ role: 'admin' })];
+      for (const who of [free, pro]) {
+        for (const from of ['tool.grid', 'tool.study'] as const) {
+          expect(await askForSet(who, from)).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.worksheets'] });
+        }
+        expect((await getEntitlements(db, who)).features).not.toContain('export.worksheets');
+        // A refusal counts nothing, not even the saved images.
+        expect(await getUsage(db, who, usagePeriod())).toEqual({});
+      }
+      expect(await checkTool(admin, 'tool.grid')).toEqual({ status: 'recorded' });
+      expect(await askForSet(admin, 'tool.study')).toEqual({ status: 'recorded' });
+      expect(await getUsage(db, admin, usagePeriod())).toEqual({ 'export.worksheets': 1, 'export.image': 1 });
+      expect((await getPlanOffer(db)).pro).not.toContain('export.worksheets');
+    }
+  });
+
+  it('follows a publication for Pro; a set also needs Saved images and both tools; then out again, refused at once', async () => {
+    const proWithSheets: Catalog = {
+      ...STAGING_V2,
+      plans: { ...STAGING_V2.plans, pro: { features: [...STAGING_V2.plans.pro.features, 'export.worksheets'], quotas: {} } },
+    };
+    await publish(proWithSheets);
+    const [free, pro] = [await account(), await account({ plan: 'pro' })];
+    expect(await askForSet(free, 'tool.grid')).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.worksheets'] });
+    for (const from of ['tool.grid', 'tool.study'] as const) expect(await askForSet(pro, from)).toEqual({ status: 'recorded' });
+    expect(await checkTool(pro, 'tool.study')).toEqual({ status: 'recorded' });
+    expect(await getUsage(db, pro, usagePeriod())).toEqual({ 'export.worksheets': 2, 'export.image': 2 });
+    // Without saved images in the plan: no set (the sheets are saved images).
+    await publish({ ...proWithSheets, plans: { ...proWithSheets.plans, pro: { features: without(proWithSheets.plans.pro.features, 'export.image'), quotas: {} } } });
+    expect(await askForSet(pro, 'tool.grid')).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.image'] });
+    // Without Study & Simplify: its sheets (outline, values) are refused at the tool check.
+    await publish({ ...proWithSheets, plans: { ...proWithSheets.plans, pro: { features: without(proWithSheets.plans.pro.features, 'tool.study'), quotas: {} } } });
+    expect(await checkTool(pro, 'tool.study')).toEqual({ status: 'denied', reason: 'not_included', missing: ['tool.study'] });
+    expect(await askForSet(pro, 'tool.grid')).toEqual({ status: 'recorded' });
+    await publish(STAGING_V2);
+    expect(await askForSet(pro, 'tool.grid')).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.worksheets'] });
+  });
+});
+
 describe('the grid PDF (M2): in no plan until an admin publishes it', () => {
   it('is refused to Free and Pro on the default and the staging catalogs, allowed to admins, and counted', async () => {
     for (const catalog of [defaultCatalog(), STAGING_V2]) {

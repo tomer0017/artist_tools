@@ -5,6 +5,7 @@ import { colorHe } from './tools/color';
 import { gridHe } from './tools/grid';
 import { compareHe } from './tools/compare';
 import { commonHe } from './tools/common';
+import { worksheetsHe } from './tools/worksheets';
 
 // Hebrew messages. Same keys as English (the type enforces it). Phrasing is
 // gender-neutral: actions are nouns or infinitives ("כניסה", "ליצור חשבון"),
@@ -19,6 +20,7 @@ export const he: Messages = {
   gridTool: gridHe,
   compareTool: compareHe,
   toolsCommon: commonHe,
+  worksheets: worksheetsHe,
   meta: {
     siteDescription: 'ערכת כלים לציירים: מדידה, לימוד ערכים, ערבוב צבעים ורשת להעברת ציור.',
     pricingTitle: 'מסלולים · Studio Companion',
@@ -155,6 +157,7 @@ export const he: Messages = {
       large: { label: 'GIF גדול', detail: 'עד 800 פיקסלים, לשיתוף ולהדפסה' },
       difference: { label: 'GIF השוואה + הבדלים', detail: 'הנפשות שמדגישות את מה ששונה' },
       pdf: { label: 'קובצי PDF להדפסה', detail: 'A4: תמונת הייחוס עם הרשת ורשת ריקה תואמת, בקנה מידה' },
+      worksheets: { label: 'דפי תרגול', detail: 'דפי תרגול מהתמונה שלך: המקור, קו מתאר, הרשת והערכים, מיושרים זה לזה' },
     },
     faq: {
       freeQ: 'האם Studio Companion חינמי?',
@@ -264,6 +267,7 @@ export const he: Messages = {
       exportGifLarge: 'GIF גדול',
       exportGifDifference: 'GIF השוואה + הבדלים',
       exportPdf: 'קובצי PDF של רשת (A4)',
+      exportWorksheets: 'דפי תרגול',
     },
     intros: {
       title: 'הסברי פתיחה לכלים',

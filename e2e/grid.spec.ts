@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { photo } from './fixtures/photo';
 import { inspectPdf, type InspectedPage, type InspectedPdf, type PlacedImage } from '../src/test/pdfInspect';
+import { GRID_PDF_BUTTON } from '../src/lib/print/ui';
 
 // Create a Grid in real browsers (M1 of the Learn plan):
 // - rotation turns the image on the grid, never the photo itself, and the
@@ -256,7 +257,10 @@ test.describe('Create a Grid on a phone', () => {
 
 // ─── The A4 PDF (M2) ──────────────────────────────────────────────────────────
 // Before the owner publishes grid PDFs for a plan, only admins have them: the
-// tests that make one are signed in as this server's admin.
+// tests that make one are signed in as this server's admin. The button is
+// hidden since the owner's decision after M2 (src/lib/print/ui.ts): the tests
+// that use it follow that switch, and come back with it.
+const PDF_HIDDEN = 'The PDF button is hidden (owner, 2026-11-18); GRID_PDF_BUTTON brings it and these tests back';
 
 const ADMIN = 'e2e/.auth/admin.json';
 /** A4 in points, as each page's MediaBox must say. */
@@ -408,6 +412,7 @@ async function expectPlacedAsSaved(page: Page, png: Buffer, photoOnPage: PlacedI
 
 test.describe('Create a Grid PDF (A4)', () => {
   test.use({ storageState: ADMIN });
+  test.skip(!GRID_PDF_BUTTON, PDF_HIDDEN);
 
   test('reduced to fit: 50×70 cm on portrait A4, the photo with its grid then the same grid blank, and a 50 mm bar', async ({ page }) => {
     await page.goto('/app/grid');
@@ -495,6 +500,7 @@ test.describe('Create a Grid PDF (A4)', () => {
 
 test.describe('Create a Grid PDF in Hebrew', () => {
   test.use({ storageState: ADMIN, locale: 'he-IL' });
+  test.skip(!GRID_PDF_BUTTON, PDF_HIDDEN);
 
   test('the words on the pages read right to left: from the right margin, the bar on the right', async ({ page }) => {
     await page.goto('/app/grid');
@@ -523,6 +529,7 @@ test.describe('Create a Grid PDF in Hebrew', () => {
 
 test.describe('Create a Grid PDF on a phone', () => {
   test.use({ ...phone, storageState: ADMIN });
+  test.skip(!GRID_PDF_BUTTON, PDF_HIDDEN);
 
   test('mobile: the PDF sits with the saves under the grid; its sheet fits the screen and saves the A4 PDF', async ({ page }) => {
     await page.goto('/app/grid');
@@ -548,6 +555,33 @@ test.describe('Create a Grid PDF on a phone', () => {
     expect(sheetBox.x + sheetBox.width).toBeLessThanOrEqual(page.viewportSize()!.width + 0.5);
     const { pdf } = await downloadPdf(page, sheet, saveButton);
     expectPages(pdf, 'portrait', REDUCED_FRAME);
+  });
+});
+
+test.describe('Create a Grid PDF, hidden', () => {
+  test.use({ storageState: ADMIN });
+
+  test('even for an admin (who has grid PDFs), no PDF button: the grid image and the blank grid save as before', async ({ page }) => {
+    test.skip(GRID_PDF_BUTTON, 'The PDF button is shown');
+    await page.goto('/app/grid');
+    await upload(page);
+    await expect(page.getByRole('button', { name: 'Save grid image' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /PDF/ })).toHaveCount(0);
+    expect(pngSize((await saveAndDownload(page, 'Save grid image')).bytes)).toEqual({ width: 2400, height: 3360 });
+    expect(pngSize((await saveAndDownload(page, 'Save blank grid')).bytes)).toEqual({ width: 2400, height: 3360 });
+  });
+
+  test.describe('on a phone', () => {
+    test.use(phone);
+
+    test('mobile: no PDF button for an admin either; the image saves keep their place', async ({ page }) => {
+      test.skip(GRID_PDF_BUTTON, 'The PDF button is shown');
+      await page.goto('/app/grid');
+      await upload(page);
+      await expect(page.getByRole('button', { name: 'Save blank grid' })).toBeVisible();
+      await expect(page.getByRole('button', { name: /PDF/ })).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    });
   });
 });
 

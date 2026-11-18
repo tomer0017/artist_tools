@@ -45,11 +45,11 @@ const OWNER: Catalog = {
 const NEWER = () => ({
   plans: {
     free: {
-      features: ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.worksheets'],
-      quotas: { 'export.worksheets': { limit: 5, period: 'month' } },
+      features: ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.lesson_pack'],
+      quotas: { 'export.lesson_pack': { limit: 5, period: 'month' } },
       learn: { curriculum: { rule: 'selected', ids: ['D-START-01', 'D-SHAPE-01'] } },
     },
-    pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.worksheets'], quotas: {}, learn: { curriculum: { rule: 'all' } } },
+    pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.lesson_pack'], quotas: {}, learn: { curriculum: { rule: 'all' } } },
   },
   disabled: ['learn.color'],
   learnPreviews: 'title_and_thumbnail',
@@ -57,8 +57,8 @@ const NEWER = () => ({
 
 /** The `plans` documents that newer release writes (with its feature ids). */
 const NEWER_PLANS = {
-  free: { features: [...OWNER.plans.free.features, 'learn.curriculum', 'export.worksheets'], limits: { 'export.worksheets': 5 } },
-  pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.worksheets'] },
+  free: { features: [...OWNER.plans.free.features, 'learn.curriculum', 'export.lesson_pack'], limits: { 'export.lesson_pack': 5 } },
+  pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.lesson_pack'] },
 };
 
 /** Publish as an admin does here: a draft, then publish it. */
@@ -145,9 +145,9 @@ describe('rolling back after a newer release published new feature ids and secti
     expect(read.status).toBe('ok');
     if (read.status === 'unreadable') return;
     expect(read.catalog).toEqual(OWNER);
-    expect(read.unknown).toEqual({ features: ['export.worksheets', 'learn.color', 'learn.curriculum'], sections: ['learnPreviews', 'plans.free.learn', 'plans.pro.learn'] });
+    expect(read.unknown).toEqual({ features: ['export.lesson_pack', 'learn.color', 'learn.curriculum'], sections: ['learnPreviews', 'plans.free.learn', 'plans.pro.learn'] });
     expect(catalogReadNotes(read)).toEqual([
-      'Feature ids this version of the app does not know: export.worksheets, learn.color, learn.curriculum.',
+      'Feature ids this version of the app does not know: export.lesson_pack, learn.color, learn.curriculum.',
       'Settings this version of the app does not know: learnPreviews, plans.free.learn, plans.pro.learn.',
     ]);
   });
@@ -170,7 +170,7 @@ describe('what a newer release added survives editing, publishing and restoring 
 
     const expected = NEWER();
     // Kept in place; the new one added at the end.
-    expected.plans.free.features = ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.worksheets', 'tool.compare'];
+    expected.plans.free.features = ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.lesson_pack', 'tool.compare'];
     expect((await getPublished(db, catalogSpec))!.document).toEqual(expected);
     const free = await account(db, 'free');
     expect((await getEntitlements(db, free)).features).toEqual(['tool.study', 'tool.color', 'tool.grid', 'tool.compare', 'export.image']);

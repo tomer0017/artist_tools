@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { photo } from './fixtures/photo';
-import { inspectPdf } from '../src/test/pdfInspect';
 
 // What each plan may use, enforced (src/server/entitlements.ts,
 // docs/adr/0013): against the third test server (port 8082,
@@ -48,8 +47,9 @@ const STAGING: Record<string, { Free: boolean; Pro: boolean }> = {
   GIFs: { Free: false, Pro: true },
   'Large GIFs': { Free: false, Pro: true },
   'Compare + Difference GIFs': { Free: false, Pro: true },
-  // Since M2; in no plan until the owner publishes it.
+  // Since M2 and M3; in no plan until the owner publishes them.
   'Grid PDFs (A4)': { Free: false, Pro: false },
+  Worksheets: { Free: false, Pro: false },
 };
 
 let visitors = 0;
@@ -441,8 +441,9 @@ test('exports: refused by the server when the plan lacks them or it cannot answe
   await tester.context.close();
 });
 
-test('grid PDFs: in no plan until published; published for Pro, Pro makes one while Free sees it locked and is refused; taken back, refused again', async ({ browser }) => {
-  // As staging has it: no plan has grid PDFs, so no one but admins is offered them.
+test('grid PDFs (button hidden): in no plan until published; published for Pro, the server allows Pro and refuses Free; taken back, refused again', async ({ browser }) => {
+  // As staging has it: no plan has grid PDFs. The button is hidden in any case (src/lib/print/ui.ts);
+  // what a plan may do is still decided by the server, as for every export.
   const pro = await signedIn(browser, 'ENT_Pro');
   await pro.page.goto(TOOLS.grid.path);
   await upload(pro.page, 'Upload reference photo');
@@ -455,36 +456,71 @@ test('grid PDFs: in no plan until published; published for Pro, Pro makes one wh
   catalogChanged = true;
   await publish(admin.page, { 'Grid PDFs (A4)': { Pro: true } });
 
-  // Pro, at the studio's next look at the account: offered, made, saved.
+  // Pro has it now, Free does not; neither is shown a button.
   await pro.page.reload();
   expect(await features(pro.page)).toContain('export.pdf');
-  const make = pro.page.getByRole('button', { name: 'Save PDF (A4)', exact: true });
-  await expect(make).toBeVisible();
-  await make.click();
-  const sheet = pro.page.getByRole('dialog', { name: 'Save PDF (A4)' });
-  await expect(sheet.getByRole('img', { name: 'The PDF’s pages: the reference with its grid, and the blank grid' })).toBeVisible();
-  const [download] = await Promise.all([pro.page.waitForEvent('download'), sheet.getByRole('button', { name: 'Save PDF', exact: true }).click()]);
-  expect(download.suggestedFilename()).toBe('grid-4x4-50x70cm-a4.pdf');
-  const chunks: Buffer[] = [];
-  for await (const chunk of await download.createReadStream()) chunks.push(chunk as Buffer);
-  const pdf = inspectPdf(Buffer.concat(chunks));
-  expect(pdf.pages.map((p) => p.mediaBox)).toEqual([[0, 0, 595.28, 841.89], [0, 0, 595.28, 841.89]]);
+  expect((await authorize(pro.page, { tool: 'tool.grid', features: ['export.pdf'] })).status).toBe(200);
+  await expect(saveImage).toBeVisible();
+  await expect(pro.page.getByRole('button', { name: /PDF/ })).toHaveCount(0);
+  const free = await signedIn(browser, 'ENT_Free');
+  expect(await authorize(free.page, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 403, refused: ['export.pdf'] });
+  await free.page.goto(TOOLS.grid.path);
+  await upload(free.page, 'Upload reference photo');
+  await expect(free.page.getByRole('button', { name: 'Save grid image' }).first()).toBeVisible();
+  await expect(free.page.getByRole('button', { name: /PDF/ })).toHaveCount(0);
+  await free.context.close();
+
+  // Taken back out, as staging has it: refused again.
+  await publishStaging(admin.page);
+  catalogChanged = false;
+  expect(await authorize(pro.page, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 403, refused: ['export.pdf'] });
+  await admin.context.close();
+  await pro.context.close();
+});
+
+test('worksheets: in no plan until published; published for Pro, Pro makes a set with the server’s yes; Free sees it locked and is refused; taken back, refused again', async ({ browser }) => {
+  // As staging has it: no plan has worksheets.
+  const pro = await signedIn(browser, 'ENT_Pro');
+  await pro.page.goto(TOOLS.grid.path);
+  await upload(pro.page, 'Upload reference photo');
+  await expect(pro.page.getByRole('button', { name: 'Save grid image' }).first()).toBeVisible();
+  await expect(pro.page.getByRole('button', { name: /worksheets/i })).toHaveCount(0);
+  expect(await authorize(pro.page, { tool: 'tool.grid', features: ['export.worksheets', 'export.image'] })).toEqual({ status: 403, refused: ['export.worksheets'] });
+
+  const admin = await adminPage(browser);
+  catalogChanged = true;
+  await publish(admin.page, { Worksheets: { Pro: true } });
+
+  // Pro, at the studio's next look at the account: offered; the set is asked for and made.
+  await pro.page.reload();
+  expect(await features(pro.page)).toContain('export.worksheets');
+  await pro.page.getByRole('button', { name: 'Prepare worksheets', exact: true }).click();
+  const dialog = pro.page.getByRole('dialog', { name: 'Prepare worksheets' });
+  const answers: number[] = [];
+  pro.page.on('response', (r) => {
+    if (r.url().endsWith('/api/usage') && r.request().method() === 'POST') answers.push(r.status());
+  });
+  await dialog.getByRole('button', { name: 'Make sheets (4)' }).click();
+  await expect(dialog.getByText('Sheets ready: 4')).toBeVisible({ timeout: 60_000 });
+  expect(answers).toEqual([200, 200]);
+  const [download] = await Promise.all([pro.page.waitForEvent('download'), dialog.getByRole('button', { name: 'Save Original' }).click()]);
+  expect(download.suggestedFilename()).toBe('worksheet-1-original-50x70cm.png');
 
   // Free: shown locked; asking explains and makes nothing; the server refuses it.
   const free = await signedIn(browser, 'ENT_Free');
   await free.page.goto(TOOLS.grid.path);
   await upload(free.page, 'Upload reference photo');
-  const locked = free.page.getByRole('button', { name: 'Save PDF (A4) (Locked)', exact: true });
-  await expect(locked).toBeVisible();
-  await locked.click();
+  await free.page.getByRole('button', { name: 'Prepare worksheets (Locked)', exact: true }).click();
+  const lockedDialog = free.page.getByRole('dialog', { name: 'Prepare worksheets' });
+  await lockedDialog.getByRole('button', { name: 'Make sheets (4)' }).click();
   const refused = free.page.getByRole('alertdialog');
-  await expect(refused).toContainText('Grid PDFs (A4) are not part of your plan right now, so nothing was saved.');
-  await expect(free.page.getByRole('dialog', { name: 'Save PDF (A4)' })).toHaveCount(0);
+  await expect(refused).toContainText('Worksheets are not part of your plan right now, so nothing was saved.');
   await refused.getByRole('button', { name: 'Close', exact: true }).click();
-  expect(await authorize(free.page, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 403, refused: ['export.pdf'] });
+  await expect(lockedDialog.getByText('Sheets ready: 4')).toHaveCount(0);
+  expect(await authorize(free.page, { tool: 'tool.grid', features: ['export.worksheets', 'export.image'] })).toEqual({ status: 403, refused: ['export.worksheets'] });
   // The plans page lists them now: in Pro, not in Free.
   await free.page.goto('/app/plans');
-  const row = free.page.getByRole('row', { name: /Print-ready PDFs/ });
+  const row = free.page.getByRole('row', { name: /Worksheets/ });
   await expect(row.locator('[aria-label="Not included"]')).toHaveCount(1);
   await expect(row.locator('[aria-label="Included"]')).toHaveCount(1);
   await free.context.close();
@@ -492,10 +528,10 @@ test('grid PDFs: in no plan until published; published for Pro, Pro makes one wh
   // Taken back out, as staging has it: refused again, and no longer offered.
   await publishStaging(admin.page);
   catalogChanged = false;
-  expect(await authorize(pro.page, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 403, refused: ['export.pdf'] });
+  expect(await authorize(pro.page, { tool: 'tool.grid', features: ['export.worksheets', 'export.image'] })).toEqual({ status: 403, refused: ['export.worksheets'] });
   await pro.page.reload();
-  await expect(saveImage).toBeVisible();
-  await expect(pro.page.getByRole('button', { name: /PDF/ })).toHaveCount(0);
+  await expect(pro.page.getByRole('button', { name: 'Save grid image' }).first()).toBeVisible();
+  await expect(pro.page.getByRole('button', { name: /worksheets/i })).toHaveCount(0);
   await admin.context.close();
   await pro.context.close();
 });

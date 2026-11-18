@@ -71,6 +71,13 @@ AI scoring of anyone's artwork.
   leaves the device).
 
 ### S6 · Prepare Worksheets
+
+> **As built in M3 (ADR-0016):** one sheet in Create a Grid and Study &
+> Simplify. The frame is Create a Grid's (no separate Frame section); the
+> pages are switches (the blank grid off at first; 3 or 5 values); the
+> result is aligned **PNG images**, saved together (on phones, one share
+> sheet with Print) or one at a time. The design below remains the target
+> for the Learn screens.
 Opens as a full-screen sheet over the card, with the reference already
 loaded. Three short sections on one screen, a live page preview beside them:
 

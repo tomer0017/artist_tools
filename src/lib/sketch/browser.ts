@@ -122,16 +122,25 @@ export async function pathsToPng(layers: PathLayer[], working: Size, out: Size):
   try {
     const ctx = c.getContext('2d');
     if (!ctx) throw new Error('No 2D canvas');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, out.width, out.height);
-    ctx.setTransform(out.width / working.width, 0, 0, out.height / working.height, 0, 0);
-    for (const layer of layers) {
-      if (!layer.loops) continue;
-      ctx.fillStyle = layer.fill;
-      ctx.fill(new Path2D(layer.d), 'evenodd');
-    }
+    drawPaths(ctx, layers, working, out);
     return await toPng(c);
   } finally {
     free(c);
+  }
+}
+
+/**
+ * Clean Outline's vector paths, traced at `working` size, drawn on white over
+ * a whole `out`-sized canvas. Saving the outline (pathsToPng) and Prepare
+ * Worksheets' Outline sheet both draw it this way.
+ */
+export function drawPaths(ctx: CanvasRenderingContext2D, layers: PathLayer[], working: Size, out: Size): void {
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.setTransform(out.width / working.width, 0, 0, out.height / working.height, 0, 0);
+  for (const layer of layers) {
+    if (!layer.loops) continue;
+    ctx.fillStyle = layer.fill;
+    ctx.fill(new Path2D(layer.d), 'evenodd');
   }
 }

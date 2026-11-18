@@ -20,6 +20,7 @@ change its decision; a new record supersedes it.
 | [0012](0012-username-accounts-for-invited-testers.md) | Username accounts for invited testers, created only by administrators | Accepted |
 | [0013](0013-plan-enforcement-everywhere.md) | What a plan includes is enforced on every route and every save | Accepted |
 | [0014](0014-catalog-rollback-safety.md) | Rolling back never resets or widens the published plans | Accepted |
-| [0015](0015-print-foundation-grid-pdf.md) | Print foundation: A4 PDFs made in the browser (jsPDF, words as images, true size or stated reduction) | Accepted |
+| [0015](0015-print-foundation-grid-pdf.md) | Print foundation: A4 PDFs made in the browser (jsPDF, words as images, true size or stated reduction); the button hidden since M3, the code kept | Accepted |
+| [0016](0016-prepare-worksheets-as-aligned-images.md) | Prepare Worksheets: aligned PNG sheets from one photo, reusing Create a Grid and Study & Simplify | Accepted |
 
 Format: Context · Decision · Consequences · Alternatives considered.

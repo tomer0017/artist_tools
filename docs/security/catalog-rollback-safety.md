@@ -102,9 +102,10 @@ No data change and no visible change for anyone.
   `entitlement-test`. Production and GitHub Pages are untouched.
 - Rolling back this fix itself is harmless while no new feature ID exists,
   because it changes no data.
-- **The first new feature ID** is `export.pdf` (M2, ADR-0015). It ships
-  unpublished, in no plan. The floor applies from the first published
-  catalog that uses it: from then on, never roll back below `224bb65`.
+- **The first new feature IDs** are `export.pdf` (M2, ADR-0015) and
+  `export.worksheets` (M3, ADR-0016). Both ship unpublished, in no plan. The
+  floor applies from the first published catalog that uses either: from then
+  on, never roll back below `224bb65`.
 
 ## Decision
 

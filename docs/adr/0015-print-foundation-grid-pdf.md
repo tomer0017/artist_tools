@@ -3,6 +3,11 @@
 **Status:** Accepted (2026-11-18). Milestone M2 of the Learn plan
 (docs/learn/07-phases-qa-approvals.md); decisions A5 and A17.
 
+**Since M3 (2026-11-18):** the "Save PDF (A4)" button is hidden on the
+owner's decision (the PNG grid image is what is needed). Everything below
+stays in the code, with its tests; `GRID_PDF_BUTTON` (src/lib/print/ui.ts)
+brings the button back (ADR-0016 §5).
+
 ## Context
 Create a Grid needed a printable result: an A4 PDF whose first page is the
 reference with its grid and whose second page is the same grid, blank, for

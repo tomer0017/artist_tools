@@ -176,6 +176,8 @@ function useFeatureName() {
         return t('account.features.exportGifLarge');
       case 'export.gif_difference':
         return t('account.features.exportGifDifference');
+      case 'export.worksheets':
+        return t('account.features.exportWorksheets');
       case 'export.pdf':
         return t('account.features.exportPdf');
       case 'tool.measure':

@@ -29,6 +29,9 @@ vi.mock('@/components/shell/account', () => ({
 const buildGridPdf = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => new ArrayBuffer(8)));
 vi.mock('@/lib/print/gridPdf', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/print/gridPdf')>()), buildGridPdf }));
 vi.mock('jspdf', () => ({ jsPDF: class {}, GState: class {} }));
+// The PDF button is hidden in the product (src/lib/print/ui.ts); the tests of the code behind it turn it on.
+const ui = vi.hoisted(() => ({ GRID_PDF_BUTTON: false }));
+vi.mock('@/lib/print/ui', () => ui);
 vi.mock('@/lib/saveMedia', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/saveMedia')>()),
   canvasToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
@@ -91,6 +94,7 @@ beforeEach(() => {
   buildGridPdf.mockClear();
   account.features = [];
   account.offer = { free: [], pro: [] };
+  ui.GRID_PDF_BUTTON = false;
   mobile.value = false;
   localStorage.clear();
   vi.stubGlobal('Image', FakeImage);
@@ -365,69 +369,125 @@ describe('on a phone, and in Hebrew', () => {
 describe('the A4 PDF', () => {
   const pdfButton = () => screen.queryByRole('button', { name: 'Save PDF (A4)' });
 
-  it('is offered only where it can be had: hidden while no plan has it, locked where another plan does, ready where included', async () => {
-    const view = await renderGrid();
-    expect(pdfButton()).toBeNull();
-    view.unmount();
-    account.offer = { free: [], pro: ['export.pdf'] };
-    const locked = await renderGrid();
-    // Locked in words as well as by the icon.
-    expect(pdfButton()).toBeNull();
-    const lockedButton = screen.getByRole('button', { name: 'Save PDF (A4) (Locked)' });
-    expect(lockedButton.querySelector('.lucide-lock')).not.toBeNull();
-    locked.unmount();
+  it('is not in the interface, whatever the account has (the owner kept the PNG): saving images is as before', async () => {
     account.features = ['export.pdf'];
-    await renderGrid();
-    expect(pdfButton()!.querySelector('.lucide-lock')).toBeNull();
+    account.offer = { free: ['export.pdf'], pro: ['export.pdf'] };
+    await renderGrid(oldProject());
+    expect(screen.queryByRole('button', { name: /PDF/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save grid image' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save blank grid' })).toBeInTheDocument();
   });
 
-  it('asks the server first: a refusal makes nothing; a yes makes both pages and saves them as one authorized PDF', async () => {
-    account.features = ['export.pdf'];
-    authorize.mockResolvedValueOnce(false);
-    await renderGrid(oldProject({ ...OLD_GRID, canvasWidth: 21, canvasHeight: 29.7, cellMode: 'square', cellSize: 3 }));
-    fireEvent.click(pdfButton()!);
-    await waitFor(() => expect(authorize).toHaveBeenCalledWith({ tool: 'grid', features: ['export.pdf'] }));
-    await act(async () => {});
-    expect(buildGridPdf).not.toHaveBeenCalled();
-    expect(save).not.toHaveBeenCalled();
-
-    fireEvent.click(pdfButton()!);
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(authorize).toHaveBeenCalledTimes(2);
-    const input = buildGridPdf.mock.calls[0][1] as { layout: { orientation: string; scale: number }; reference: Uint8Array; words: Record<string, string>; rtl: boolean };
-    expect(input.layout.orientation).toBe('portrait');
-    expect(input.reference).toBeInstanceOf(Uint8Array);
-    expect(input.rtl).toBe(false);
-    expect(input.words).toEqual({
-      title: 'Grid for a 21×29.7 cm canvas',
-      reference: 'Reference with grid',
-      blank: 'Blank grid',
-      detail: ['3 cm squares (25.3 mm on this page)', '84.4% of 21×29.7 cm'],
-      print: 'Print at 100% (Actual size). The bar below must measure 50 mm.',
-      bar: '50 mm',
+  describe('the code behind it, kept for later (with the button switched on)', () => {
+    beforeEach(() => {
+      ui.GRID_PDF_BUTTON = true;
     });
-    const media = save.mock.calls[0][0] as Record<string, unknown>;
-    expect(media).toMatchObject({ filename: 'grid-3cm-squares-21x29.7cm-a4.pdf', mime: 'application/pdf', title: 'Save PDF (A4)', tool: 'grid', authorized: true });
-    expect((media.blob as Blob).type).toBe('application/pdf');
-    expect(media.preview).toBeInstanceOf(Blob);
+
+    it('is offered only where it can be had: hidden while no plan has it, locked where another plan does, ready where included', async () => {
+      const view = await renderGrid();
+      expect(pdfButton()).toBeNull();
+      view.unmount();
+      account.offer = { free: [], pro: ['export.pdf'] };
+      const locked = await renderGrid();
+      // Locked in words as well as by the icon.
+      expect(pdfButton()).toBeNull();
+      const lockedButton = screen.getByRole('button', { name: 'Save PDF (A4) (Locked)' });
+      expect(lockedButton.querySelector('.lucide-lock')).not.toBeNull();
+      locked.unmount();
+      account.features = ['export.pdf'];
+      await renderGrid();
+      expect(pdfButton()!.querySelector('.lucide-lock')).toBeNull();
+    });
+
+    it('asks the server first: a refusal makes nothing; a yes makes both pages and saves them as one authorized PDF', async () => {
+      account.features = ['export.pdf'];
+      authorize.mockResolvedValueOnce(false);
+      await renderGrid(oldProject({ ...OLD_GRID, canvasWidth: 21, canvasHeight: 29.7, cellMode: 'square', cellSize: 3 }));
+      fireEvent.click(pdfButton()!);
+      await waitFor(() => expect(authorize).toHaveBeenCalledWith({ tool: 'grid', features: ['export.pdf'] }));
+      await act(async () => {});
+      expect(buildGridPdf).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+
+      fireEvent.click(pdfButton()!);
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+      expect(authorize).toHaveBeenCalledTimes(2);
+      const input = buildGridPdf.mock.calls[0][1] as { layout: { orientation: string; scale: number }; reference: Uint8Array; words: Record<string, string>; rtl: boolean };
+      expect(input.layout.orientation).toBe('portrait');
+      expect(input.reference).toBeInstanceOf(Uint8Array);
+      expect(input.rtl).toBe(false);
+      expect(input.words).toEqual({
+        title: 'Grid for a 21×29.7 cm canvas',
+        reference: 'Reference with grid',
+        blank: 'Blank grid',
+        detail: ['3 cm squares (25.3 mm on this page)', '84.4% of 21×29.7 cm'],
+        print: 'Print at 100% (Actual size). The bar below must measure 50 mm.',
+        bar: '50 mm',
+      });
+      const media = save.mock.calls[0][0] as Record<string, unknown>;
+      expect(media).toMatchObject({ filename: 'grid-3cm-squares-21x29.7cm-a4.pdf', mime: 'application/pdf', title: 'Save PDF (A4)', tool: 'grid', authorized: true });
+      expect((media.blob as Blob).type).toBe('application/pdf');
+      expect(media.preview).toBeInstanceOf(Blob);
+    });
+
+    it('in Hebrew: the words on the pages are Hebrew, right to left', async () => {
+      account.features = ['export.pdf'];
+      await renderGrid(oldProject(), 'he');
+      fireEvent.click(screen.getByRole('button', { name: 'שמירת PDF\u200f (A4)' }));
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+      const input = buildGridPdf.mock.calls[0][1] as { words: Record<string, string>; rtl: boolean };
+      expect(input.rtl).toBe(true);
+      expect(input.words.print).toBe('להדפיס ב־100%, בגודל אמיתי. הפס שלמטה צריך להיות באורך 50 מ״מ.');
+      expect(input.words.reference).toBe('תמונת הייחוס עם הרשת');
+    });
+
+    it('on a phone: short labels under the grid, their full names kept', async () => {
+      mobile.value = true;
+      account.features = ['export.pdf'];
+      await renderGrid();
+      expect(screen.getByRole('button', { name: 'Save blank grid' })).toHaveTextContent('Blank grid');
+      expect(screen.getByRole('button', { name: 'Save PDF (A4)' })).toHaveTextContent('PDF');
+    });
+  });
+});
+
+describe('Prepare Worksheets (M3)', () => {
+  const button = (name = 'Prepare worksheets') => screen.queryByRole('button', { name });
+
+  it('is offered only where it can be had: hidden while no plan has it, locked where another plan does, ready where included', async () => {
+    const view = await renderGrid(oldProject());
+    expect(screen.queryByRole('button', { name: /worksheets/i })).toBeNull();
+    view.unmount();
+    account.offer = { free: [], pro: ['export.worksheets'] };
+    const locked = await renderGrid(oldProject());
+    expect(button()).toBeNull();
+    expect(button('Prepare worksheets (Locked)')!.querySelector('.lucide-lock')).not.toBeNull();
+    locked.unmount();
+    account.features = ['export.worksheets'];
+    await renderGrid(oldProject());
+    expect(button()!.querySelector('.lucide-lock')).toBeNull();
   });
 
-  it('in Hebrew: the words on the pages are Hebrew, right to left', async () => {
-    account.features = ['export.pdf'];
-    await renderGrid(oldProject(), 'he');
-    fireEvent.click(screen.getByRole('button', { name: 'שמירת PDF\u200f (A4)' }));
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    const input = buildGridPdf.mock.calls[0][1] as { words: Record<string, string>; rtl: boolean };
-    expect(input.rtl).toBe(true);
-    expect(input.words.print).toBe('להדפיס ב־100%, בגודל אמיתי. הפס שלמטה צריך להיות באורך 50 מ״מ.');
-    expect(input.words.reference).toBe('תמונת הייחוס עם הרשת');
+  it('opens with this grid: its canvas and grid, the image saves unchanged beside it', async () => {
+    account.features = ['export.worksheets'];
+    await renderGrid(oldProject());
+    expect(screen.getByRole('button', { name: 'Save grid image' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save blank grid' })).toBeInTheDocument();
+    fireEvent.click(button()!);
+    const dialog = screen.getByRole('dialog', { name: 'Prepare worksheets' });
+    expect(within(dialog).getByRole('checkbox', { name: /^Reference with grid/ })).toHaveAccessibleName(/3×5 grid on a 40×50 cm canvas/);
+    expect(dialog).toHaveTextContent('The canvas, grid and framing come from Create a Grid.');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Prepare worksheets' })).toBeNull();
   });
 
-  it('on a phone: short labels under the grid, their full names kept', async () => {
+  it('on a phone: a short label beside the saves, its full name kept; in Hebrew too', async () => {
     mobile.value = true;
-    account.features = ['export.pdf'];
-    await renderGrid();
-    expect(screen.getByRole('button', { name: 'Save blank grid' })).toHaveTextContent('Blank grid');
-    expect(screen.getByRole('button', { name: 'Save PDF (A4)' })).toHaveTextContent('PDF');
+    account.features = ['export.worksheets'];
+    const view = await renderGrid(oldProject());
+    expect(button()).toHaveTextContent('Worksheets');
+    view.unmount();
+    await renderGrid(oldProject(), 'he');
+    expect(screen.getByRole('button', { name: 'הכנת דפי תרגול' })).toHaveTextContent('דפי תרגול');
   });
 });

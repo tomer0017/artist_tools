@@ -1,9 +1,9 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Download, FileText, Loader2, Lock, Minus, Plus, RefreshCw, RotateCcw, RotateCw } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Download, FileText, Layers, Loader2, Lock, Minus, Plus, RefreshCw, RotateCcw, RotateCw } from 'lucide-react';
 import ToolHeader from '@/components/shell/ToolHeader';
 import ToolEmptyState from '@/components/shell/ToolEmptyState';
 import type { GridSettings } from '@/types/project';
@@ -13,6 +13,9 @@ import { canvasToBlob } from '@/lib/saveMedia';
 import { A4_CM, cellCounts, exportSize, fillImageScale, previewSize, turn } from '@/lib/grid/geometry';
 import { drawExport, drawPreview, exportFilename, fillBackground, type LoadedImage } from '@/lib/grid/draw';
 import { buildGridPdf, gridPrintDetail, gridPrintLayout } from '@/lib/print/gridPdf';
+import { GRID_PDF_BUTTON } from '@/lib/print/ui';
+import { activeControls, resolveSketch } from '@/lib/sketch/settings';
+import PrepareWorksheets from '@/components/worksheets/PrepareWorksheets';
 import { canvasTextRenderer, loadImage, rasterizeReference, renderPdfPreview } from '@/lib/print/gridPdfBrowser';
 import type { gridEn } from '@/i18n/messages/tools/grid';
 
@@ -32,15 +35,23 @@ const round = (value: number, places: number) => Math.round(value * 10 ** places
 export default function GridTab() {
   const t = useTranslations('gridTool');
   const tLocked = useTranslations('studio.locked');
-  const { image, gridImage, setGridImage, initGridImageFromReference, gridSettings, setGridSettings } = useProject();
+  const tw = useTranslations('worksheets');
+  const { image, gridImage, setGridImage, initGridImageFromReference, gridSettings, setGridSettings, valueSettings } = useProject();
   const { save, authorize } = useSaveMedia();
   const locale = useLocale();
   // The A4 PDF: offered to accounts that have it, and shown locked where another plan has it
-  // (in no plan until the owner publishes it: only admins see it before that).
+  // (in no plan until the owner publishes it: only admins see it before that). The button is
+  // hidden for now (GRID_PDF_BUTTON, src/lib/print/ui.ts); everything behind it is kept.
   const canPdf = useHasFeature('export.pdf');
   const offer = useAccount()?.account.offer;
-  const pdfOffered = canPdf || offer?.free.includes('export.pdf') === true || offer?.pro.includes('export.pdf') === true;
+  const pdfOffered = GRID_PDF_BUTTON && (canPdf || offer?.free.includes('export.pdf') === true || offer?.pro.includes('export.pdf') === true);
   const [pdfBusy, setPdfBusy] = useState(false);
+  // Prepare Worksheets (M3): offered like the PDF (in no plan until the owner publishes it), with
+  // this grid's canvas, grid and framing, and Study & Simplify's Clean Outline settings.
+  const canWorksheets = useHasFeature('export.worksheets');
+  const worksheetsOffered = canWorksheets || offer?.free.includes('export.worksheets') === true || offer?.pro.includes('export.worksheets') === true;
+  const [worksheetsOpen, setWorksheetsOpen] = useState(false);
+  const outlineControls = useMemo(() => activeControls({ ...resolveSketch(valueSettings), style: 'outline' }), [valueSettings]);
   // Mobile panel: the common presets first, every setting one tap away.
   const [panel, setPanel] = useState<'preset' | 'customize'>('preset');
   const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number } | null>(null);
@@ -305,6 +316,8 @@ export default function GridTab() {
 
   // Locked is said in words too (as in the navigation), not only by the icon.
   const pdfName = canPdf ? t('savePdf') : `${t('savePdf')} (${tLocked('badge')})`;
+  const worksheetsName = canWorksheets ? tw('open') : `${tw('open')} (${tLocked('badge')})`;
+  const worksheetsIcon = canWorksheets ? <Layers className="h-4 w-4" aria-hidden="true" /> : <Lock className="h-4 w-4" aria-hidden="true" />;
   const pdfButtonContent = pdfBusy ? (
     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
   ) : canPdf ? (
@@ -443,6 +456,15 @@ export default function GridTab() {
                     {pdfButtonContent} {t('savePdfShort')}
                   </button>
                 )}
+                {worksheetsOffered && (
+                  <button
+                    onClick={() => setWorksheetsOpen(true)}
+                    aria-label={worksheetsName}
+                    className="flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-border bg-secondary/40 px-3 text-sm font-semibold text-foreground active:bg-secondary"
+                  >
+                    {worksheetsIcon} {tw('openShort')}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -522,6 +544,16 @@ export default function GridTab() {
                 {t('savePdf')}
               </button>
             )}
+            {worksheetsOffered && (
+              <button
+                onClick={() => setWorksheetsOpen(true)}
+                aria-label={worksheetsName}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 active:scale-95 transition-transform"
+              >
+                {worksheetsIcon}
+                {tw('open')}
+              </button>
+            )}
             <button
               onClick={handleExport}
               data-onboarding="grid-export"
@@ -535,6 +567,9 @@ export default function GridTab() {
       )}
 
       <canvas ref={exportCanvasRef} className="hidden" />
+      {worksheetsOpen && activeImage && (
+        <PrepareWorksheets from="grid" image={activeImage} settings={gs} outline={outlineControls} onClose={() => setWorksheetsOpen(false)} />
+      )}
     </div>
   );
 }
