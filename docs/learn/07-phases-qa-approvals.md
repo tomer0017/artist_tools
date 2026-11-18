@@ -5,18 +5,26 @@ small, ships on its own to staging after CI, keeps a rollback path, and
 waits for approval before the next one starts. Nothing in this plan has been
 implemented or tested yet: no Learn code exists.
 
-## Milestones
+**Revised 2026-11-18 after the owner's first review:**
 
-### M0 — Rollback safety (no visible change)
-- **Why first:** today, rolling back after a catalog with any new feature
-  ID is published would reset every plan to the code defaults (06 §12).
-- **Scope:** the catalog keeps unknown feature IDs but ignores them, and a
-  published version that fails to parse is never replaced by defaults
-  (`plans` untouched; the failure is logged and shown to admins).
-- **Tests:** unit tests; a migration integration test with a catalog from
-  "the future"; the existing suites.
-- **Done when:** released to staging and verified with `entitlement-test`.
-  The next release may then add feature IDs safely.
+- The former M0 is now a separate security fix, outside this plan.
+- M4 uses the new storage for images and the new place for access rules.
+- M7 produces 20 exercises, the core first.
+- Decisions A1, A2, A6 and A8 changed, and A19 is new.
+
+## Prerequisite (not part of this plan): the rollback-safety fix
+
+- **What:** today, rolling back after a catalog with any new feature ID is
+  published would reset every plan to the code defaults. This was reproduced
+  on 2026-11-18.
+- **Where:** [catalog-rollback-safety.md](../security/catalog-rollback-safety.md)
+  has the defect, the reproduction, the fix, its tests and its rollout.
+- **Approval:** its own. It is implemented, tested, released to staging and
+  reported on its own.
+- **Order:** no milestone below that adds a feature ID or a catalog section
+  (M2 onwards) starts before it is released.
+
+## Milestones
 
 ### M1 — Create a Grid: rotation, A4, square cells, blank grid
 - **Scope:**
@@ -69,20 +77,23 @@ implemented or tested yet: no Learn code exists.
 
 ### M4 — Learn foundations (server), dark launch
 - **Scope:**
-  - content and access kinds;
-  - the asset store and upload (admin only, licence metadata required);
+  - the content kind;
+  - the Learn access section of the catalog, edited in Admin → Plans;
+  - the asset directory and its backup, and admin-only upload with licence
+    metadata required (06 §3);
   - the authorized asset route;
   - the access resolver;
   - `learnItem` in `/api/usage`;
   - the `learn.*` features (in no plan);
-  - Admin → Learn → Access;
-  - a JSON import of seed content: 3 exercises and 3 challenges with
-    licensed references, visible to admins only.
+  - an import of seed content from a file outside the repository: 3
+    exercises and 3 challenges with licensed references, visible to admins
+    only.
 - **Tests:**
   - the resolver's full rule matrix;
-  - publish validation;
+  - publish validation, including frozen First N lists;
   - the authorization criteria below, local and on real staging;
-  - `entitlement-test` extended for Learn.
+  - `entitlement-test` extended for Learn;
+  - the restore drill with the asset directory.
 
 ### M5 — Learn screens and personal history
 - **Scope:**
@@ -110,10 +121,14 @@ implemented or tested yet: no Learn code exists.
 
 ### M7 — Content production, in batches
 - **Scope:**
-  - the 46 drawing exercises and 50 challenges: text in both languages,
+  - the 20 drawing exercises and 50 challenges: text in both languages,
     licensed references, static worksheets;
   - reviewed by an art educator and a native Hebrew speaker;
-  - published in batches (Units 0–3, 4–7, 8–10, then challenge groups).
+  - published in batches:
+    1. core 1–6;
+    2. core 7–12;
+    3. the 8 next steps, after the core has been used;
+    4. then the challenge groups.
 - **Tests:** content validation; printed samples of every static
   worksheet.
 
@@ -158,8 +173,11 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
    - the card locks on the next navigation or within a minute;
    - its assets and exports are refused at once.
 7. Publishing a new access rule while a card is open behaves the same.
-8. "First N" and "Selected" open exactly the expected items. Unknown or
-   unpublished IDs block publication.
+8. A Selected list (made by First N, a whole group, or picking) opens
+   exactly the listed items:
+   - reordering or adding content changes no account's access;
+   - the diff shows the gains and losses;
+   - unknown or unpublished IDs block publication.
 9. A module feature turned off locks every item of the module, whatever the
    rules say.
 10. Admins see everything, including drafts. "View as" never changes the
@@ -194,14 +212,14 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
 
 | # | Decision | Recommendation | Needed before |
 |---|---|---|---|
-| A1 | This plan and its order, with M0 first | Approve as is | M0 |
-| A2 | The curriculum sequence and exercises (02) | Review; ideally also an art educator | M7 (content), M4 (seed) |
+| A1 | This plan and its order (M1 to M9), after the separate rollback-safety fix | Approve | M1 |
+| A2 | The curriculum: 12 core exercises and 8 next steps; 18 merged and 8 deferred (02) | Approve the scope. Produce the core first; the next steps after the core has been used. Ideally reviewed by an art educator | M4 (seed), M7 |
 | A3 | The 50 challenges (03) | Review | M7, M4 (seed) |
 | A4 | Where Learn lives: Home and desktop navigation; phones through Home | Approve; revisit after measuring | M5 |
 | A5 | The PDF library (one new dependency, loaded on demand) | jsPDF ≥ 4.2.1 (maintained, smallest, right-to-left text; 01 §7) | M2 |
-| A6 | Content in the database as versioned publications (not in code) | Database | M4 |
+| A6 | Content in the database as versioned publications, never committed to the repository (it is public) | Database; seed imported from a file kept outside the repository | M4 |
 | A7 | Reference sourcing: own or commissioned photos, CC0 collections, model releases; any budget | Own or commissioned plus CC0 museum collections; no stock-photo sites without legal review | M4 (seed), M7 |
-| A8 | The entitlement model (module features and per-collection rules) and the dark launch | Approve; the launch policy is a separate decision at M9 | M4 |
+| A8 | The entitlement model, all in Admin → Plans: module and export features, plus one rule per collection and plan (All, None, Selected); First N frozen at publication; the dark launch | Approve; the launch policy is a separate decision at M9 | M4 |
 | A9 | What locked items show in lists | Title and thumbnail | M5 |
 | A10 | Class mode: its name and the 12-hour automatic end | Approve | M5 |
 | A11 | Grid scope: rotation, A4, square cells, blank grid now; fine rotation later | Approve | M1 |
@@ -212,3 +230,4 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
 | A16 | Should Learn ever measure drawing accuracy (angles, proportions)? | No in v1: feedback can backfire, and the aim is less screen time (01 §2) | M5 |
 | A17 | Paper and text in PDFs: A4 only or also Letter; Hebrew text as an embedded font or as images | A4 only at first; decide the Hebrew method in M2 | M2 |
 | A18 | How Learn is evaluated before any claim about results (for example volunteers' before-and-after drawings) | Make no outcome claims until such an evaluation exists | M9 |
+| A19 | Where reference images live (06 §3) | Files on the server, outside the releases and `public/`, named by hash; metadata in MongoDB; served only by the authorized route; copied incrementally with the nightly backup. Not GridFS, not the repository | M4 |

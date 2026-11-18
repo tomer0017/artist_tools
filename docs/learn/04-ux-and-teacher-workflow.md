@@ -28,10 +28,14 @@ AI scoring of anyone's artwork.
   completed exercises appears only on the history page.
 
 ### S2 · Curriculum (`/app/learn/curriculum`)
-- Units as a list; each opens to its exercises (title, small thumbnail, a
-  "completed" tick with the number of times, a lock when not in the plan).
-- A one-line recommendation to start with pencil units before colour, never
-  a requirement.
+- Three groups, in the recommended order (02):
+  - **Core** (12 exercises);
+  - **Next steps** (8);
+  - **Colour** (7).
+- Each exercise shows its title, a small thumbnail, a "completed" tick with
+  the number of times, and a lock when it is not in the plan.
+- A one-line recommendation to start with the core in pencil before colour,
+  never a requirement.
 
 ### S3 · Exercise card (`/app/learn/exercises/<id>`)
 - **Title**, a **large reference image** (tap for full screen and zoom), the

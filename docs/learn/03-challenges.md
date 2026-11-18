@@ -16,8 +16,8 @@ no written reflection, no intermediate checkboxes.
 - **Level** — recommended difficulty: **B** beginner, **I** intermediate,
   **A** advanced. A recommendation for filtering and random picks, never a
   lock.
-- **Skill** — the primary skill (it links to the curriculum unit that
-  teaches it).
+- **Skill** — the primary skill, with its skill area in brackets (1–10,
+  below), which links it to the exercises that teach it.
 - **Reference** — **Life** (draw from observation), **Own photo** (the
   learner's own photo, which never leaves the device), **Provided** (a
   licensed reference shipped with Learn), **Memory/none**.
@@ -29,9 +29,27 @@ Counts (computed from the tables): 50 challenges; 12 beginner, 25
 intermediate, 13 advanced; 15 quick. Every challenge works in pencil; 20 also
 suit colour.
 
+## Skill areas
+
+The curriculum no longer has units (02, revised 2026-11-18). The numbers in
+the Skill column are skill areas, each taught by these exercises:
+
+| Area | Taught by |
+|---|---|
+| 1 Lines | D-LINE-04 |
+| 2 Shapes | D-SHAPE-01 |
+| 3 Observation | D-OBS-02, D-OBS-03, D-OBS-04, D-OBS-06, D-OBS-07 |
+| 4 Value | D-VAL-01 |
+| 5 Light | D-LIGHT-01 |
+| 6 Perspective | D-PERSP-01 |
+| 7 Copying | D-COPY-01, D-COPY-02, D-COPY-03 |
+| 8 Head | D-HEAD-02, D-HEAD-04 |
+| 9 Figure | D-FIG-01, D-FIG-04 |
+| 10 Subjects | D-SUBJ-02, D-SUBJ-04 |
+
 ## Everyday objects
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-001 | Your shoe | הנעל שלך | Draw one of your shoes from the side. Next time, from above. | I | Proportion, block-in (3) | Life | P/C | — | Measure, Compare |
 | CH-002 | Keys on the table | מפתחות על השולחן | Drop your keys on the table and draw them exactly as they landed. | B | Contour (3) | Life | P | ✓ | — |
@@ -42,7 +60,7 @@ suit colour.
 
 ## Still life
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-007 | Three pieces of fruit | שלושה פירות | Arrange three fruits under one light and draw them. | B | Simple forms in light (5) | Life | P/C | — | Study |
 | CH-008 | An egg on a cloth | ביצה על בד | Draw an egg on a folded cloth, lit from one side. | I | Light on form (5) | Life | P | — | Study |
@@ -52,7 +70,7 @@ suit colour.
 
 ## Plants and flowers
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-012 | A single leaf | עלה אחד | Draw one leaf: its outline first, then its veins. | B | Contour, structure (3) | Life | P/C | ✓ | — |
 | CH-013 | A potted plant | צמח בעציץ | Draw a potted plant, using the gaps between the leaves. | I | Negative space, overlap (3) | Life | P/C | — | Study |
@@ -62,7 +80,7 @@ suit colour.
 
 ## Butterflies and insects
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-017 | A butterfly | פרפר | Draw a butterfly, matching its two sides and its patterns. | B | Symmetry, copying (7) | Provided | P/C | — | Grid, Study, Worksheets |
 | CH-018 | A beetle | חיפושית | Draw a beetle's shiny shell with its highlights. | I | Highlights, value (5) | Provided | P | — | Study, Worksheets |
@@ -70,7 +88,7 @@ suit colour.
 
 ## Animals
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-020 | A sleeping pet | חיית מחמד ישנה | Draw a pet while it sleeps: its big masses first. | I | Gesture, masses (9, 10) | Life or Own photo | P/C | ✓ | — |
 | CH-021 | A dog's portrait | דיוקן של כלב | Draw a dog's head, showing the fur through value rather than single hairs. | A | Value, texture (4, 10) | Own photo or Provided | P | — | Grid, Study, Worksheets |
@@ -81,7 +99,7 @@ suit colour.
 
 ## Architecture
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-026 | Your front door | דלת הכניסה שלך | Draw your front door with its frame and handle. | B | Proportion, rectangles (3) | Life | P | ✓ | Measure |
 | CH-027 | A room in one-point perspective | חדר בפרספקטיבה של נקודת מגוז אחת | Stand facing a wall and draw the room around it. | I | One-point perspective (6) | Life | P | — | — |
@@ -90,7 +108,7 @@ suit colour.
 
 ## Landscapes
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-030 | Sky and clouds | שמיים ועננים | Draw today's clouds with soft edges and a few values. | B | Soft edges, value (4) | Life or Own photo | P/C | ✓ | Study |
 | CH-031 | A landscape in three values | נוף בשלושה ערכים | Draw a landscape using only three values. | I | Value grouping, depth (4, 10) | Own photo or Provided | P | — | Study, Worksheets |
@@ -99,7 +117,7 @@ suit colour.
 
 ## Portraits
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-034 | A family member | בן או בת משפחה | Draw someone from your family. Next time, someone else. | I | Portrait proportions (8) | Life or Own photo | P/C | — | Measure, Compare, Worksheets |
 | CH-035 | A self-portrait in the mirror | דיוקן עצמי במראה | Draw yourself in a mirror, measuring as you go. | I | Observation, measurement (3, 8) | Life | P | — | — |
@@ -109,7 +127,7 @@ suit colour.
 
 ## Hands
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-039 | Your free hand | היד החופשית שלך | Draw your free hand in a new pose each time. | I | Hand structure (9) | Life | P | ✓ | — |
 | CH-040 | A hand holding something | יד אוחזת בחפץ | Draw a hand holding a cup, a pen or a phone. | A | Overlapping forms (9) | Life | P | — | — |
@@ -117,14 +135,14 @@ suit colour.
 
 ## Hair
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-042 | A braid or ponytail | צמה או קוקו | Draw a braid or a ponytail as big masses and rhythm, not single hairs. | I | Masses, rhythm (4) | Life or Own photo | P | — | Study |
 | CH-043 | Curly hair | שיער מתולתל | Draw curly hair with values: big clumps first, a few curls last. | A | Texture through value (4) | Own photo or Provided | P | — | Study, Worksheets |
 
 ## Figures
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-044 | Someone reading or resting | מישהו קורא או נח | Draw someone sitting still: gesture, then structure. | I | Figure from life (9) | Life | P | — | — |
 | CH-045 | People in a public place | אנשים במקום ציבורי | In a café or on a bus, draw small sketches of people. | I | Gesture (9) | Life | P | ✓ | — |
@@ -133,7 +151,7 @@ suit colour.
 
 ## Creative
 
-| ID | English | עברית | Prompt | Level | Skill (unit) | Reference | Medium | Quick | Tools |
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Tools |
 |---|---|---|---|---|---|---|---|---|---|
 | CH-048 | An imaginary creature | יצור דמיוני | Invent a creature from parts of real animals, built from simple forms. | I | Construction, invention (2, 10) | Provided (several animals) | P/C | — | — |
 | CH-049 | A favourite place from memory | מקום אהוב מהזיכרון | Draw a place you love, from memory. | B | Composition, recall (10) | Memory | P/C | ✓ | — |

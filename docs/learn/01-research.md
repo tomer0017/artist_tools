@@ -237,12 +237,12 @@ Avoid non-commercial and share-alike licences for anything in a paid plan.
 
 | Finding | Applied in |
 |---|---|
-| Errors come from perception; looking and checking are teachable | Observation (Unit 3) comes early: angles, relative measurement, alignments, block-in, "look often" (02) |
-| Experts segment complex contours; big shapes first | Block-in (D-OBS-06); copying (Unit 7); every complete drawing starts with the big shape |
-| Schema errors (eyes too high) are only partly fixed by stating the rule | D-HEAD-01 pairs the average with measuring the real face; proportions are called averages everywhere |
-| Value is an early, separate skill | Unit 4 (Value) before Light and Perspective; Study & Simplify for 2–3 values |
+| Errors come from perception; looking and checking are teachable | Most of the core trains looking and checking: negative space, angles and alignments, relative measurement, block-in, a checked copy, "look often" (02) |
+| Experts segment complex contours; big shapes first | Block-in (D-OBS-06); the measured copy (D-COPY-02); every complete drawing starts with the big shape |
+| Schema errors (eyes too high) are only partly fixed by stating the rule | D-HEAD-04 measures the real face first and checks it against the average second; proportions are called averages everywhere |
+| Value is an early, separate skill | D-VAL-01 comes before light (D-LIGHT-01) and long before perspective; Study & Simplify for 2–3 values |
 | Feedback should be about the drawing, not the person | Success criteria describe the drawing; Compare & Correct offered as an optional self-check (an inference, not a tested feature) |
-| Interleaving helps telling things apart | Challenges mix subjects and skills; the "suggested rhythm" mixes units, without promises |
+| Interleaving helps telling things apart | Challenges mix subjects and skills; the "suggested rhythm" mixes them with the exercises, without promises |
 | Upside-down copying does not improve accuracy | Not in the curriculum; contour exercises are framed as attention warm-ups |
 | Canons are averages; individuals vary widely | No age tracks, no rates; progress is the learner's own earlier drawing (D-START-01 revisited) |
 | Stock-photo licences conflict with a printable library | CC0/public-domain and own or commissioned images only (06 §11) |

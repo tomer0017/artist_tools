@@ -2,17 +2,30 @@
 
 **Status: proposal for the owner's approval. Nothing here is implemented.**
 No Learn code, migration or deployment exists; no test has been written or
-run for Learn. Prepared on 2026-11-18 against `be6890c`.
+run for Learn. Prepared on 2026-11-18 against `be6890c`, and revised the same
+day after the owner's first review.
+
+**Start with [00-review.md](00-review.md):** the short review document,
+with:
+
+- the whole curriculum and all 50 challenges;
+- the nine screens;
+- the Free/Pro controls;
+- the decisions still open.
 
 ## Executive summary
 
 **What Learn is:**
 
-- A pencil-first drawing practice companion: a curriculum of 46 drawing
-  exercises in 11 units, a separate colour module of 7 exercises, and 50
-  reusable challenges.
-- It is designed so people spend their time on paper, not on screens.
-  Pick a task in a few taps, put the tablet down, draw. Help is one tap away.
+- A pencil-first drawing practice companion with:
+  - a curriculum of 20 drawing exercises: 12 core exercises and 8 next steps;
+  - a separate colour module of 7 exercises;
+  - 50 reusable challenges.
+- **The 80/20 cut:** the first proposal had 46 drawing exercises. Most were
+  merged or deferred, keeping the ones that train looking, measuring and
+  checking, which the research links to accuracy.
+- **Time on paper, not on screens:** pick a task in a few taps, put the
+  tablet down, draw. Help is one tap away.
 - No timers, streaks, scores, forms or classroom management.
 
 **What it builds on:**
@@ -36,13 +49,18 @@ run for Learn. Prepared on 2026-11-18 against `be6890c`.
   personal history. It is a browser setting: there are no student accounts,
   roles or records.
 
-**Admin control:**
+**Admin control, all in Admin → Plans:**
 
-- Whole modules and the two PDF exports are features in the existing plan
-  editor.
-- Inside each collection, each plan has exactly one rule: All, None,
-  First N, or Selected items. Two settings can never conflict.
-- Everything is a versioned draft until published.
+- **Today** that editor controls only the five tools and the image and GIF
+  saves (05 §2).
+- **The proposal extends it:**
+  - whole modules and the two PDF exports become rows with Free/Pro
+    switches;
+  - inside each collection, each plan has exactly one rule: All, None, or
+    Selected items. Two settings can never conflict.
+- **First N** counts items, and is frozen into a list when published, so
+  reordering content never changes anyone's access.
+- Everything is one versioned draft until published.
 - Locked content and its images are never sent to accounts that cannot open
   them.
 
@@ -55,25 +73,33 @@ run for Learn. Prepared on 2026-11-18 against `be6890c`.
 - It does not support claims about learning speed, "right-brain" drawing or
   upside-down copying. Learn will make none.
 
-**A risk found during inspection:**
+**Found during inspection, handled separately:**
 
-- **The hazard:** today, rolling back after a catalog with any new feature
-  ID is published would reset every plan to the code defaults.
-- **The fix:** milestone M0 removes that hazard and ships before anything
-  else.
+- **The rollback hazard:**
+  - Today, rolling back after a catalog with any new feature ID is published
+    would reset every plan to the code defaults.
+  - It is now a separate security fix with its own tests and approval
+    ([catalog-rollback-safety.md](../security/catalog-rollback-safety.md)).
+  - It is released before any Learn milestone that adds a feature.
+- **The repository is public:**
+  - so reviewed content and reference images are never committed;
+  - the drafts in these documents are already readable by anyone.
 
-**What is needed from the owner:** the 18 decisions in
-[07-phases-qa-approvals.md](07-phases-qa-approvals.md) § Approval checkpoints.
-A1 (this plan and its order) is needed before M0 starts.
+**What is needed from the owner:**
+
+- the rollback-safety fix's approval;
+- the 19 decisions in [07-phases-qa-approvals.md](07-phases-qa-approvals.md)
+  § Approval checkpoints, summarised in [00-review.md](00-review.md).
 
 ## Documents
 
 | # | Document | Contents |
 |---|---|---|
+| 00 | [Review](00-review.md) | The short review document: answers to the first review, the curriculum, the 50 challenges, the nine screens, the Free/Pro controls, the open decisions |
 | 01 | [Research findings](01-research.md) | Evidence by topic with strength tags; curricula and methods; image licensing; print accuracy; PDF libraries; what Learn must never claim; open questions; 87 references |
-| 02 | [Curriculum](02-curriculum.md) | 46 drawing exercises in 11 units and 7 colour exercises, each with ID, English and Hebrew title, objective, materials, instruction, guide, reference, mistake and fix, tool, worksheet, success criterion |
-| 03 | [Challenges](03-challenges.md) | The 50 reusable challenges with level, skill, reference, medium, quick flag and tools |
+| 02 | [Curriculum](02-curriculum.md) | 12 core exercises, 8 next steps and 7 colour exercises, each with ID, English and Hebrew title, objective, materials, instruction, guide, reference, mistake and fix, tool, worksheet, success criterion; the 26 merged or deferred |
+| 03 | [Challenges](03-challenges.md) | The 50 reusable challenges with level, skill area, reference, medium, quick flag and tools |
 | 04 | [Screens and the teacher workflow](04-ux-and-teacher-workflow.md) | Where Learn lives, screens S1–S9, Prepare Worksheets, Class mode, history, the one-tablet-five-students flow, printing |
-| 05 | [Admin and entitlements](05-admin-and-entitlements.md) | Status of the earlier bug, module features, per-collection rules, precedence, visibility versus authorization, admin screens |
-| 06 | [Architecture](06-architecture.md) | Reuse map, content schema, assets, the access resolver, routes, worksheets and PDF, Grid improvements, localisation, history, security, copyright, migration and rollback, risks |
-| 07 | [Phases, QA and approvals](07-phases-qa-approvals.md) | Milestones M0–M9, acceptance criteria, the 18 decisions |
+| 05 | [Admin and entitlements](05-admin-and-entitlements.md) | The earlier bug's status; what today's Plans editor controls; module features; the per-collection rules and First N; precedence; visibility versus authorization; admin screens |
+| 06 | [Architecture](06-architecture.md) | Reuse map, content schema, reference images (storage reevaluated), the access resolver, routes, worksheets and PDF, Grid improvements, localisation, history, security, copyright, migration and rollback, risks |
+| 07 | [Phases, QA and approvals](07-phases-qa-approvals.md) | The prerequisite fix, milestones M1–M9, acceptance criteria, the 19 decisions |
