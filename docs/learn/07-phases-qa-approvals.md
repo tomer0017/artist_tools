@@ -66,7 +66,10 @@ implemented or tested yet: no Learn code exists.
   - **owner check:** print at 100% and measure the scale bar.
 
 ### M3 — Prepare Worksheets from any image (before any curriculum exists)
-- **Status:** approved 2026-11-18 and implemented (ADR-0016). M4 waits for
+- **Status:** approved 2026-11-18 and implemented (ADR-0016); on staging
+  since 2026-11-18 (`8576f66`, deploy/RELEASES.md), with `export.worksheets`
+  in no plan (admins only). Open: the owner's checks on a real iPhone and
+  iPad (the share sheet with several images, memory and time). M4 waits for
   the owner's approval.
 - **Changed by the owner (2026-11-18):** the sheets are saved as **PNG
   images**, not one multipage PDF. Each is the size of Create a Grid's

@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-18 21:04:47 | `8576f66` | **Prepare Worksheets, Learn milestone M3** (approved by the owner; includes `ab2f5aa`). From Create a Grid and Study & Simplify: the original, a clean outline, the reference with its grid, an optional blank grid and a values study, saved as **PNG images** that line up (the owner's choice over the planned PDF). Built from the existing tools: Create a Grid's own images, Study's Clean Outline and its Values algorithm (moved to `src/lib/values` unchanged, ADR-0016). New feature ID `export.worksheets` ("Worksheets"), **in no plan: only admins can make worksheets until the owner publishes it**. Create a Grid's "Save PDF (A4)" button is hidden (code and `export.pdf` kept). **Fixed (`ab2f5aa`):** Study & Simplify's study, palette and study sheet saves did nothing under the site's CSP since 2026-11-11. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 21:04:41, `mongodb-20261118T210441Z`) |
 | 2026-11-18 18:47:37 | `d261013` | **Create a Grid's A4 PDF, Learn milestone M2** (approved by the owner). A two-page A4 PDF: the reference with its grid, then the same grid blank, for paper. Both pages have one frame, the same vector lines and a 50 mm bar; true size when the canvas fits, otherwise reduced and stated. jsPDF 4.2.1 is loaded only after the server authorizes a PDF (ADR-0015). New feature ID `export.pdf` ("Grid PDFs (A4)"), **in no plan: only admins can make PDFs until the owner publishes it**. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 18:47:32, `mongodb-20261118T184732Z`) |
 | 2026-11-18 17:24:48 | `6f2159a` | **Create a Grid improvements, Learn milestone M1** (approved by the owner; includes `f2f7b91`). Rotation left or right 90° or by 180°: only the drawing turns, never the stored photo. Exact A4 portrait and landscape. Square cells of a set size. **Save blank grid** (the same lines on white, for paper), through the same authorized save. Exact zoom and moves beside drag, pinch and wheel. The geometry is shared in `src/lib/grid`. Grids saved before M1 open and save byte for byte as before. No Learn screens, content, migrations or feature IDs. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 17:24:43, `mongodb-20261118T172443Z`) |
 | 2026-11-18 15:52:59 | `224bb65` | **Rolling back never resets or widens the published plans** (ADR-0014; approved by the owner as a separate security fix; includes `9c38661`). An older release keeps the feature IDs and sections a newer one published, and applies none of them. A setting it cannot apply withholds that feature (fail closed). An unreadable catalog leaves `plans` as it is, never the defaults. Admin → Plans says so and turns editing off. New read-only `npm run db -- catalog-status`. No feature ID added. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 15:52:54, `mongodb-20261118T155254Z`) |
@@ -46,6 +47,70 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Prepare Worksheets (Learn M3) on staging, `8576f66` (2026-11-18, 21:02–21:16Z)
+
+Approved by the owner as M3 only (no Learn screens or content). Nothing was
+published, so the published plan settings are as they were. Production and
+GitHub Pages are untouched.
+
+- **Before:**
+  - CI run 37 (`8576f66`) green: type check, lint, 481 unit and integration
+    tests, and 239 e2e tests (Chromium, WebKit iPhone emulation). Nine more
+    are skipped on purpose: the hidden PDF button's interface tests.
+  - Capture: catalog version 6 `f8a1a43e4cedbed7`, `plans`
+    `48f75a1f7925d6c5`, no draft. Staging ran `d261013`.
+- **The release:**
+  - the dump `mongodb-20261118T210441Z`;
+  - "0 plans updated", then "Catalog version 6: applied";
+  - healthy at 21:04:47.
+- **After, on real staging:**
+  - The capture is identical, after the release and again after the browser
+    checks: catalog (content and publication time), history, and `plans`
+    with their update times.
+  - `catalog-status` ok, both plans in step.
+  - Smoke 22/22, `login-test` 13/13.
+  - `entitlement-test` (read only) 11/11. It checks every export feature, so
+    the server refused `export.worksheets` and `export.pdf` to Free and Pro.
+- **M3 in real browsers** (temporary Free, Pro and Hebrew accounts; removed;
+  passwords only in a 0600 file, deleted): 6/6 passed.
+  - **As staging is (Free, Pro):**
+    - no Worksheets or PDF button in Create a Grid or Study & Simplify;
+    - no Worksheets row on the plans page;
+    - the server refuses a set (403, `export.worksheets`).
+  - **A studio that believes it may:** the account answer was altered in the
+    test browser only. The real server checked Study & Simplify (200), then
+    refused the set (403). The studio said why, and nothing was made.
+  - **Staging's own build making a set:** the server's yes was **simulated
+    in the test browser**; the real server would refuse. Desktop Chrome in
+    English and Hebrew, and WebKit with iPhone 13 emulation.
+    - The four sheets are 2400 × 3360.
+    - The grid sheet is identical, byte for byte, to the grid image staging
+      saved for real.
+    - The original, the outline and the values are where the photo is.
+  - **Study & Simplify's saves, for real** (Free has them): the study, the
+    palette and the study sheet were saved (the server said 200 each). Before
+    `ab2f5aa` they did nothing.
+  - **Not verified on staging:** a set made with the server's real yes. That
+    needs an admin account (the owner's) or a publication.
+- **Regressions on the same build:**
+  - The M1 checks: 8/8 passed.
+  - The plan-enforcement checks: 6/6 passed. The test that publishes was
+    skipped.
+- **Locally:**
+  - The full suites: 481 unit and 239 e2e tests.
+  - **The Values move, in a real browser:** Study's files compared between
+    `7b11235` and M3 were all byte-identical: 21 files (5 on-screen
+    studies, 5 saved studies, 5 palettes, 5 study sheets, 1 Clean Outline
+    PNG).
+  - The old build could only be compared with its study saves made to work
+    in the test page.
+- **Rollback:**
+  - `d261013` is still in releases/. It is safe while neither `export.pdf`
+    nor `export.worksheets` is published. It would bring back the PDF button
+    for admins and the Study save bug.
+  - Once the owner publishes either feature, never roll back below `224bb65`
+    (ADR-0014).
 
 ## Create a Grid's A4 PDF (Learn M2) on staging, `d261013` (2026-11-18, 18:45–18:56Z)
 
