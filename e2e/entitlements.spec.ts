@@ -421,6 +421,11 @@ test('exports: refused by the server when the plan lacks them or it cannot answe
   await expect(preview).toHaveCount(0);
   await refused.getByRole('button', { name: 'Close', exact: true }).click();
   await expectOpen(page, TOOLS.grid);
+  // The blank grid (M1) is a saved image too: refused the same way, nothing saved.
+  await page.getByRole('button', { name: 'Save blank grid' }).first().click();
+  await expect(refused).toContainText('Saved images are not part of your plan right now, so nothing was saved.');
+  await expect(preview).toHaveCount(0);
+  await refused.getByRole('button', { name: 'Close', exact: true }).click();
   expect(await authorize(page, { tool: 'tool.grid', features: ['export.image'] })).toEqual({ status: 403, refused: ['export.image'] });
 
   // GIFs: never from a tool the plan lacks; with Compare and GIFs in Free, still not the Pro options.

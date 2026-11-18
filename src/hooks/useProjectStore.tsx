@@ -3,7 +3,7 @@ import {
   type Point, type MeasurementLine, type CalibrationLine, type Layer,
   type ValueSettings, type InteractionMode, type ViewId, type ProjectData,
   type SampledColor, type GridSettings,
-  DEFAULT_LAYERS, DEFAULT_VALUE_SETTINGS, DEFAULT_GRID_SETTINGS, LAYER_COLORS, genId,
+  DEFAULT_LAYERS, DEFAULT_VALUE_SETTINGS, DEFAULT_GRID_SETTINGS, LAYER_COLORS, genId, normalizeGridSettings,
 } from '@/types/project';
 
 /** Where the shared project (Measure, Study, Grid) is kept in this browser. */
@@ -91,7 +91,8 @@ function loadFromStorage(): Partial<StoreState> {
       activeLayerId: data.activeLayerId || 'general',
       valueSettings: data.valueSettings || DEFAULT_VALUE_SETTINGS,
       sampledColors: data.sampledColors || [],
-      gridSettings: data.gridSettings || { ...DEFAULT_GRID_SETTINGS },
+      // A grid saved before M1 lacks rotation and square cells: they get their defaults, nothing else changes.
+      gridSettings: normalizeGridSettings(data.gridSettings),
       gridImage: data.gridImage ?? null,
       gridImageInitialized: data.gridImageInitialized ?? false,
     };
@@ -162,7 +163,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [sampledColors, setSampledColors] = useState<SampledColor[]>(saved.current.sampledColors || []);
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
-  const [gridSettings, setGridSettingsRaw] = useState<GridSettings>(saved.current.gridSettings || { ...DEFAULT_GRID_SETTINGS });
+  const [gridSettings, setGridSettingsRaw] = useState<GridSettings>(normalizeGridSettings(saved.current.gridSettings));
   const [gridImage, setGridImageRaw] = useState<string | null>(saved.current.gridImage ?? null);
   const [gridImageInitialized, setGridImageInitialized] = useState<boolean>(saved.current.gridImageInitialized ?? false);
   const [isImageLoading, setIsImageLoading] = useState(false);

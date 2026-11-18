@@ -93,6 +93,11 @@ export type NavViewId = 'home' | TabId;
 // Everything the app can show: those, plus the account and plans pages.
 export type ViewId = NavViewId | 'profile' | 'plans';
 
+/** Quarter turns of the image on the grid, clockwise; the image itself is never changed. */
+export type GridRotation = 0 | 90 | 180 | 270;
+/** Columns × rows dividing the canvas evenly, or square cells of a size in the canvas unit. */
+export type GridCellMode = 'divisions' | 'square';
+
 export interface GridSettings {
   canvasWidth: number;
   canvasHeight: number;
@@ -105,6 +110,12 @@ export interface GridSettings {
   imageOffsetX: number;
   imageOffsetY: number;
   imageScale: number;
+  // Since M1 (2026-11): optional in saved projects, read with the defaults
+  // below (normalizeGridSettings), so a grid saved before opens exactly as it was.
+  rotation: GridRotation;
+  cellMode: GridCellMode;
+  /** Side of a square cell, in `unit` (square cells only). */
+  cellSize: number;
 }
 
 export const DEFAULT_GRID_SETTINGS: GridSettings = {
@@ -119,7 +130,26 @@ export const DEFAULT_GRID_SETTINGS: GridSettings = {
   imageOffsetX: 0,
   imageOffsetY: 0,
   imageScale: 1,
+  rotation: 0,
+  cellMode: 'divisions',
+  cellSize: 3,
 };
+
+/**
+ * Grid settings as saved, made complete: only the settings added since M1 get
+ * their defaults (or replace an unusable value); everything a grid saved
+ * earlier holds is kept exactly as it is, so it draws and exports as before.
+ */
+export function normalizeGridSettings(saved: unknown): GridSettings {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return { ...DEFAULT_GRID_SETTINGS };
+  const s = saved as Partial<GridSettings>;
+  return {
+    ...(s as GridSettings),
+    rotation: s.rotation === 90 || s.rotation === 180 || s.rotation === 270 ? s.rotation : 0,
+    cellMode: s.cellMode === 'square' ? 'square' : 'divisions',
+    cellSize: typeof s.cellSize === 'number' && Number.isFinite(s.cellSize) && s.cellSize > 0 ? s.cellSize : DEFAULT_GRID_SETTINGS.cellSize,
+  };
+}
 
 export interface ProjectData {
   image: string | null;

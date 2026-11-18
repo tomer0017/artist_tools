@@ -558,11 +558,27 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   - Plus a "Painter Cheat Sheet" shown under each sub-tab.
 
 ### Grid tool
-- **GridTab** (`grid/GridTab.tsx`) — Renders a canvas of configurable
-  proportions with an overlaid grid. The image can be dragged, pinch/wheel
-  scaled, and fit/fill/centered. `GridControls` (a sub-component) sets canvas
-  size + unit, quick aspect-ratio presets, grid columns/rows, line
-  color/opacity/thickness, and image scale. Exports a high-resolution PNG.
+- **GridTab** (`grid/GridTab.tsx`) — a canvas of configurable proportions
+  with a grid laid over the image.
+  - **Moving the image:** drag, pinch or wheel to zoom; Fit, Fill or Center;
+    turned left or right 90° or by 180°. Only the drawing turns; the stored
+    photo never changes.
+  - **Grid:** presets 3×3, 4×4 and 8×8, or **square cells** of a set size in
+    the canvas unit (squares on paper, a partial cell at the right and bottom
+    edges).
+  - **`GridControls`** sets:
+    - the canvas size and unit, and quick ratios, including exact **A4**
+      portrait and landscape (21 × 29.7 cm);
+    - columns × rows, or the cell size;
+    - the lines' colour, opacity and thickness;
+    - exact zoom: −/+ 1 %, a slider from 25 % to 800 %, or typed;
+    - moves by 0.1 of the unit.
+  - **Saves** (since M1): the grid image (2400 px wide PNG), and a **blank
+    grid** (the same lines in black on white, without the photo, for paper).
+    Both go through the authorized save (`tool.grid` and `export.image`,
+    failing closed).
+  - **Settings** live in the saved project; a grid saved before M1 gets the
+    new settings' defaults (`normalizeGridSettings`) and opens unchanged.
 
 ### UI primitives
 - **`components/ui/*`** — Standard shadcn/ui wrappers over Radix primitives
@@ -768,10 +784,18 @@ older `sketchDetail` / `sketchShading`) are still accepted and kept untouched;
 such a project opens in Sketch as Clean Outline at the defaults.
 
 ### Grid & Measure geometry
-- **Grid** math (`GridTab`) computes a fit scale so the image fills the chosen
-  canvas ratio, then layers offset/scale transforms for drag/pinch/wheel, and
-  draws evenly-spaced column/row lines plus a border, mirrored between the live
-  preview and the 2400px export.
+- **Grid geometry.** `src/lib/grid/geometry.ts` holds the geometry; it is
+  pure, and since M1 it is shared by the preview, the saved image and the
+  blank grid.
+  - It computes a fit scale for the image, as turned, then the offset and
+    scale for drag, pinch and wheel.
+  - It places the lines: columns × rows evenly, or square cells from the
+    top-left corner.
+- **Grid drawing.** `src/lib/grid/draw.ts` draws them, with the canvas calls
+  Create a Grid has always made: the background, the clipped image, the lines,
+  then a stronger border.
+- **Proof that nothing changed:** `draw.test.ts` replays the code from before
+  M1 and requires exactly the same canvas calls for 90 grids saved before.
 - **Measure** uses `distanceBetween`, `angleBetween`, and `midpoint` from
   `types/project.ts`. Real-world length is computed by the shared
   `realWorldLength(line, calibration)` helper: it scales pixel distance by

@@ -3,13 +3,26 @@ import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
-import { Download, RefreshCw } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Download, Minus, Plus, RefreshCw, RotateCcw, RotateCw } from 'lucide-react';
 import ToolHeader from '@/components/shell/ToolHeader';
 import ToolEmptyState from '@/components/shell/ToolEmptyState';
 import type { GridSettings } from '@/types/project';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { canvasToBlob } from '@/lib/saveMedia';
+import { A4_CM, cellCounts, exportSize, fillImageScale, previewSize, turn } from '@/lib/grid/geometry';
+import { drawExport, drawPreview, exportFilename, fillBackground, type LoadedImage } from '@/lib/grid/draw';
 import type { gridEn } from '@/i18n/messages/tools/grid';
+
+/** How far the image can be zoomed (by pinch, wheel, slider, buttons or typing), relative to fitting it. */
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 8;
+const clampZoom = (scale: number) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, scale));
+/** Exact steps: the zoom buttons change it by 1 %, the move buttons by 0.1 of the canvas unit (1 mm in cm). */
+const ZOOM_STEP = 0.01;
+const NUDGE_STEP = 0.1;
+/** Square cells: the smallest side (in the canvas unit), and the step of the − and + buttons. */
+const cellLimits = (unit: GridSettings['unit']) => (unit === 'cm' ? { min: 0.5, step: 0.5 } : { min: 0.2, step: 0.25 });
+const round = (value: number, places: number) => Math.round(value * 10 ** places) / 10 ** places;
 
 // Numbers go into messages as the strings they always were (no locale
 // formatting), so the English text stays exactly as before.
@@ -40,16 +53,10 @@ export default function GridTab() {
   const pinchRef = useRef<{ initDist: number; initScale: number } | null>(null);
 
   const gs = gridSettings;
-  const aspect = gs.canvasWidth / gs.canvasHeight;
 
   const update = useCallback((partial: Partial<GridSettings>) => {
     setGridSettings(partial);
   }, [setGridSettings]);
-
-  const getFitScale = useCallback((imageWidth: number, imageHeight: number) => {
-    if (!imageWidth || !imageHeight) return 1;
-    return Math.min(gs.canvasWidth / imageWidth, gs.canvasHeight / imageHeight);
-  }, [gs.canvasWidth, gs.canvasHeight]);
 
   const fitImage = useCallback(() => {
     update({ imageScale: 1, imageOffsetX: 0, imageOffsetY: 0 });
@@ -57,40 +64,33 @@ export default function GridTab() {
 
   const fillCanvas = useCallback(() => {
     if (!imageNaturalSize) return;
-    const fitScale = getFitScale(imageNaturalSize.w, imageNaturalSize.h);
-    const fillScale = Math.max(gs.canvasWidth / imageNaturalSize.w, gs.canvasHeight / imageNaturalSize.h);
     update({
-      imageScale: fillScale / fitScale,
+      imageScale: fillImageScale(gs, imageNaturalSize.w, imageNaturalSize.h),
       imageOffsetX: 0,
       imageOffsetY: 0,
     });
-  }, [getFitScale, gs.canvasHeight, gs.canvasWidth, imageNaturalSize, update]);
+  }, [gs, imageNaturalSize, update]);
 
   const resetImagePosition = useCallback(() => {
     update({ imageOffsetX: 0, imageOffsetY: 0 });
   }, [update]);
 
-  // Draw grid onto visible canvas
+  // The image turns on the grid; the image itself (the stored photo) never changes.
+  const rotate = useCallback((by: -90 | 90 | 180) => update({ rotation: turn(gs.rotation, by) }), [gs.rotation, update]);
+
+  // Draw grid onto visible canvas (src/lib/grid: the same calls as always for a grid without the newer settings)
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const maxW = container.clientWidth - 16;
-    const maxH = container.clientHeight - 16;
-    const scale = Math.min(maxW / gs.canvasWidth, maxH / gs.canvasHeight);
-    const w = Math.round(gs.canvasWidth * scale);
-    const h = Math.round(gs.canvasHeight * scale);
-
-    canvas.width = w;
-    canvas.height = h;
+    const size = previewSize(gs, container.clientWidth - 16, container.clientHeight - 16);
+    canvas.width = size.w;
+    canvas.height = size.h;
     const ctx = canvas.getContext('2d')!;
 
-    // Background
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(0, 0, w, h);
-
-    // Draw image if present
+    // Background at once; the image and the grid when the image has loaded.
+    fillBackground(ctx, size.w, size.h);
     if (activeImage) {
       const img = new Image();
       img.onerror = (e) => {
@@ -98,62 +98,16 @@ export default function GridTab() {
       };
       img.onload = () => {
         try {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, w, h);
-          ctx.clip();
-
-          const baseScale = getFitScale(img.naturalWidth, img.naturalHeight);
-          const imgW = img.naturalWidth * baseScale * gs.imageScale * scale;
-          const imgH = img.naturalHeight * baseScale * gs.imageScale * scale;
-          const ox = gs.imageOffsetX * scale;
-          const oy = gs.imageOffsetY * scale;
-
-          // Center image then apply offset
-          const cx = (w - imgW) / 2 + ox;
-          const cy = (h - imgH) / 2 + oy;
-          ctx.drawImage(img, cx, cy, imgW, imgH);
-          ctx.restore();
-
-          drawGrid(ctx, w, h);
+          drawPreview(ctx, gs, { source: img, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight }, size);
         } catch (error) {
           console.error('[GridTab] Failed to draw grid preview canvas:', error);
         }
       };
       img.src = activeImage;
     } else {
-      drawGrid(ctx, w, h);
+      drawPreview(ctx, gs, null, size);
     }
-  }, [activeImage, getFitScale, gs]);
-
-  const drawGrid = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    ctx.strokeStyle = gs.lineColor;
-    ctx.globalAlpha = gs.lineOpacity;
-    ctx.lineWidth = gs.lineWidth;
-
-    // Columns
-    for (let i = 1; i < gs.columns; i++) {
-      const x = Math.round((i / gs.columns) * w);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    }
-
-    // Rows
-    for (let i = 1; i < gs.rows; i++) {
-      const y = Math.round((i / gs.rows) * h);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-
-    // Border
-    ctx.globalAlpha = Math.min(1, gs.lineOpacity + 0.3);
-    ctx.strokeRect(0, 0, w, h);
-    ctx.globalAlpha = 1;
-  }, [gs]);
+  }, [activeImage, gs]);
 
   useEffect(() => {
     draw();
@@ -236,7 +190,7 @@ export default function GridTab() {
         e.touches[1].clientY - e.touches[0].clientY,
       );
       const ratio = d / pinchRef.current.initDist;
-      update({ imageScale: Math.max(0.25, Math.min(8, pinchRef.current.initScale * ratio)) });
+      update({ imageScale: clampZoom(pinchRef.current.initScale * ratio) });
     }
   }, [update]);
 
@@ -249,90 +203,45 @@ export default function GridTab() {
     if (!activeImage) return;
     e.preventDefault();
     const factor = e.deltaY > 0 ? 0.95 : 1.05;
-    update({ imageScale: Math.max(0.25, Math.min(8, gs.imageScale * factor)) });
+    update({ imageScale: clampZoom(gs.imageScale * factor) });
   }, [activeImage, gs.imageScale, update]);
 
-  // Export
-  const handleExport = useCallback(() => {
-    const exportW = 2400;
-    const exportH = Math.round(exportW / aspect);
+  // Export: the grid with the image, or the same grid blank on white (for paper).
+  // Every save is authorized by the server first (SaveMedia: Create a Grid and saving images).
+  const exportGrid = useCallback((blank: boolean) => {
+    const { w, h } = exportSize(gs);
     const canvas = document.createElement('canvas');
-    canvas.width = exportW;
-    canvas.height = exportH;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d')!;
 
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(0, 0, exportW, exportH);
-
-    const doExport = () => {
+    const doExport = (loaded: LoadedImage | null) => {
       try {
-        drawGridOnCtx(ctx, exportW, exportH);
-        const filename = `grid-${gs.columns}x${gs.rows}-${gs.canvasWidth}x${gs.canvasHeight}${gs.unit}.png`;
+        drawExport(ctx, gs, loaded, { blank });
+        const filename = exportFilename(gs, blank);
         canvasToBlob(canvas, 'image/png')
-          .then((blob) => save({ blob, filename, mime: 'image/png', title: t('saveTitle'), tool: 'grid' }))
+          .then((blob) => save({ blob, filename, mime: 'image/png', title: t(blank ? 'saveBlankTitle' : 'saveTitle'), tool: 'grid' }))
           .catch((error) => console.error('[GridTab] Failed to export grid PNG:', error));
       } catch (error) {
         console.error('[GridTab] Failed to export grid PNG:', error);
       }
     };
 
-    if (activeImage) {
+    if (activeImage && !blank) {
       const img = new Image();
       img.onerror = (e) => {
         console.error('[GridTab] Failed to load image for grid PNG export:', e);
       };
-      img.onload = () => {
-        try {
-          const baseScale = getFitScale(img.naturalWidth, img.naturalHeight);
-          const unitScale = exportW / gs.canvasWidth;
-          const imgW = img.naturalWidth * baseScale * gs.imageScale * unitScale;
-          const imgH = img.naturalHeight * baseScale * gs.imageScale * unitScale;
-          const ox = gs.imageOffsetX * (exportW / gs.canvasWidth);
-          const oy = gs.imageOffsetY * (exportW / gs.canvasWidth);
-          const cx = (exportW - imgW) / 2 + ox;
-          const cy = (exportH - imgH) / 2 + oy;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, exportW, exportH);
-          ctx.clip();
-          ctx.drawImage(img, cx, cy, imgW, imgH);
-          ctx.restore();
-        } catch (error) {
-          console.error('[GridTab] Failed to draw image onto grid export canvas:', error);
-        }
-        doExport();
-      };
+      img.onload = () => doExport({ source: img, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight });
       img.src = activeImage;
     } else {
-      doExport();
+      doExport(null);
     }
-  }, [activeImage, aspect, getFitScale, gs, save, t]);
+  }, [activeImage, gs, save, t]);
+  const handleExport = useCallback(() => exportGrid(false), [exportGrid]);
+  const handleExportBlank = useCallback(() => exportGrid(true), [exportGrid]);
 
-  const drawGridOnCtx = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    ctx.strokeStyle = gs.lineColor;
-    ctx.globalAlpha = gs.lineOpacity;
-    ctx.lineWidth = Math.max(1, gs.lineWidth * (w / 600));
-
-    for (let i = 1; i < gs.columns; i++) {
-      const x = Math.round((i / gs.columns) * w);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    }
-    for (let i = 1; i < gs.rows; i++) {
-      const y = Math.round((i / gs.rows) * h);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = Math.min(1, gs.lineOpacity + 0.3);
-    ctx.strokeRect(0, 0, w, h);
-    ctx.globalAlpha = 1;
-  }, [gs]);
-
-  const GRID_COLORS = ['#ffffff', '#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6'];
+  const GRID_COLORS = GRID_LINE_COLORS.map((c) => c.value);
 
   const fitButtons = activeImage && (
     <SegmentedRow
@@ -341,6 +250,17 @@ export default function GridTab() {
         { label: t('fit.fit'), onClick: fitImage },
         { label: t('fit.fill'), onClick: fillCanvas },
         { label: t('fit.center'), onClick: resetImagePosition },
+      ]}
+    />
+  );
+
+  const rotateButtons = activeImage && (
+    <SegmentedRow
+      label={t('rotate.label')}
+      options={[
+        { label: t('rotate.left'), content: <><RotateCcw className="h-4 w-4" aria-hidden="true" /> 90°</>, onClick: () => rotate(-90) },
+        { label: t('rotate.half'), content: '180°', onClick: () => rotate(180) },
+        { label: t('rotate.right'), content: <><RotateCw className="h-4 w-4" aria-hidden="true" /> 90°</>, onClick: () => rotate(90) },
       ]}
     />
   );
@@ -354,19 +274,24 @@ export default function GridTab() {
     />
   );
 
+  const counts = cellCounts(gs);
   const sizes = {
     columns: `${gs.columns}`,
     rows: `${gs.rows}`,
     width: `${gs.canvasWidth}`,
     height: `${gs.canvasHeight}`,
     unit: gs.unit,
+    size: `${gs.cellSize}`,
+    across: `${counts.across}`,
+    down: `${counts.down}`,
   };
+  const squares = gs.cellMode === 'square';
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
       <ToolHeader
         tool="grid"
-        task={activeImage ? t('task.withImage', sizes) : t('task.empty')}
+        task={activeImage ? (squares ? t('task.withSquares', sizes) : t('task.withImage', sizes)) : t('task.empty')}
         actions={activeImage ? replaceButton : undefined}
       />
       {/* No image yet: explain the method instead of showing an empty grid.
@@ -409,20 +334,32 @@ export default function GridTab() {
               <SegmentedTabs<'preset' | 'customize'> value={panel} onChange={setPanel}
                 options={[{ value: 'preset', label: t('panel.preset') }, { value: 'customize', label: t('panel.customize') }]} />
               {panel === 'preset' ? (
-                <GridPresets gs={gs} update={update} />
+                <>
+                  <GridPresets gs={gs} update={update} />
+                  {squares && <CellSizeField gs={gs} update={update} />}
+                </>
               ) : (
                 <div className="max-h-[36vh] overflow-y-auto space-y-3 pe-1">
                   <GridControls gs={gs} update={update} activeImage={activeImage} colors={GRID_COLORS} />
                 </div>
               )}
               {fitButtons}
-              <button
-                onClick={handleExport}
-                data-onboarding="grid-export"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground active:opacity-90"
-              >
-                <Download className="h-5 w-5" /> {t('saveImage')}
-              </button>
+              {rotateButtons}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExport}
+                  data-onboarding="grid-export"
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground active:opacity-90"
+                >
+                  <Download className="h-5 w-5" /> {t('saveImage')}
+                </button>
+                <button
+                  onClick={handleExportBlank}
+                  className="flex h-12 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary/40 px-3 text-sm font-semibold text-foreground active:bg-secondary"
+                >
+                  {t('saveBlank')}
+                </button>
+              </div>
             </div>
           )}
         </>
@@ -433,8 +370,10 @@ export default function GridTab() {
             <div>
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1.5">{t('sidebar.grid')}</p>
               <GridPresets gs={gs} update={update} />
+              {squares && <div className="mt-2"><CellSizeField gs={gs} update={update} /></div>}
             </div>
             {fitButtons}
+            {rotateButtons}
             <details className="group">
               <summary className="flex min-h-[40px] cursor-pointer list-none items-center justify-between text-sm font-medium text-foreground">
                 {t('sidebar.customize')}
@@ -476,17 +415,26 @@ export default function GridTab() {
         <div className="flex items-center justify-between px-3 py-2 toolbar-surface border-t border-border shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-muted-foreground">
-              {t('summary', sizes)}
+              {squares ? t('summarySquares', sizes) : t('summary', sizes)}
             </span>
           </div>
-          <button
-            onClick={handleExport}
-            data-onboarding="grid-export"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:opacity-90 active:scale-95 transition-transform"
-          >
-            <Download className="w-4 h-4" />
-            {t('saveImage')}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* No border: the bar keeps its height, so the grid on screen keeps its size. */}
+            <button
+              onClick={handleExportBlank}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 active:scale-95 transition-transform"
+            >
+              {t('saveBlank')}
+            </button>
+            <button
+              onClick={handleExport}
+              data-onboarding="grid-export"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-lg hover:opacity-90 active:scale-95 transition-transform"
+            >
+              <Download className="w-4 h-4" />
+              {t('saveImage')}
+            </button>
+          </div>
         </div>
       )}
 
@@ -494,6 +442,16 @@ export default function GridTab() {
     </div>
   );
 }
+
+/** The line colours, each with the name screen readers say (gridTool.controls.colors). */
+const GRID_LINE_COLORS: { value: string; name: keyof typeof gridEn.controls.colors }[] = [
+  { value: '#ffffff', name: 'white' },
+  { value: '#f59e0b', name: 'amber' },
+  { value: '#ef4444', name: 'red' },
+  { value: '#3b82f6', name: 'blue' },
+  { value: '#10b981', name: 'green' },
+  { value: '#8b5cf6', name: 'violet' },
+];
 
 // ─── Presets ──────────────────────────────────────────
 // Each note is a message key (gridTool.presets.notes).
@@ -505,17 +463,20 @@ const GRID_PRESETS: { n: number; note: keyof typeof gridEn.presets.notes }[] = [
 
 function GridPresets({ gs, update }: { gs: GridSettings; update: (p: Partial<GridSettings>) => void }) {
   const t = useTranslations('gridTool.presets');
+  const squares = gs.cellMode === 'square';
+  const option = (active: boolean) =>
+    `flex flex-col items-center gap-1 rounded-xl border py-2 transition-colors ${
+      active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
+    }`;
   return (
-    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('label')}>
+    <div className="grid grid-cols-4 gap-2 md:grid-cols-2" role="radiogroup" aria-label={t('label')}>
       {GRID_PRESETS.map(({ n, note: noteKey }) => {
-        const active = gs.columns === n && gs.rows === n;
+        const active = !squares && gs.columns === n && gs.rows === n;
         const note = t(`notes.${noteKey}`);
         return (
           <button key={n} role="radio" aria-checked={active} aria-label={t('option', { n: `${n}`, note })}
-            onClick={() => update({ columns: n, rows: n })}
-            className={`flex flex-col items-center gap-1 rounded-xl border py-2 transition-colors ${
-              active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
-            }`}>
+            onClick={() => update({ columns: n, rows: n, cellMode: 'divisions' })}
+            className={option(active)}>
             <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
               <rect x="2" y="2" width="20" height="20" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
               {Array.from({ length: n - 1 }, (_, i) => {
@@ -528,6 +489,17 @@ function GridPresets({ gs, update }: { gs: GridSettings; update: (p: Partial<Gri
           </button>
         );
       })}
+      {/* Square cells: physically square, of a size in the canvas unit (partial ones at the right and bottom edges). */}
+      <button role="radio" aria-checked={squares} aria-label={t('squaresOption', { size: `${gs.cellSize}`, unit: gs.unit })}
+        onClick={() => update({ cellMode: 'square' })}
+        className={option(squares)}>
+        <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M8 2V22M14 2V22M20 2V22M2 8H22M2 14H22M2 20H22" stroke="currentColor" strokeWidth="1" />
+        </svg>
+        <span className="text-sm font-semibold leading-none" dir="ltr">{gs.cellSize} {gs.unit}</span>
+        <span className={`text-[10px] leading-none ${squares ? 'text-primary' : 'text-muted-foreground'}`}>{t('squares')}</span>
+      </button>
     </div>
   );
 }
@@ -547,19 +519,89 @@ function SegmentedTabs<T extends string>({ value, onChange, options }: {
   );
 }
 
-// One-shot actions laid out like a segmented control (Fit / Fill / Center).
-function SegmentedRow({ label, options }: { label: string; options: { label: string; onClick: () => void }[] }) {
+// One-shot actions laid out like a segmented control (Fit / Fill / Center, the rotations).
+// `content` replaces the visible text (an icon); `label` stays the accessible name.
+function SegmentedRow({ label, options }: { label: string; options: { label: string; content?: React.ReactNode; onClick: () => void }[] }) {
   return (
     <div className="flex items-center gap-2">
       <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
       <div className="flex flex-1 gap-1.5">
         {options.map(o => (
-          <button key={o.label} onClick={o.onClick}
-            className="min-h-[40px] flex-1 rounded-lg border border-border bg-secondary/40 text-sm font-medium text-foreground active:bg-secondary hover:bg-secondary">
-            {o.label}
+          <button key={o.label} onClick={o.onClick} aria-label={o.content ? o.label : undefined} title={o.content ? o.label : undefined}
+            className="flex min-h-[40px] flex-1 items-center justify-center gap-1 rounded-lg border border-border bg-secondary/40 text-sm font-medium text-foreground active:bg-secondary hover:bg-secondary">
+            {o.content ?? o.label}
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A number typed freely and applied on Enter or leaving the field (so typing
+ * "150" never passes through 1 %), within `min`–`max`.
+ */
+function NumberField({ value, min, max, step, onCommit, label, className }: {
+  value: number; min: number; max: number; step: number; onCommit: (v: number) => void; label: string; className?: string;
+}) {
+  const [text, setText] = useState(`${value}`);
+  useEffect(() => setText(`${value}`), [value]);
+  const commit = () => {
+    const v = Number(text.replace(',', '.'));
+    if (text.trim() === '' || !Number.isFinite(v)) {
+      setText(`${value}`);
+      return;
+    }
+    const clamped = Math.max(min, Math.min(max, v));
+    if (clamped === value) setText(`${value}`);
+    onCommit(clamped);
+  };
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      dir="ltr"
+      min={min}
+      max={max}
+      step={step}
+      value={text}
+      aria-label={label}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+      }}
+      className={`rounded border border-border bg-secondary px-2 py-1.5 text-base text-foreground focus:outline-none focus:ring-1 focus:ring-primary md:text-sm ${className ?? ''}`}
+    />
+  );
+}
+
+const iconButton = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-secondary/40 text-foreground hover:bg-secondary active:bg-secondary';
+
+// ─── Square cells: the side, typed or by steps ─────────
+function CellSizeField({ gs, update }: { gs: GridSettings; update: (p: Partial<GridSettings>) => void }) {
+  const t = useTranslations('gridTool.controls');
+  const { min, step } = cellLimits(gs.unit);
+  const max = Math.max(gs.canvasWidth, gs.canvasHeight);
+  const set = (v: number) => update({ cellSize: round(Math.max(min, Math.min(max, v)), 2) });
+  const counts = cellCounts(gs);
+  return (
+    <div>
+      <div className="flex items-center gap-2" dir="ltr">
+        <span className="me-auto text-xs font-medium text-muted-foreground" dir="auto">{t('cellSize')}</span>
+        <button type="button" onClick={() => set(gs.cellSize - step)} aria-label={t('cellSmaller')} className={iconButton}>
+          <Minus className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <NumberField value={gs.cellSize} min={min} max={max} step={0.1} onCommit={set} label={t('cellSizeValue', { unit: gs.unit })} className="w-16 text-center" />
+        <span className="text-xs text-muted-foreground">{gs.unit}</span>
+        <button type="button" onClick={() => set(gs.cellSize + step)} aria-label={t('cellLarger')} className={iconButton}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {t('cellCount', { across: `${counts.across}`, down: `${counts.down}` })}
+        {counts.partial ? ` ${t('cellPartial')}` : ''}
+      </p>
     </div>
   );
 }
@@ -577,6 +619,11 @@ function GridControls({
   colors: string[];
 }) {
   const t = useTranslations('gridTool.controls');
+  const squares = gs.cellMode === 'square';
+  const nudgeStep = `${NUDGE_STEP} ${gs.unit}`;
+  const nudge = (dx: number, dy: number) =>
+    update({ imageOffsetX: round(gs.imageOffsetX + dx * NUDGE_STEP, 6), imageOffsetY: round(gs.imageOffsetY + dy * NUDGE_STEP, 6) });
+  const zoomPercent = Math.round(gs.imageScale * 100);
   // Number fields and sliders stay left to right in every language.
   return (
     <>
@@ -592,6 +639,7 @@ function GridControls({
               inputMode="decimal"
               dir="ltr"
               value={gs.canvasWidth}
+              aria-label={t('width')}
               onChange={(e) => update({ canvasWidth: Math.max(1, Number(e.target.value)) })}
               className="w-full px-2 py-1.5 text-sm bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             />
@@ -604,6 +652,7 @@ function GridControls({
               inputMode="decimal"
               dir="ltr"
               value={gs.canvasHeight}
+              aria-label={t('height')}
               onChange={(e) => update({ canvasHeight: Math.max(1, Number(e.target.value)) })}
               className="w-full px-2 py-1.5 text-sm bg-secondary border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             />
@@ -611,6 +660,7 @@ function GridControls({
           </div>
           <select
             value={gs.unit}
+            aria-label={t('unit')}
             onChange={(e) => update({ unit: e.target.value as 'cm' | 'in' })}
             className="px-2 py-1.5 text-sm bg-secondary border border-border rounded text-foreground mt-[-14px]"
           >
@@ -620,7 +670,7 @@ function GridControls({
         </div>
       </div>
 
-      {/* Common presets */}
+      {/* Common presets: ratios, and A4 exactly (21 × 29.7 cm) */}
       <div>
         <label className="text-xs text-muted-foreground font-medium block mb-1.5">{t('quickRatios')}</label>
         <div className="flex flex-wrap gap-1.5">
@@ -643,40 +693,68 @@ function GridControls({
               {p.label}
             </button>
           ))}
+          {[
+            { label: t('a4Portrait'), w: A4_CM.short, h: A4_CM.long },
+            { label: t('a4Landscape'), w: A4_CM.long, h: A4_CM.short },
+          ].map(p => {
+            const active = gs.unit === 'cm' && gs.canvasWidth === p.w && gs.canvasHeight === p.h;
+            return (
+              <button
+                key={p.label}
+                aria-pressed={active}
+                onClick={() => update({ canvasWidth: p.w, canvasHeight: p.h, unit: 'cm' })}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Grid divisions */}
+      {/* Grid divisions, or square cells */}
       <div data-onboarding="grid-divisions">
         <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
           {t('divisions')}
         </label>
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <label className="text-[10px] text-muted-foreground">{t('columns', { count: `${gs.columns}` })}</label>
-            <input
-              type="range"
-              dir="ltr"
-              min={1}
-              max={16}
-              value={gs.columns}
-              onChange={(e) => update({ columns: Number(e.target.value) })}
-              className="w-full accent-primary"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="text-[10px] text-muted-foreground">{t('rows', { count: `${gs.rows}` })}</label>
-            <input
-              type="range"
-              dir="ltr"
-              min={1}
-              max={16}
-              value={gs.rows}
-              onChange={(e) => update({ rows: Number(e.target.value) })}
-              className="w-full accent-primary"
-            />
-          </div>
+        <div className="mb-2">
+          <SegmentedTabs<'divisions' | 'square'> value={gs.cellMode} onChange={(cellMode) => update({ cellMode })}
+            options={[{ value: 'divisions', label: t('modeDivisions') }, { value: 'square', label: t('modeSquares') }]} />
         </div>
+        {squares ? (
+          <CellSizeField gs={gs} update={update} />
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <label className="text-[10px] text-muted-foreground">{t('columns', { count: `${gs.columns}` })}</label>
+              <input
+                type="range"
+                dir="ltr"
+                min={1}
+                max={16}
+                value={gs.columns}
+                aria-label={t('columns', { count: `${gs.columns}` })}
+                onChange={(e) => update({ columns: Number(e.target.value) })}
+                className="w-full accent-primary"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-[10px] text-muted-foreground">{t('rows', { count: `${gs.rows}` })}</label>
+              <input
+                type="range"
+                dir="ltr"
+                min={1}
+                max={16}
+                value={gs.rows}
+                aria-label={t('rows', { count: `${gs.rows}` })}
+                onChange={(e) => update({ rows: Number(e.target.value) })}
+                className="w-full accent-primary"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Line appearance */}
@@ -688,6 +766,8 @@ function GridControls({
           {colors.map(c => (
             <button
               key={c}
+              aria-label={t(`colors.${GRID_LINE_COLORS.find((x) => x.value === c)?.name ?? 'white'}`)}
+              aria-pressed={gs.lineColor === c}
               onClick={() => update({ lineColor: c })}
               className={`w-6 h-6 rounded-sm border transition-all ${
                 gs.lineColor === c ? 'border-foreground scale-110' : 'border-transparent'
@@ -705,6 +785,7 @@ function GridControls({
               min={10}
               max={100}
               value={Math.round(gs.lineOpacity * 100)}
+              aria-label={t('opacity', { value: `${Math.round(gs.lineOpacity * 100)}` })}
               onChange={(e) => update({ lineOpacity: Number(e.target.value) / 100 })}
               className="w-full accent-primary"
             />
@@ -717,6 +798,7 @@ function GridControls({
               min={1}
               max={5}
               value={gs.lineWidth}
+              aria-label={t('thickness', { value: `${gs.lineWidth}` })}
               onChange={(e) => update({ lineWidth: Number(e.target.value) })}
               className="w-full accent-primary"
             />
@@ -724,23 +806,43 @@ function GridControls({
         </div>
       </div>
 
-      {/* Image scale */}
+      {/* Image scale: by steps of 1 %, by the slider, or typed; and moved by exact steps */}
       {activeImage && (
         <div>
           <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block mb-1.5">
             {t('imageScale')}
           </label>
-          {/* Slider and its readout, as one left-to-right control. */}
-          <div className="flex items-center gap-2" dir="ltr">
+          {/* Buttons, slider and value, as one left-to-right control. */}
+          <div className="flex items-center gap-1.5" dir="ltr">
+            <button type="button" onClick={() => update({ imageScale: clampZoom(round(gs.imageScale - ZOOM_STEP, 4)) })} aria-label={t('zoomOut')} className={iconButton}>
+              <Minus className="h-4 w-4" aria-hidden="true" />
+            </button>
             <input
               type="range"
-              min={25}
-              max={500}
-              value={Math.round(gs.imageScale * 100)}
+              min={ZOOM_MIN * 100}
+              max={ZOOM_MAX * 100}
+              value={zoomPercent}
+              aria-label={t('imageScale')}
               onChange={(e) => update({ imageScale: Number(e.target.value) / 100 })}
-              className="flex-1 accent-primary"
+              className="min-w-0 flex-1 accent-primary"
             />
-            <span className="text-xs text-muted-foreground w-10 text-end">{Math.round(gs.imageScale * 100)}%</span>
+            <button type="button" onClick={() => update({ imageScale: clampZoom(round(gs.imageScale + ZOOM_STEP, 4)) })} aria-label={t('zoomIn')} className={iconButton}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="mt-1.5 flex items-center gap-1.5" dir="ltr">
+            <NumberField value={zoomPercent} min={ZOOM_MIN * 100} max={ZOOM_MAX * 100} step={1} onCommit={(v) => update({ imageScale: Math.round(v) / 100 })} label={t('zoomValue')} className="w-20 text-center" />
+            <span className="text-xs text-muted-foreground">%</span>
+          </div>
+          <div className="mt-3">
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t('move', { step: nudgeStep })}</p>
+            {/* Directions on screen: left to right whatever the language. */}
+            <div className="flex items-center gap-1.5" dir="ltr">
+              <button type="button" onClick={() => nudge(-1, 0)} aria-label={t('moveLeft', { step: nudgeStep })} className={iconButton}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" onClick={() => nudge(0, -1)} aria-label={t('moveUp', { step: nudgeStep })} className={iconButton}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" onClick={() => nudge(0, 1)} aria-label={t('moveDown', { step: nudgeStep })} className={iconButton}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" onClick={() => nudge(1, 0)} aria-label={t('moveRight', { step: nudgeStep })} className={iconButton}><ArrowRight className="h-4 w-4" aria-hidden="true" /></button>
+            </div>
           </div>
           <button
             onClick={() => update({ imageOffsetX: 0, imageOffsetY: 0 })}
