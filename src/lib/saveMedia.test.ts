@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  dataUrlToBlob,
   canShareFile,
   downloadBlob,
   extForMime,
@@ -102,5 +103,22 @@ describe('saveMedia — downloadBlob', () => {
     create.mockRestore();
     revoke.mockRestore();
     click.mockRestore();
+  });
+});
+
+describe('saveMedia — dataUrlToBlob', () => {
+  it('decodes in the page, without a fetch (the site’s CSP refuses connections to data: URLs)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const png = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 255]);
+    const b64 = btoa(String.fromCharCode(...png));
+    const blob = await dataUrlToBlob(`data:image/png;base64,${b64}`);
+    expect(blob.type).toBe('image/png');
+    expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual(Array.from(png));
+    const text = await dataUrlToBlob('data:text/plain;charset=utf-8,a%20b%2Cc');
+    expect(text.type).toBe('text/plain');
+    expect(new TextDecoder().decode(await text.arrayBuffer())).toBe('a b,c');
+    await expect(dataUrlToBlob('blob:http://x/1')).rejects.toThrow('Not a data URL');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });

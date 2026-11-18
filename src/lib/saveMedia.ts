@@ -132,8 +132,17 @@ export function downloadBlob(blob: Blob, filename: string): void {
 
 /** Convert a data URL to a Blob (browser). */
 export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const res = await fetch(dataUrl);
-  return res.blob();
+  // Decoded here in the page: fetch() of a data: URL is a connection, which the
+  // site's Content-Security-Policy (connect-src 'self') refuses, so saving the
+  // study, the palette and the study sheet silently did nothing.
+  const match = /^data:([^,]*?)(;base64)?,(.*)$/s.exec(dataUrl);
+  if (!match) throw new Error('Not a data URL');
+  const type = match[1].split(';')[0] || 'text/plain';
+  if (!match[2]) return new Blob([decodeURIComponent(match[3])], { type });
+  const binary = atob(match[3]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type });
 }
 
 /** Render a canvas to a Blob with the given type (falls back via dataURL). */
