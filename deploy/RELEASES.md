@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-18 18:47:37 | `d261013` | **Create a Grid's A4 PDF, Learn milestone M2** (approved by the owner). A two-page A4 PDF: the reference with its grid, then the same grid blank, for paper. Both pages have one frame, the same vector lines and a 50 mm bar; true size when the canvas fits, otherwise reduced and stated. jsPDF 4.2.1 is loaded only after the server authorizes a PDF (ADR-0015). New feature ID `export.pdf` ("Grid PDFs (A4)"), **in no plan: only admins can make PDFs until the owner publishes it**. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 18:47:32, `mongodb-20261118T184732Z`) |
 | 2026-11-18 17:24:48 | `6f2159a` | **Create a Grid improvements, Learn milestone M1** (approved by the owner; includes `f2f7b91`). Rotation left or right 90° or by 180°: only the drawing turns, never the stored photo. Exact A4 portrait and landscape. Square cells of a set size. **Save blank grid** (the same lines on white, for paper), through the same authorized save. Exact zoom and moves beside drag, pinch and wheel. The geometry is shared in `src/lib/grid`. Grids saved before M1 open and save byte for byte as before. No Learn screens, content, migrations or feature IDs. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 17:24:43, `mongodb-20261118T172443Z`) |
 | 2026-11-18 15:52:59 | `224bb65` | **Rolling back never resets or widens the published plans** (ADR-0014; approved by the owner as a separate security fix; includes `9c38661`). An older release keeps the feature IDs and sections a newer one published, and applies none of them. A setting it cannot apply withholds that feature (fail closed). An unreadable catalog leaves `plans` as it is, never the defaults. Admin → Plans says so and turns editing off. New read-only `npm run db -- catalog-status`. No feature ID added. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 15:52:54, `mongodb-20261118T155254Z`) |
 | 2026-11-18 12:49:17 | `be6890c` | The staging checks (`login-test`, `entitlement-test`) try a request again, up to five times, when it could not be made: the server's resolver sometimes takes 5–15 s for staging's own sslip.io name. App unchanged | 44 indexes ensured; no data changed | yes (release step, 12:49:12) |
@@ -45,6 +46,69 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Create a Grid's A4 PDF (Learn M2) on staging, `d261013` (2026-11-18, 18:45–18:56Z)
+
+Approved by the owner as M2 only (no Learn screens or content). Nothing was
+published, so the published plan settings are as they were. Production and
+GitHub Pages are untouched.
+
+- **Before:**
+  - CI run 35 (`d261013`) green: type check, lint, unit/integration, and
+    230 e2e tests (Chromium, WebKit iPhone emulation).
+  - Capture: catalog version 6 `f8a1a43e4cedbed7`, `plans`
+    `48f75a1f7925d6c5`, no draft. Staging ran `6f2159a`.
+- **The release:**
+  - the dump `mongodb-20261118T184732Z`;
+  - "0 plans updated", then "Catalog version 6: applied";
+  - healthy at 18:47:37.
+- **After, on real staging:**
+  - The capture is identical, at the start and again after the browser
+    checks: catalog (content and publication time), history, and `plans`
+    with their update times.
+  - `catalog-status` under `d261013`: "ok (everything known and applied)",
+    both plans in step, `export.pdf` in neither.
+  - Smoke 22/22 (expecting `d261013`), `login-test` 13/13.
+  - `entitlement-test` (read only) 11/11. It checks every export feature,
+    so the server refused `export.pdf` to Free and to Pro.
+- **M2 in real browsers** (temporary Free, Pro and Hebrew accounts; removed;
+  passwords only in a 0600 file, deleted): 5/5 passed.
+  - **As staging is (Free, Pro):** no PDF button; the plans page does not
+    list grid PDFs; the server refuses a grid PDF (403, `export.pdf`).
+  - **A studio that believes it may:** the account answer was altered in
+    the test browser only. The real server still refused the PDF (403), the
+    studio said why, and nothing was made.
+  - **Staging's own build making the PDF:** the server's yes was
+    **simulated in the test browser**; the real server would refuse.
+    Desktop Chrome in English and in Hebrew, and WebKit with iPhone 13
+    emulation. Each PDF was read back from the file:
+    - exact A4, two pages, printing without scaling asked;
+    - one frame (179 × 250.6 mm for 50 × 70 cm) and the same lines on both
+      pages, the photo on page 1 only;
+    - the bar exactly 50 mm, on the right in Hebrew.
+  - **Not verified on staging:** a PDF made with the server's real yes. That
+    needs an admin account (temporary testers cannot be admins) or a
+    publication, which needs the owner.
+- **Regressions on the same build:**
+  - The M1 checks: 8/8 passed.
+  - The plan-enforcement checks: 6/6 passed. The test that publishes was
+    skipped.
+- **Locally:**
+  - 436 unit/integration and 230 e2e tests at `d261013` (an earlier full
+    run, before the last Hebrew and dependency changes, passed 228/228).
+  - Every PDF the e2e tests make is read back from the file.
+  - The app's PDFs, rendered by PDFKit (the engine of Preview and Safari),
+    were looked at page by page.
+  - A test PDF opened from a blob URL under the site's CSP renders in
+    Chrome's viewer ("Open to print").
+  - A check in a real browser: jsPDF (133 KB gzipped) loads only once a PDF
+    is authorized; html2canvas, DOMPurify and canvg never load.
+- **Rollback:**
+  - `6f2159a` is still in releases/. It is safe while `export.pdf` stays
+    unpublished: the tolerant reader keeps an unknown ID without applying
+    it.
+  - Once the owner publishes a catalog with `export.pdf`, never roll back
+    below `224bb65` (ADR-0014).
 
 ## Create a Grid improvements (Learn M1) on staging, `6f2159a` (2026-11-18, 17:23–17:40Z)
 

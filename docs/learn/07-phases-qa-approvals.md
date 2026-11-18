@@ -47,9 +47,10 @@ implemented or tested yet: no Learn code exists.
 - **Value:** immediately useful to painters and teachers, with no new data.
 
 ### M2 — Print foundation and the Grid PDF
-- **Status:** approved 2026-11-18 and implemented (ADR-0015). Staging and
-  the owner's print check are reported with the release (deploy/RELEASES.md).
-  M3 waits for the owner's approval.
+- **Status:** approved 2026-11-18 and implemented (ADR-0015); on staging
+  since 2026-11-18 (`d261013`, deploy/RELEASES.md), with `export.pdf` in no
+  plan (admins only). Open: the owner's print check. M3 waits for the
+  owner's approval.
 - **Scope:**
   - the chosen PDF library, loaded on demand;
   - `src/lib/print` (A4 geometry, margins, scale bar);

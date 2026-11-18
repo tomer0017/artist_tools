@@ -242,6 +242,9 @@ unreadable catalog with the defaults: `plans` stays exactly as it is.
 - **Never roll back below that release** once a later release has published
   a new feature ID or catalog section. Releases before it reset every plan
   to the code defaults on such a catalog.
+  - The first new feature ID is `export.pdf` (grid PDFs, M2, ADR-0015). It
+    shipped unpublished. From the first published catalog that includes it,
+    the floor is `224bb65`.
 - **After any rollback, check the catalog** with the release now live (read
   only):
 
