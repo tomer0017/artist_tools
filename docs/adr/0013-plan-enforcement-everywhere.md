@@ -71,6 +71,12 @@ acted on it. Investigation found:
   sibling learned of it; a save attempted in between is refused by the server.
 - Every save now makes one small request first (no request per pointer move
   or canvas interaction). Saving needs the server to answer.
+- Operators can check all of this on a live environment
+  (`npm run db -- entitlement-test [--publish-check]`). A publication check
+  records the live version and content, and publishes its temporary version
+  and the restore only over the version it expects
+  (`publishIfUnchanged`): it never overwrites an admin's draft or
+  publication, and stops and says so instead.
 - **Limit:** the five tools process images on the person's own device, by
   design (images never leave it). The server decides and refuses everything
   it is asked, but cannot stop someone who rewrites the studio's code in

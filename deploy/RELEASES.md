@@ -12,6 +12,8 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-18 12:49:17 | `be6890c` | The staging checks (`login-test`, `entitlement-test`) try a request again, up to five times, when it could not be made: the server's resolver sometimes takes 5–15 s for staging's own sslip.io name. App unchanged | 44 indexes ensured; no data changed | yes (release step, 12:49:12) |
+| 2026-11-18 12:34:24 | `cc98437` | The publication check never overwrites an admin: it records the live version and content first, and publishes the temporary version and the restore only over the version it expects (`publishIfUnchanged`); scripts are type-checked in CI. App unchanged | 44 indexes ensured; no data changed | yes (release step, 12:34:18) |
 | 2026-11-18 11:57:07 | `3161d2c` | The operator check `entitlement-test` always removes its temporary accounts and retries requests that could not be made (the server failed for a moment to resolve its own sslip.io name, and one temporary account was left behind: removed with `remove-tester`). App unchanged since `cccced6` | 44 indexes ensured; no data changed | yes (release step, 11:57:01) |
 | 2026-11-18 11:33:59 | `cccced6` | **What a plan includes is enforced everywhere** (ADR-0013), after QA found a Free account using Measure & Plan although the published catalog (version 2) removed it from Free: a tool opens only if the plan includes it (locked screen otherwise, English and Hebrew, by every route), every save and export is authorized by the server first and fails closed, plan changes and publications reach open studios, plans pages follow the published catalog. Settings unchanged | 44 indexes ensured; no data changed (0 plans updated: the published version 2 was already in `plans`) | yes (release step, 11:33:54) and again before the publication check (`mongodb-20261118T113628Z`) |
 | 2026-11-18 02:14:25 | `887a41e` | Username accounts for invited testers (ADR-0012): a username and a password beside Google, for accounts only admins create (no sign-up, no email); in the admin dashboard, New tester account, Reset password, Reveal initial password (once), Sign out everywhere, search by username. **Settings changed after the release, 02:14:47Z:** `AUTH_USERNAME_PASSWORD=on` with `studio-set-username-login` (previous file in `/root/backups/username-login-20261118T021447Z/`); Google, `AUTH_SIGNUP_MODE=open`, `AUTH_EMAIL_PASSWORD=off` and `MAIL_TRANSPORT=disabled` unchanged. **Data added 02:16Z,** after a second dump: QA accounts `Tomerfree` (Free) and `Tomerpay` (Pro), role user, test accounts, initial passwords sealed for one reveal until 2026-11-21 02:16Z | 44 indexes ensured (new: unique partial `users.username`, TTL `password_handoffs.expiresAt`); no existing data changed | yes (release step, 02:14:19) and again before the accounts were created (`mongodb-20261118T021507Z`) |
@@ -41,6 +43,26 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Real-browser verification on staging, `be6890c` (2026-11-18, 12:49–12:57Z)
+
+Approved by the owner: real browsers against staging with temporary username
+accounts (`npm run db -- temp-testers create`: Free, Pro and Free in Hebrew;
+passwords only in a 0600 file on the operator's machine, never printed),
+removed afterwards. Run from `lab/qa/staging-qa.spec.ts` (Desktop Chrome;
+WebKit with iPhone 13 emulation); no traces, videos or automatic screenshots.
+
+- **Before:** CI runs 24 (`cc98437`) and 25 (`be6890c`) green; smoke 22/22; `login-test` 13/13; dump `mongodb-20261118T125151Z`; snapshot of the accounts and the catalog (live version 4 = the owner's version 2 content, no draft).
+- **Real staging, 7/7 browser tests passed:**
+  - Free: Measure & Plan and Compare & Correct locked through the navigation, the address bar and a reload (the tool's controls and file inputs are not in the page); the server refuses the tools and their exports (403); account and plans pages show the same; admin pages 404.
+  - Free: Study & Simplify (the Sketch drawing is drawn and saved as PNG), Color & Mixing and Create a Grid work, saving included.
+  - Pro: Measure & Plan (photo, saved image, project file download) and Compare & Correct (a Large Compare+Diff GIF made and saved) work.
+  - Saving fails closed: with the usage request failing (connection refused) or answering 503, nothing is saved and the message says so; "Try again" saves once the server answers.
+  - Hebrew: the locked screen in Hebrew, right to left.
+  - iPhone emulation: the locked screen fits (no sideways scroll), the bottom bar marks locked tools, Hebrew too, and Pro opens Measure & Plan.
+  - **Published entitlements changed for real** (`entitlement-test --publish-check`, 32/32 on the server): recorded version 4 (content `f8a1a43e4cedbed7`); published temporary version 5 over version 4 only (Create a Grid off for everyone; Free gains Measure & Plan, Compare & Correct and GIFs, loses saving images), live 12:52:56–12:53:43Z. In the browsers, without touching them: Free's and Pro's open Grid tabs locked 42–43 s after it, Free's locked Measure tab opened; saving an image from it was refused (nothing saved) while Pro still saved; Free could make a plain GIF but not the Large or Compare+Diff ones. Then version 4's content again as **version 6** (identical content, identical `plans` documents). Free's stale Compare tab: its GIF was refused by the server and the tool locked at once; Grid opened again in both tabs 56 s later, their photos still there.
+- **After:** the temporary accounts and their sessions removed (the sessions the browsers held answer 401); no temporary account left; no password in any log or result (725 files scanned); accounts unchanged (same fingerprints for the owner's admin account, the other Google account, `Tomerfree`, `Tomerpay`); `plans` documents identical; MongoDB on 127.0.0.1 only; no errors in the app's log.
+- **Not checked here:** the owner's own accounts (`Tomerfree`, `Tomerpay`: their passwords are the owner's), the admin dashboard with an admin session (only the owner's Google account is an admin; username accounts can never be), a real Google sign-in and a real iPhone. The admin dashboard is covered by the e2e tests (210/210 locally).
 
 ## Verification of `cccced6` and `3161d2c` (2026-11-18, 11:34–12:00Z)
 
@@ -214,4 +236,4 @@ every migration was additive).
 
 ## Awaiting deployment
 
-Nothing: `3161d2c` is live (plan enforcement, ADR-0013, since `cccced6`): Google, plus username sign-in for accounts admins create; the plan catalog's live version is 4 (version 2's content).
+Nothing: `be6890c` is live (plan enforcement, ADR-0013, since `cccced6`): Google, plus username sign-in for accounts admins create; the plan catalog's live version is 6, with exactly the owner's version 2 content (versions 3–6 are the two audited publication checks).
