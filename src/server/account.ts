@@ -44,6 +44,8 @@ export async function getAccountSummary(
       access: entitlements.access,
       subscription: { status: entitlements.subscriptionStatus ?? 'none' },
       features: entitlements.features,
+      offer: entitlements.offer,
+      asOf: now.toISOString(),
       introsSeen: (user.introsSeen ?? []).filter((tool): tool is ToolId => (TOOL_IDS as readonly string[]).includes(tool)),
       locale: isLocale(user.locale) ? user.locale : DEFAULT_LOCALE,
       currency: isCurrency(user.currency) ? user.currency : DEFAULT_CURRENCY,

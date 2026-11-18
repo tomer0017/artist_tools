@@ -1,8 +1,9 @@
 import Link from 'next/link';
+import { Lock } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import type { NavViewId } from '@/types/project';
-import { AccountButton } from './account';
+import { AccountButton, useToolAllowed } from './account';
 import { BrandMark } from './BrandMark';
 import { NAV_ORDER, navItem, pathForView } from './tools';
 
@@ -58,8 +59,17 @@ export function TopNav() {
 
 function NavItemLink({ id, active, variant }: { id: NavViewId; active: boolean; variant: 'bottom' | 'top' }) {
   const t = useTranslations();
+  const allowed = useToolAllowed();
   const Icon = navItem(id).icon;
   const label = id === 'home' ? t('studio.home') : t(`tools.${id}.navLabel`);
+  // A tool the plan does not include keeps its place, with a lock (it opens to say why).
+  const locked = id !== 'home' && !allowed(id);
+  const lockMark = locked ? (
+    <>
+      <Lock className="h-3 w-3 shrink-0 opacity-80" aria-hidden="true" />
+      <span className="sr-only"> ({t('studio.locked.badge')})</span>
+    </>
+  ) : null;
   if (variant === 'bottom') {
     return (
       <Link
@@ -69,10 +79,14 @@ function NavItemLink({ id, active, variant }: { id: NavViewId; active: boolean; 
           active ? 'text-primary' : 'text-muted-foreground active:text-foreground'
         }`}
       >
-        <span className={`flex h-7 w-11 items-center justify-center rounded-full transition-colors ${active ? 'bg-primary/15' : ''}`}>
+        <span className={`relative flex h-7 w-11 items-center justify-center rounded-full transition-colors ${active ? 'bg-primary/15' : ''}`}>
           <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.3 : 2} aria-hidden="true" />
+          {locked && <Lock className="absolute end-1 top-0 h-3 w-3" aria-hidden="true" />}
         </span>
-        <span className="leading-none">{label}</span>
+        <span className="leading-none">
+          {label}
+          {locked && <span className="sr-only"> ({t('studio.locked.badge')})</span>}
+        </span>
       </Link>
     );
   }
@@ -88,6 +102,7 @@ function NavItemLink({ id, active, variant }: { id: NavViewId; active: boolean; 
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{label}</span>
+      {lockMark}
     </Link>
   );
 }

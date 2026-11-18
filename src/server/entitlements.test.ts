@@ -6,7 +6,7 @@ import { FEATURES, collections, type PlanDoc, type PlanId, type SubscriptionDoc 
 import { migrate } from '@/server/db/migrate';
 import { recordUsage } from '@/server/usage';
 import { PLAN_FEATURES } from '@/lib/plans';
-import { authorizeFeatureUse, canUse, clearPlanCache, computeEntitlements, getEntitlements, remaining, subscriptionGrantsPlan, GRACE_DAYS } from './entitlements';
+import { authorizeFeatureUse, canUse, computeEntitlements, getEntitlements, remaining, subscriptionGrantsPlan, GRACE_DAYS } from './entitlements';
 import { getUsage } from '@/server/usage';
 
 const NOW = new Date('2026-11-09T12:00:00Z');
@@ -114,7 +114,6 @@ describe('getEntitlements (from the database only)', () => {
     mongo = await startTestMongo();
     await migrate(mongo.db);
   }, MONGO_STARTUP_TIMEOUT);
-  beforeEach(() => clearPlanCache());
   afterAll(async () => mongo?.stop());
 
   async function newUser(extra: Record<string, unknown> = {}) {
@@ -154,7 +153,6 @@ describe('getEntitlements (from the database only)', () => {
   it('counts real usage against limits', async () => {
     const userId = await newUser();
     await collections(mongo.db).plans.updateOne({ _id: 'free' }, { $set: { limits: { 'export.gif': 2 } } });
-    clearPlanCache();
     await recordUsage(mongo.db, userId, 'export.gif', 2);
     const e = await getEntitlements(mongo.db, userId);
     expect(canUse(e, 'export.gif')).toBe(false);

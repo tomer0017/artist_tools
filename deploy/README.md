@@ -75,6 +75,34 @@ a new one. `create-tester` does nothing to a username that exists.
 environment's own URL with a temporary account it removes afterwards, and
 `npm run db -- remove-tester <username>` deletes a username account.
 
+### Checking what each plan may use (ADR-0013)
+
+`npm run db -- entitlement-test` checks, over the environment's own URL, that
+a temporary Free account and a temporary Pro account get exactly what the
+published plan catalog gives them: every tool allowed or refused, every
+export, what the studio is told, and a plan change on the same session. The
+accounts are removed afterwards; nothing secret is printed. With
+`--publish-check` it also publishes a temporary catalog version (Create a
+Grid off for everyone, Measure & Plan added to Free), checks both accounts
+against it, and publishes the previous content again as a new version (both
+are audited and listed in Admin → Plans). It refuses to start while a
+catalog draft exists, because publishing would publish that draft.
+
+`--hold <seconds>` (at most 300) keeps the temporary version that long
+before restoring, so a studio left open in a browser can be watched following
+it.
+
+For a check in a real browser, `npm run db -- temp-testers create` makes
+temporary username accounts (Free, Pro, and Free in Hebrew) and writes their
+passwords to standard output, which must be a pipe or a file (it refuses a
+terminal):
+
+```sh
+ssh root@<server> 'cd /home/studio-staging/app/current && runuser -u studio-staging -- bash -c "set -a; . /etc/studio-companion/staging.env; set +a; npm run --silent db -- temp-testers create"' > temp-testers.json  # chmod 600; delete after
+```
+
+Remove them afterwards with `npm run db -- temp-testers remove`.
+
 ### Changing who may create an account
 
 Install the server side once (as root): `install -m 700 deploy/install-invites.sh /usr/local/sbin/studio-set-invites`.

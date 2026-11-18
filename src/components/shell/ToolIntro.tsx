@@ -4,7 +4,7 @@ import { HelpCircle, X } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import type { TabId } from '@/types/project';
-import { introSeenLocally, useAccount } from './account';
+import { introSeenLocally, useAccount, useToolAllowed } from './account';
 import { TOOLS, TOOL_ART, isTool } from './tools';
 
 // ─── First-visit tool introductions ───────────────────────────────────────────
@@ -101,19 +101,22 @@ export function ToolIntroHost() {
   const [showing, setShowing] = useState<TabId | null>(null);
   const seen = state?.account.introsSeen;
   const userId = state?.account.id;
+  const allowed = useToolAllowed();
+  // A locked tool shows why it is locked, not how to use it.
+  const current = isTool(activeTab) && allowed(activeTab) ? activeTab : null;
 
   useEffect(() => {
-    if (!isTool(activeTab) || !seen || !userId) return;
-    if (seen.includes(activeTab) || introSeenLocally(userId, activeTab)) return;
+    if (!current || !seen || !userId) return;
+    if (seen.includes(current) || introSeenLocally(userId, current)) return;
     // Let the tool's own screen appear first, then introduce it.
-    const timer = window.setTimeout(() => setShowing(activeTab), 300);
+    const timer = window.setTimeout(() => setShowing(current), 300);
     return () => window.clearTimeout(timer);
-  }, [activeTab, seen, userId]);
+  }, [current, seen, userId]);
 
-  // Leaving the tool (e.g. the Back gesture) closes its introduction without dismissing it.
+  // Leaving the tool (e.g. the Back gesture), or the tool locking, closes its introduction without dismissing it.
   useEffect(() => {
-    if (showing && showing !== activeTab) setShowing(null);
-  }, [activeTab, showing]);
+    if (showing && showing !== current) setShowing(null);
+  }, [current, showing]);
 
   if (!showing || !state) return null;
   return (

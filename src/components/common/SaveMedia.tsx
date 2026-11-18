@@ -1,8 +1,13 @@
 // Shared "Save to Photos" experience for every image/GIF export in the app.
 //
 // A single provider renders ONE preview/share sheet. Any surface calls
-// `useSaveMedia().save({ blob, filename })` after generating media and the sheet
-// shows the ACTUAL image/GIF plus the clearest save path for the platform:
+// `useSaveMedia().save({ blob, filename, tool })` after generating media.
+// Every save is authorized by the server first (src/app/api/usage/route.ts):
+// the tool it comes from must still be included in the account's plan, and
+// saving an image or a GIF must be too (each save is counted). Only a yes
+// opens the sheet; a refusal, or no answer at all, saves nothing and says why
+// (fail closed). The sheet then shows the ACTUAL image/GIF plus the clearest
+// save path for the platform:
 //  • Touch / iOS  → "Save to Photos" (native share, file only) with guidance to
 //    choose "Save Image", plus a full-screen long-press fallback.
 //  • Desktop      → a standard "Save Image" / "Save GIF" download, with Share
@@ -17,8 +22,14 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { Download, ExternalLink, Image as ImageIcon, Share2, X } from 'lucide-react';
+import Link from 'next/link';
+import { Download, ExternalLink, Image as ImageIcon, Lock, Share2, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'use-intl';
+import { useAccount } from '@/components/shell/account';
+import { pathForView } from '@/components/shell/tools';
+import type { ToolId } from '@/lib/account';
+import { authorizeUse, type FeatureDecision } from '@/lib/features-client';
+import { TOOL_FEATURES, isToolFeature, type ExportFeatureId, type FeatureId } from '@/lib/plans';
 import {
   canShareFile,
   downloadBlob,
@@ -38,10 +49,36 @@ export interface SaveMediaInput {
   mime?: string;
   /** Optional heading shown on the sheet. */
   title?: string;
+  /** The tool it comes from: its plan must still include that tool. */
+  tool: ToolId;
+  /** Export features beyond the image or GIF itself (a large GIF…), authorized with it. */
+  features?: ExportFeatureId[];
+  /**
+   * The server already authorized (and counted) this very export, just before
+   * the work of making it (a GIF): it is not asked twice.
+   */
+  authorized?: boolean;
+}
+
+/** A protected operation of a tool: the tool, and what it exports (none, e.g. a project file). */
+export interface ToolUse {
+  tool: ToolId;
+  features: ExportFeatureId[];
 }
 
 interface SaveMediaContextValue {
-  save: (media: SaveMediaInput) => void;
+  /** Authorize with the server, then show the save sheet; resolves whether it was allowed. */
+  save: (media: SaveMediaInput) => Promise<boolean>;
+  /** Authorize a protected operation with the server; on a refusal (or no answer) explain why. Resolves whether it may go ahead. */
+  authorize: (use: ToolUse) => Promise<boolean>;
+}
+
+/** Why something was not saved, as the sheet explains it. */
+interface Refusal {
+  decision: FeatureDecision;
+  use: ToolUse;
+  /** For "Try again" after no answer. */
+  retry: (() => void) | null;
 }
 
 const SaveMediaContext = createContext<SaveMediaContextValue | null>(null);
@@ -59,12 +96,37 @@ interface ActiveMedia extends SaveMediaInput {
 
 export function SaveMediaProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveMedia | null>(null);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const refresh = useAccount()?.refresh;
 
-  const save = useCallback((media: SaveMediaInput) => {
-    const mime = media.mime ?? mimeForFilename(media.filename);
-    const url = URL.createObjectURL(media.blob);
-    setActive({ ...media, mime, url });
-  }, []);
+  const ask = useCallback(
+    async (use: ToolUse, retry: (() => void) | null): Promise<boolean> => {
+      const decision = await authorizeUse({ tool: TOOL_FEATURES[use.tool], features: use.features });
+      if (decision.access === 'ok') return true;
+      // Signed out: already on the way to sign in.
+      if (decision.access !== 'signed_out') setRefusal({ decision, use, retry: decision.access === 'unavailable' ? retry : null });
+      // The plan changed: bring the studio's copy up to date (a tool no longer included locks).
+      if (decision.access === 'locked') void refresh?.();
+      return false;
+    },
+    [refresh],
+  );
+
+  const authorize = useCallback((use: ToolUse) => ask(use, null), [ask]);
+
+  const save = useCallback(
+    async (media: SaveMediaInput): Promise<boolean> => {
+      const mime = media.mime ?? mimeForFilename(media.filename);
+      if (!media.authorized) {
+        const use: ToolUse = { tool: media.tool, features: [isGif(mime) ? 'export.gif' : 'export.image', ...(media.features ?? [])] };
+        if (!(await ask(use, () => void save(media)))) return false;
+      }
+      const url = URL.createObjectURL(media.blob);
+      setActive({ ...media, mime, url });
+      return true;
+    },
+    [ask],
+  );
 
   const close = useCallback(() => {
     setActive((cur) => {
@@ -81,13 +143,113 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const value = useMemo(() => ({ save }), [save]);
+  const value = useMemo(() => ({ save, authorize }), [save, authorize]);
 
   return (
     <SaveMediaContext.Provider value={value}>
       {children}
       {active && <SaveMediaSheet media={active} onClose={close} />}
+      {refusal && <RefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />}
     </SaveMediaContext.Provider>
+  );
+}
+
+/** A feature's name in the page language, as the account page shows it. */
+function useFeatureName() {
+  const t = useTranslations();
+  return (feature: FeatureId): string => {
+    switch (feature) {
+      case 'export.image':
+        return t('account.features.exportImage');
+      case 'export.gif':
+        return t('account.features.exportGif');
+      case 'export.gif_large':
+        return t('account.features.exportGifLarge');
+      case 'export.gif_difference':
+        return t('account.features.exportGifDifference');
+      case 'tool.measure':
+        return t('tools.measure.title');
+      case 'tool.study':
+        return t('tools.value.title');
+      case 'tool.color':
+        return t('tools.color.title');
+      case 'tool.grid':
+        return t('tools.grid.title');
+      case 'tool.compare':
+        return t('tools.compare.title');
+    }
+  };
+}
+
+/** Nothing was saved: the plan does not include it, its limit is used up, or the server could not be asked. */
+function RefusalSheet({ refusal, onClose }: { refusal: Refusal; onClose: () => void }) {
+  const t = useTranslations('toolsCommon.access');
+  const name = useFeatureName();
+  const { decision, use, retry } = refusal;
+  // What the server named; the tool first (if it is the tool, nothing of it can be saved now).
+  const tool = decision.missing.find(isToolFeature) ?? null;
+  const feature = decision.missing.find((f) => !isToolFeature(f)) ?? use.features[0] ?? 'export.image';
+  const content =
+    decision.access === 'unavailable'
+      ? { title: t('unavailableTitle'), body: t('unavailableBody') }
+      : decision.access === 'limit'
+        ? { title: t('limitTitle'), body: t('limitBody', { feature: name(feature) }) }
+        : tool
+          ? { title: t('lockedTitle'), body: t('lockedTool', { tool: name(tool) }) }
+          : { title: t('lockedTitle'), body: t('lockedExport', { feature: name(feature) }) };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
+      <button className="absolute inset-0 bg-black/60" aria-label={t('close')} onClick={onClose} />
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="save-refused-title"
+        aria-describedby="save-refused-body"
+        data-save-refused={decision.access}
+        className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-border bg-card p-5 pb-[calc(env(safe-area-inset-bottom)+20px)] shadow-2xl sm:rounded-2xl sm:border sm:pb-5"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground">
+            <Lock className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p id="save-refused-title" className="text-base font-semibold text-foreground">{content.title}</p>
+            <p id="save-refused-body" className="mt-1 text-sm leading-relaxed text-muted-foreground">{content.body}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row-reverse">
+          {retry ? (
+            <button
+              type="button"
+              autoFocus
+              onClick={() => {
+                onClose();
+                retry();
+              }}
+              className="flex h-11 flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:scale-95"
+            >
+              {t('tryAgain')}
+            </button>
+          ) : decision.access !== 'unavailable' ? (
+            <Link
+              href={pathForView('plans')}
+              onClick={onClose}
+              className="flex h-11 flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:scale-95"
+            >
+              {t('comparePlans')}
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            autoFocus={!retry}
+            onClick={onClose}
+            className="flex h-11 flex-1 items-center justify-center rounded-xl bg-secondary px-4 text-sm font-medium text-foreground active:scale-95"
+          >
+            {t('close')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

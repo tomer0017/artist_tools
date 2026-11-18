@@ -269,7 +269,7 @@ export default function GridTab() {
         drawGridOnCtx(ctx, exportW, exportH);
         const filename = `grid-${gs.columns}x${gs.rows}-${gs.canvasWidth}x${gs.canvasHeight}${gs.unit}.png`;
         canvasToBlob(canvas, 'image/png')
-          .then((blob) => save({ blob, filename, mime: 'image/png', title: t('saveTitle') }))
+          .then((blob) => save({ blob, filename, mime: 'image/png', title: t('saveTitle'), tool: 'grid' }))
           .catch((error) => console.error('[GridTab] Failed to export grid PNG:', error));
       } catch (error) {
         console.error('[GridTab] Failed to export grid PNG:', error);

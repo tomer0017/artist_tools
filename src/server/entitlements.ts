@@ -1,6 +1,6 @@
 import 'server-only';
 import type { Db, ObjectId } from 'mongodb';
-import { FEATURES, betterPlan, isPlanId } from '@/lib/plans';
+import { FEATURES, PLAN_IDS, betterPlan, isPlanId, type ExportFeatureId, type PlanOffer, type ToolFeatureId } from '@/lib/plans';
 import {
   collections,
   type AccountStatus,
@@ -12,6 +12,7 @@ import {
   type UserRole,
 } from '@/server/db/collections';
 import { activeGrant } from '@/server/grants';
+import { log } from '@/server/log';
 import { countUsage, getUsage, giveBackUsage, takeUsage, usageDay, usagePeriod } from '@/server/usage';
 
 // ─── Entitlements ──────────────────────────────────────────────────────────────
@@ -26,6 +27,10 @@ import { countUsage, getUsage, giveBackUsage, takeUsage, usageDay, usagePeriod }
 // or subscription, and no plan ever grants the admin role. The plan in force
 // is the best of three: the plan an admin assigned, an active subscription,
 // and a live time-limited grant (src/server/grants.ts).
+//
+// What each plan includes is the published plan catalog, as publishing wrote
+// it to `plans` (src/server/config/catalog.ts). It is read on every request:
+// a publication applies to everyone's next request, in every process.
 
 /** Days a subscription keeps its plan after its period ends while renewal or a failed payment resolves. */
 export const GRACE_DAYS = 3;
@@ -52,10 +57,18 @@ export interface Entitlements {
   /** Daily caps (UTC day) and today's use. */
   dailyLimits: Partial<Record<FeatureId, number>>;
   dailyUsage: Partial<Record<FeatureId, number>>;
+  /** What each plan includes as published (to explain a lock: "part of Pro", or off for everyone). */
+  offer: PlanOffer;
 }
 
 type SubscriptionState = Pick<SubscriptionDoc, 'planId' | 'status' | 'currentPeriodEnd'>;
 type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits' | 'dailyLimits'>;
+
+/** What each plan includes, from the plan documents (a plan that is switched off includes nothing). */
+export function offerOf(plans: Partial<Record<PlanId, PlanState>>): PlanOffer {
+  const features = (planId: PlanId) => (plans[planId]?.active ? FEATURES.filter((f) => plans[planId]!.features.includes(f)) : []);
+  return Object.fromEntries(PLAN_IDS.map((planId) => [planId, features(planId)])) as PlanOffer;
+}
 type UserState = { status: AccountStatus; role?: unknown; plan?: unknown };
 
 /** Whether a subscription currently grants its plan. */
@@ -120,6 +133,7 @@ export function computeEntitlements(input: {
     usage: input.usage,
     dailyLimits: {},
     dailyUsage: input.dailyUsage ?? {},
+    offer: offerOf(input.plans),
   };
   if (!input.user || input.user.status !== 'active') return none;
 
@@ -165,22 +179,33 @@ export function remaining(entitlements: Entitlements, feature: FeatureId): numbe
   return left.length === 0 ? null : Math.max(0, Math.min(...left));
 }
 
-// Plans change rarely; keep them for a minute instead of reading them on every request.
-let planCache: { at: number; plans: Partial<Record<PlanId, PlanState>> } | null = null;
-const PLAN_CACHE_MS = 60_000;
-
-async function loadPlans(db: Db, now: number): Promise<Partial<Record<PlanId, PlanState>>> {
-  if (planCache && now - planCache.at < PLAN_CACHE_MS) return planCache.plans;
+// Read on every request (two small documents), never cached: a cache here was
+// per process, and with Next.js even per bundle layer, so an admin's server
+// action could clear one copy while pages and API routes kept answering from
+// another for up to a minute after a publication.
+async function loadPlans(db: Db): Promise<Partial<Record<PlanId, PlanState>>> {
   const docs = await collections(db).plans.find({}, { projection: { active: 1, features: 1, limits: 1, dailyLimits: 1 } }).toArray();
-  const plans = Object.fromEntries(docs.map((p) => [p._id, p])) as Partial<Record<PlanId, PlanState>>;
-  planCache = { at: now, plans };
-  return plans;
+  return Object.fromEntries(docs.map((p) => [p._id, p])) as Partial<Record<PlanId, PlanState>>;
 }
 
-/** Forget cached plans (after editing them, and in tests). */
-export const clearPlanCache = () => {
-  planCache = null;
-};
+/** What each plan includes as published, for pages that compare plans (public, no account needed). */
+export async function getPlanOffer(db: Db): Promise<PlanOffer> {
+  return offerOf(await loadPlans(db));
+}
+
+/**
+ * The same for public pages that only describe the plans (landing, sign-in,
+ * pricing): null when the database cannot be read, and the page then uses
+ * wording that holds whatever the plans are, rather than failing.
+ */
+export async function describablePlanOffer(db: () => Db): Promise<PlanOffer | null> {
+  try {
+    return await getPlanOffer(db());
+  } catch (error) {
+    log.warn('plans.offer_unavailable', { error });
+    return null;
+  }
+}
 
 /** Entitlements of an account, read entirely from the database. */
 export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()): Promise<Entitlements> {
@@ -188,7 +213,7 @@ export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()
   const [user, subscription, plans, usage, dailyUsage, grant] = await Promise.all([
     users.findOne({ _id: userId }, { projection: { status: 1, role: 1, plan: 1 } }),
     subscriptions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { planId: 1, status: 1, currentPeriodEnd: 1 } }),
-    loadPlans(db, now.getTime()),
+    loadPlans(db),
     getUsage(db, userId, usagePeriod(now)),
     getUsage(db, userId, usageDay(now)),
     activeGrant(db, userId, now),
@@ -214,7 +239,29 @@ export type FeatureUseResult = { status: 'recorded' } | { status: 'denied'; reas
  * can never be exceeded, even by simultaneous requests.
  */
 export async function authorizeFeatureUse(db: Db, userId: ObjectId, features: FeatureId[], now = new Date()): Promise<FeatureUseResult> {
+  return takeFeatures(db, userId, await getEntitlements(db, userId, now), features, now);
+}
+
+/**
+ * Authorize one export (or other protected operation) from a tool: the tool
+ * must be included — checked, never counted, so an export never uses up
+ * anything of the tool — and then each export feature is authorized and
+ * counted as in authorizeFeatureUse. With no export features it only checks
+ * the tool (e.g. saving a project file). Decided from the database only.
+ */
+export async function authorizeToolUse(
+  db: Db,
+  userId: ObjectId,
+  use: { tool: ToolFeatureId | null; features: ExportFeatureId[] },
+  now = new Date(),
+): Promise<FeatureUseResult> {
   const entitlements = await getEntitlements(db, userId, now);
+  if (use.tool && !includes(entitlements, use.tool)) return { status: 'denied', reason: 'not_included', missing: [use.tool] };
+  if (use.features.length === 0) return entitlements.accountActive ? { status: 'recorded' } : { status: 'denied', reason: 'not_included', missing: [] };
+  return takeFeatures(db, userId, entitlements, use.features, now);
+}
+
+async function takeFeatures(db: Db, userId: ObjectId, entitlements: Entitlements, features: FeatureId[], now: Date): Promise<FeatureUseResult> {
   const wanted = [...new Set(features)];
   const notIncluded = wanted.filter((feature) => !includes(entitlements, feature));
   if (notIncluded.length > 0) return { status: 'denied', reason: 'not_included', missing: notIncluded };

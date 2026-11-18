@@ -14,7 +14,16 @@ import { PRIMARY_BUTTON, authErrorKey, isPasswordError, verifiedReturn } from '.
 // invited), so this page always ends on "check your email": only the owner of
 // the address learns which it was, from the email they receive.
 
-export default function SignUpCard({ callbackPath, registration }: { callbackPath: string; registration: 'open' | 'invite' }) {
+export default function SignUpCard({
+  callbackPath,
+  registration,
+  freeHasAllTools = true,
+}: {
+  callbackPath: string;
+  registration: 'open' | 'invite';
+  /** Whether the published Free plan has all five tools ("All five tools, free" only then). */
+  freeHasAllTools?: boolean;
+}) {
   const t = useTranslations('auth');
   const locale = useLocale();
   const [name, setName] = useState('');
@@ -63,7 +72,7 @@ export default function SignUpCard({ callbackPath, registration }: { callbackPat
 
   const passwordError = state.status === 'error' && state.field === 'password' ? state.message : null;
   return (
-    <AuthCard title={t('signUp.title')} lead={registration === 'invite' ? t('signUp.leadInvite') : t('signUp.leadOpen')}>
+    <AuthCard title={t('signUp.title')} lead={registration === 'invite' ? t('signUp.leadInvite') : freeHasAllTools ? t('signUp.leadOpen') : t('signUp.leadOpenPartial')}>
       <form ref={form} onSubmit={submit} aria-label={t('signUp.formLabel')} className="mt-6 space-y-4" noValidate>
         <TextField label={t('signUp.name')} name="name" autoComplete="name" required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
         <TextField

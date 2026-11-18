@@ -1,9 +1,8 @@
 import 'server-only';
 import type { Db } from 'mongodb';
 import { z } from 'zod';
-import { FEATURES, FEATURE_LABELS, PLAN_FEATURES, PLAN_IDS, PLAN_NAMES, type FeatureId, type PlanId } from '@/lib/plans';
+import { FEATURES, FEATURE_LABELS, PLAN_FEATURES, PLAN_IDS, PLAN_NAMES, isToolFeature, type FeatureId, type PlanId } from '@/lib/plans';
 import { collections } from '@/server/db/collections';
-import { clearPlanCache } from '@/server/entitlements';
 import type { ConfigSpec } from './versions';
 
 // ─── The plan catalog ─────────────────────────────────────────────────────────
@@ -12,14 +11,22 @@ import type { ConfigSpec } from './versions';
 // Feature ids are code (a feature needs code that checks it); everything else
 // here is the owner's to change. Version 1 is today's matrix: Free keeps all
 // five tools and every save, no quotas, nothing switched off. Publishing a
-// version writes it to `plans`, which entitlements read (and which older
-// releases still understand: monthly quotas stay in `limits`).
+// version writes it to `plans`, which entitlements read on every request
+// (and which older releases still understand: monthly quotas stay in
+// `limits`).
+//
+// A tool is on or off per plan; quotas are for what is saved or exported,
+// which the server counts. A tool has no unit to count, so a quota on one is
+// dropped rather than kept as a setting that would do nothing.
 
 const Feature = z.enum(FEATURES);
 const Quota = z.object({ limit: z.number().int().min(1).max(1_000_000), period: z.enum(['day', 'month']) });
 const PlanEntry = z.object({
   features: z.array(Feature).max(FEATURES.length),
-  quotas: z.record(Feature, Quota).default({}),
+  quotas: z
+    .record(Feature, Quota)
+    .default({})
+    .transform((quotas) => Object.fromEntries(Object.entries(quotas).filter(([feature]) => !isToolFeature(feature as FeatureId))) as typeof quotas),
 });
 
 export const CatalogSchema = z
@@ -64,7 +71,7 @@ export async function syncPlans(db: Db, catalog: Catalog, now = new Date()): Pro
     const limits: Partial<Record<FeatureId, number>> = {};
     const dailyLimits: Partial<Record<FeatureId, number>> = {};
     for (const feature of FEATURES) {
-      const quota = entry.quotas[feature];
+      const quota = isToolFeature(feature) ? undefined : entry.quotas[feature];
       if (quota?.period === 'month') limits[feature] = quota.limit;
       if (quota?.period === 'day') dailyLimits[feature] = quota.limit;
     }
@@ -90,7 +97,6 @@ export async function syncPlans(db: Db, catalog: Catalog, now = new Date()): Pro
       updated += 1;
     }
   }
-  clearPlanCache();
   return { inserted, updated };
 }
 

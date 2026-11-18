@@ -1,5 +1,5 @@
 import type { Currency, Locale } from './locale';
-import type { FeatureId, PlanId } from './plans';
+import type { FeatureId, PlanId, PlanOffer } from './plans';
 
 /** The five tools' ids (as in TabId), for checking what the browser sends. */
 export const TOOL_IDS = ['measure', 'value', 'color', 'grid', 'compare'] as const;
@@ -31,7 +31,12 @@ export interface AccountSummary {
   /** What decides the features: the admin role, the plan in force, or nothing. */
   access: 'admin' | PlanId | 'none';
   subscription: { status: 'none' | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'expired' };
+  /** What this account may use now: the studio opens a tool, or offers a save, only if it is listed here. */
   features: FeatureId[];
+  /** What each plan includes as published (to explain a lock: part of Pro, or off for everyone). */
+  offer: PlanOffer;
+  /** When the server read this (ISO): a copy never replaces a newer one (e.g. a page restored from history). */
+  asOf: string;
   /** Tools whose first-visit introduction this person has dismissed (on any device). */
   introsSeen: ToolId[];
   locale: Locale;

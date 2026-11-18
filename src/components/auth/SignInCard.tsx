@@ -28,6 +28,7 @@ export default function SignInCard({
   registration,
   emailPassword = false,
   usernamePassword = false,
+  freeHasAllTools = true,
 }: {
   callbackPath: string;
   /** False until this server's Google OAuth client is configured. */
@@ -39,11 +40,13 @@ export default function SignInCard({
   emailPassword?: boolean;
   /** Whether this server offers username + password sign-in (accounts administrators create; no registration). */
   usernamePassword?: boolean;
+  /** Whether the published Free plan has all five tools ("All five tools, free" only then). */
+  freeHasAllTools?: boolean;
 }) {
   const t = useTranslations('auth');
   const locale = useLocale();
   const included = [
-    t('includedTools'),
+    freeHasAllTools ? t('includedTools') : t('includedToolsPartial'),
     emailPassword ? t('includedMethods') : usernamePassword ? t('includedUsername') : t('includedGoogleOnly'),
     t('includedPrivacy'),
   ];

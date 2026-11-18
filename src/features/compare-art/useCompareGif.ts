@@ -8,8 +8,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { useAccount, useHasFeature } from '@/components/shell/account';
-import { authorizeFeatures } from '@/lib/features-client';
-import type { FeatureId } from '@/lib/plans';
+import { authorizeUse } from '@/lib/features-client';
+import type { ExportFeatureId } from '@/lib/plans';
 import { useCompare } from './compareArtState';
 import {
   ANALYSIS_MAX_DIM,
@@ -25,7 +25,7 @@ import {
 } from './compareArtGif';
 
 /** Why the one-tap GIF did not happen; the button shows the message (compareTool.quickGif.errors). */
-export type QuickGifError = 'differencePro' | 'notInPlan' | 'limit' | 'failed';
+export type QuickGifError = 'differencePro' | 'notInPlan' | 'limit' | 'unverified' | 'failed';
 
 export interface QuickGifState {
   busy: boolean;
@@ -61,17 +61,20 @@ export function useCompareGif(): QuickGifState {
       setError(null);
       setBusy(true);
       setProgress(null); // "Preparing…" until frames start
-      const needed: FeatureId[] = ['export.gif'];
+      const needed: ExportFeatureId[] = ['export.gif'];
       if (size === 'high') needed.push('export.gif_large');
       if (animation === 'compare-diff') needed.push('export.gif_difference');
-      const access = await authorizeFeatures(needed);
-      if (access !== 'ok' && access !== 'unavailable') {
+      // Authorized (and counted) before the frames are made; the tool itself
+      // must still be included, and no answer from the server is a refusal.
+      const { access } = await authorizeUse({ tool: 'tool.compare', features: needed });
+      if (access !== 'ok') {
         setBusy(false);
         if (access === 'locked') {
           setError('notInPlan');
           void account?.refresh();
         }
         if (access === 'limit') setError('limit');
+        if (access === 'unavailable') setError('unverified');
         return;
       }
       try {
@@ -119,7 +122,7 @@ export function useCompareGif(): QuickGifState {
         );
         handle.current = h;
         const blob = await h.promise;
-        save({ blob, filename: `compare-${animation}-${Date.now()}.gif`, mime: 'image/gif' });
+        await save({ blob, filename: `compare-${animation}-${Date.now()}.gif`, mime: 'image/gif', tool: 'compare', authorized: true });
       } catch (e) {
         if (!(e instanceof CancelledError)) {
           console.error('[useCompareGif] generation failed:', e);

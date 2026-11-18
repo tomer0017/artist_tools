@@ -16,7 +16,7 @@ export default function MeasurePanel() {
     layers, activeLayerId, setActiveLayerId, toggleLayerVisibility, addLayer, deleteLayer,
     calibration, clearAllLines, newProject, exportProjectJSON, image,
   } = useProject();
-  const { save } = useSaveMedia();
+  const { save, authorize } = useSaveMedia();
 
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmNew, setConfirmNew] = useState(false);
@@ -80,7 +80,7 @@ export default function MeasurePanel() {
         ctx.fillText(line.label || getRealSize(line), mx, my - 8);
       });
       canvasToBlob(canvas, 'image/png')
-        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle') }))
+        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure' }))
         .catch((error) => console.error('[MeasurePanel] Failed to export annotated PNG:', error));
       } catch (error) {
         console.error('[MeasurePanel] Failed to export annotated PNG:', error);
@@ -89,7 +89,9 @@ export default function MeasurePanel() {
     img.src = image;
   }, [image, measurements, getRealSize, save, t]);
 
-  const handleExportJSON = useCallback(() => {
+  const handleExportJSON = useCallback(async () => {
+    // A protected operation of the tool: only while the plan still includes Measure.
+    if (!(await authorize({ tool: 'measure', features: [] }))) return;
     try {
       const json = exportProjectJSON();
       const blob = new Blob([json], { type: 'application/json' });
@@ -102,7 +104,7 @@ export default function MeasurePanel() {
     } catch (error) {
       console.error('[MeasurePanel] Failed to export project JSON:', error);
     }
-  }, [exportProjectJSON]);
+  }, [exportProjectJSON, authorize]);
 
   const handleNew = () => {
     if (confirmNew) { newProject(); setConfirmNew(false); }

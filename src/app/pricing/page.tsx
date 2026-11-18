@@ -5,14 +5,22 @@ import { PlanComparison } from '@/components/plans/PlanComparison';
 import { BrandMark } from '@/components/shell/BrandMark';
 import { localizedPath } from '@/i18n/config';
 import { getRequestLocale, getT } from '@/i18n/server';
+import { hasAllTools, isDefaultSplit } from '@/lib/plans';
 import { registrationMode } from '@/server/auth';
+import { getDb } from '@/server/db/client';
+import { describablePlanOffer } from '@/server/entitlements';
 
 // Public plan comparison, linked from the landing page. No prices and nothing
 // to buy: Free is available, Pro is coming soon.
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT('meta');
-  return { title: t('pricingTitle'), description: t('pricingDescription'), alternates: { languages: { en: '/pricing', he: '/he/pricing' } } };
+  const offer = await describablePlanOffer(getDb);
+  return {
+    title: t('pricingTitle'),
+    description: offer && hasAllTools(offer.free) ? t('pricingDescription') : t('pricingDescriptionPartial'),
+    alternates: { languages: { en: '/pricing', he: '/he/pricing' } },
+  };
 }
 
 // The call to action follows the server's registration setting.
@@ -20,6 +28,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function PricingPage() {
   const registration = registrationMode();
+  // What each plan includes as published: the comparison says what the studio opens.
+  const offer = await describablePlanOffer(getDb);
   const locale = await getRequestLocale();
   const t = await getT('plans');
   const tc = await getT('common');
@@ -40,18 +50,24 @@ export default async function PricingPage() {
         </header>
 
         <h1 className="mt-10 text-[30px] font-bold leading-tight tracking-tight text-foreground md:text-[40px]">{t('title')}</h1>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">{t('lead')}</p>
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">{offer && isDefaultSplit(offer) ? t('lead') : t('leadPartial')}</p>
 
         <div className="mt-6">
-          <PlanComparison
-            current={null}
-            freeAction={
-              registration === 'open'
-                ? { href: `${localizedPath('/sign-in', locale)}?callbackURL=%2Fapp`, label: tl('startFree') }
-                : { href: '/app', label: tc('openStudio') }
-            }
-            registration={registration}
-          />
+          {offer ? (
+            <PlanComparison
+              offer={offer}
+              current={null}
+              freeAction={
+                registration === 'open'
+                  ? { href: `${localizedPath('/sign-in', locale)}?callbackURL=%2Fapp`, label: tl('startFree') }
+                  : { href: '/app', label: tc('openStudio') }
+              }
+              registration={registration}
+            />
+          ) : (
+            // The database could not be read: no comparison rather than a wrong one.
+            <p role="status" className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">{t('unavailable')}</p>
+          )}
         </div>
       </div>
     </main>

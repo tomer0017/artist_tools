@@ -6,7 +6,7 @@ import { collections } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { pricingSpec } from '@/server/config/pricing';
 import { publishDraft, saveDraft } from '@/server/config/versions';
-import { clearPlanCache, getEntitlements } from '@/server/entitlements';
+import { getEntitlements } from '@/server/entitlements';
 import { CHECKOUT_TTL_MS, checkoutStatus, openCheckoutSession } from './checkout';
 import { billingMetrics } from './metrics';
 import { processPaymentEvent } from './process';
@@ -153,7 +153,6 @@ describe('payment events', () => {
 
   it('record each payment once, and money alone grants nothing', async () => {
     const db = mongo.db;
-    clearPlanCache();
     const userId = await newUser(db);
     expect(await processPaymentEvent(db, payEvent(userId, 'pay_1', NOW))).toBe('processed');
     // The same charge reported by a second event (an invoice and a charge notification).
@@ -248,7 +247,6 @@ describe('checkout sessions', () => {
 
   it('complete only from a verified event for the same account, never from the return page', async () => {
     const db = mongo.db;
-    clearPlanCache();
     const buyer = await newUser(db);
     const someoneElse = await newUser(db);
     const started = await openCheckoutSession(db, { userId: buyer, provider: 'test', priceId: 'pro-month-usd' }, NOW);
@@ -267,7 +265,6 @@ describe('checkout sessions', () => {
 
     expect(await processPaymentEvent(db, subEvent(buyer, 'sub_right', NOW, {}, { checkoutSessionId: id }))).toBe('processed');
     expect(await checkoutStatus(db, id, buyer, NOW)).toBe('completed');
-    clearPlanCache();
     expect((await getEntitlements(db, buyer)).planId).toBe('pro');
   });
 });

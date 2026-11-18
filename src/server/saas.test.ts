@@ -6,7 +6,7 @@ import { FEATURES, collections } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { processPaymentEvent } from '@/server/billing/process';
 import type { VerifiedPaymentEvent } from '@/server/billing/provider';
-import { getEntitlements, clearPlanCache } from '@/server/entitlements';
+import { getEntitlements } from '@/server/entitlements';
 import { trackEvent } from '@/server/analytics';
 import { findUserByEmail, getUserDetail, listAuditEvents, listUsers, setUserPlan, setUserRole } from '@/server/admin';
 import { recordAudit } from '@/server/audit';
@@ -45,7 +45,6 @@ const event = (userId: ObjectId, eventId: string, status: 'active' | 'canceled' 
 
 describe('payment events', () => {
   it('apply exactly once, update the subscription server-side, and are audited', async () => {
-    clearPlanCache();
     const userId = await newUser('payer@example.com');
     const inAMonth = new Date(Date.now() + 30 * 86_400_000);
     const created = event(userId, 'evt_1', 'active', inAMonth);
@@ -126,7 +125,6 @@ describe('admin', () => {
 
   it('assigns plans by user id with an audit trail, and a plan never changes the role', async () => {
     const userId = await newUser('plan.change@example.com');
-    clearPlanCache();
     expect(await setUserPlan(db(), { userId, plan: 'pro', actor: 'admin:tester' })).toEqual({ status: 'updated', from: 'free', to: 'pro' });
     expect(await setUserPlan(db(), { userId, plan: 'pro', actor: 'admin:tester' })).toEqual({ status: 'unchanged', plan: 'pro' });
     expect(await collections(db()).users.findOne({ _id: userId })).toMatchObject({ plan: 'pro', role: 'user', planUpdatedBy: 'admin:tester' });

@@ -33,6 +33,19 @@ export const commonEn = {
     saveFile: 'Save file',
     shareFailed: 'Could not open the share sheet. Try “Open” and long-press to save.',
   },
+  // A save or export the server did not allow (src/components/common/SaveMedia.tsx).
+  access: {
+    lockedTitle: 'Not included in your plan',
+    lockedExport: '{feature} are not part of your plan right now, so nothing was saved.',
+    lockedTool: '{tool} is no longer included in your plan, so nothing was saved. Nothing you made is deleted.',
+    limitTitle: 'Limit reached',
+    limitBody: 'The limit of your plan for {feature} is used up for now, so nothing was saved. Your account page shows what is left.',
+    unavailableTitle: 'Your plan could not be checked',
+    unavailableBody: 'Nothing was saved: the server could not confirm your plan just now. Check your connection and try again.',
+    tryAgain: 'Try again',
+    close: 'Close',
+    comparePlans: 'Compare plans',
+  },
   pro: {
     partOfPro: '{name} are part of Pro',
     optionPartOfPro: 'This option is part of Pro',
@@ -135,6 +148,18 @@ export const commonHe: typeof commonEn = {
     share: 'שיתוף',
     saveFile: 'שמירת הקובץ',
     shareFailed: 'לא הצלחנו לפתוח את חלון השיתוף. אפשר לבחור "פתיחה" וללחוץ לחיצה ארוכה כדי לשמור.',
+  },
+  access: {
+    lockedTitle: 'לא כלול במסלול הנוכחי',
+    lockedExport: 'האפשרות "{feature}" לא כלולה כרגע במסלול הנוכחי, ולכן שום דבר לא נשמר.',
+    lockedTool: 'הכלי {tool} כבר לא כלול במסלול הנוכחי, ולכן שום דבר לא נשמר. שום דבר ממה שנוצר לא נמחק.',
+    limitTitle: 'המכסה נוצלה',
+    limitBody: 'המכסה של "{feature}" במסלול הנוכחי נוצלה לעת עתה, ולכן שום דבר לא נשמר. בדף החשבון אפשר לראות מה נשאר.',
+    unavailableTitle: 'לא הצלחנו לבדוק את המסלול',
+    unavailableBody: 'שום דבר לא נשמר: השרת לא הצליח לאשר כרגע את המסלול. כדאי לבדוק את החיבור ולנסות שוב.',
+    tryAgain: 'לנסות שוב',
+    close: 'סגירה',
+    comparePlans: 'השוואת מסלולים',
   },
   pro: {
     partOfPro: '{name} — חלק ממסלול Pro',

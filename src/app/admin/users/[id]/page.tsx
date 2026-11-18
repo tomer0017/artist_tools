@@ -104,6 +104,8 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
           <PlanControl userId={user.id} plan={user.plan} name={user.name} />
           <dl className="mt-4 space-y-2.5 text-sm">
             <Row label="In force">{access}</Row>
+            {/* What the studio opens for this account right now (the published plans; the same answer the studio and the server follow). */}
+            <Row label="Can use">{entitlements.features.length > 0 ? entitlements.features.map((f) => FEATURE_LABELS[f]).join(', ') : 'Nothing'}</Row>
             <Row label="Subscription">{user.subscription ? `${user.subscription.status} (${PLAN_NAMES[user.subscription.planId]})` : 'None (billing is not live)'}</Row>
             <Row label="Plan last changed">{dateTime(user.planUpdatedAt)}</Row>
           </dl>

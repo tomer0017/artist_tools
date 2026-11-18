@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { FEATURES, FEATURE_LABELS, PLAN_IDS, PLAN_NAMES, type FeatureId, type PlanId } from '@/lib/plans';
+import { FEATURES, FEATURE_LABELS, PLAN_IDS, PLAN_NAMES, isToolFeature, type FeatureId, type PlanId } from '@/lib/plans';
 import type { ActionResult } from '../actions';
 import { saveConfigDraft } from '../config-actions';
 
@@ -69,7 +69,8 @@ export function CatalogEditor({ catalog, editable }: { catalog: CatalogForm; edi
                         <input type="checkbox" checked={included} disabled={!editable} onChange={(e) => toggle(planId, feature, e.target.checked)} className="h-4 w-4" />
                         {PLAN_NAMES[planId]}
                       </label>
-                      {included && (
+                      {/* Tools are on or off; quotas count saves and exports (src/server/config/catalog.ts). */}
+                      {included && !isToolFeature(feature) && (
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                           <input
                             type="number"
@@ -120,7 +121,9 @@ export function CatalogEditor({ catalog, editable }: { catalog: CatalogForm; edi
           >
             Save draft
           </button>
-          <p className="text-xs text-muted-foreground">Admins always keep every feature. Quotas count per UTC day or calendar month.</p>
+          <p className="text-xs text-muted-foreground">
+            Admins always keep every feature. A tool is on or off per plan; quotas apply to saves and GIFs and count per UTC day or calendar month.
+          </p>
         </div>
       )}
       {result && (

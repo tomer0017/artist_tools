@@ -5,7 +5,7 @@ import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mo
 import { migrate } from '@/server/db/migrate';
 import { collections } from '@/server/db/collections';
 import { listAuditEvents, listUsers, setTestAccount, setUserStatus, userStats } from './admin';
-import { clearPlanCache, computeEntitlements, getEntitlements } from './entitlements';
+import { computeEntitlements, getEntitlements } from './entitlements';
 import { activeGrant, createGrant, revokeGrant } from './grants';
 import { PLAN_FEATURES } from '@/lib/plans';
 
@@ -19,7 +19,6 @@ beforeAll(async () => {
   mongo = await startTestMongo();
   db = mongo.db;
   await migrate(db);
-  clearPlanCache();
 }, MONGO_STARTUP_TIMEOUT);
 
 afterAll(async () => mongo?.stop());

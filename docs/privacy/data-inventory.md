@@ -45,7 +45,7 @@ There are no advertising, analytics or third-party cookies.
 | `rateLimits` | IP address with request counts (Better Auth) | Stopping abuse of sign-in | Removed after 1 day idle (nightly job) | Legitimate interest (security) |
 | `auth_throttles` | SHA-256 hash of an email address or a username, with a count | Limiting emails and attempts per address or username | Removed at the end of the window (TTL index) | Legitimate interest (security) |
 | `consent_events` | Marketing-consent changes (granted or withdrawn, source, time) | Proof of consent | With the account | Legal obligation / proof of consent |
-| `usage` | Counts of feature use per day or month (e.g. GIFs saved) | Plan limits; the admin's usage figures | With the account | Contract |
+| `usage` | Counts of feature use per day or month (each saved image and GIF, since ADR-0013) | Plan limits; the admin's usage figures | With the account | Contract |
 | `analytics_events` | Account id with allow-listed event names (`active_day`, `tool_open`, registration, sign-in…) and small fixed properties. No IP, user agent, free text or image data. | Product analytics (ADR-0011) | **13 months** (*proposed*; nightly job, from 2026-11-11), and with the account | Legitimate interest (*to confirm*) |
 | `audit_events` | Account id, actor, event type and small fixed metadata (e.g. what changed). No passwords or tokens. | Security and admin accountability | **24 months** (*proposed*; nightly job, from 2026-11-11). They outlive account deletion as a bare id that no longer resolves to anyone (ADR-0010). | Legitimate interest (security) |
 | `access_grants` | Promotional plan given to an account, with dates and reason | Promotions | With the account | Contract |

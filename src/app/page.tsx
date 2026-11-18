@@ -6,7 +6,10 @@ import LegacyHashRedirect from '@/components/shell/LegacyHashRedirect';
 import { HOME_ORDER, TOOLS, TOOL_ART, pathForView } from '@/components/shell/tools';
 import { getRequestLocale, getT } from '@/i18n/server';
 import { localizedPath } from '@/i18n/config';
+import { hasAllTools, isDefaultSplit } from '@/lib/plans';
 import { registrationMode } from '@/server/auth';
+import { getDb } from '@/server/db/client';
+import { describablePlanOffer } from '@/server/entitlements';
 
 // Public landing page: what Studio Companion is, the five tools, and how to
 // start (a free account with Google, or invite-only while testing). It reuses
@@ -29,6 +32,8 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
   const t = await getT('landing');
   const tc = await getT('common');
   const tt = await getT('tools');
+  // What each plan includes as published: "every tool is free" only while it is true.
+  const offer = await describablePlanOffer(getDb);
   return (
     <main className="min-h-[100dvh] bg-background" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <LegacyHashRedirect />
@@ -104,7 +109,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
 
       <section aria-labelledby="landing-tools" className="mx-auto w-full max-w-6xl px-4 pb-8 md:px-6 lg:px-8">
         <h2 id="landing-tools" className="text-lg font-semibold text-foreground md:text-xl">{t('toolsHeading')}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t('toolsLead')}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{offer && hasAllTools(offer.free) ? t('toolsLead') : t('toolsLeadPartial')}</p>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {HOME_ORDER.map((id) => {
             const tool = TOOLS[id];
@@ -148,7 +153,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
         <div className="flex flex-col gap-4 rounded-2xl border border-primary/30 bg-primary/5 p-5 md:flex-row md:items-center md:justify-between md:p-6">
           <div>
             <h2 id="landing-plans" className="text-base font-semibold text-foreground md:text-lg">{t('plansHeading')}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t('plansLead')}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{offer && isDefaultSplit(offer) ? t('plansLead') : t('plansLeadPartial')}</p>
           </div>
           <Link href={localizedPath('/pricing', locale)} className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card px-5 text-sm font-semibold text-foreground hover:bg-secondary">
             {tc('comparePlans')}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { requireUser } from '@/server/session';
+import { AccountSync } from '@/components/shell/account';
+import { requireStudioAccount } from '@/server/studio-account';
 
 export const metadata: Metadata = { title: 'Your account · Studio Companion', robots: { index: false, follow: false } };
 
@@ -7,8 +8,9 @@ export const metadata: Metadata = { title: 'Your account · Studio Companion', r
 export const dynamic = 'force-dynamic';
 
 // The account page is rendered by the studio in ../layout.tsx (so the tools
-// stay alive behind it); this page re-verifies the session for every request.
+// stay alive behind it); this page re-verifies the session for every request
+// and sends the account as it is now.
 export default async function ProfilePage() {
-  await requireUser('/app/profile');
-  return null;
+  const { account } = await requireStudioAccount('/app/profile');
+  return <AccountSync account={account} />;
 }

@@ -9,7 +9,13 @@
 //      for accounts an admin creates, no mail at all, with its own database
 //      (e2e/google-only.spec.ts, e2e/username-accounts.spec.ts). Its username
 //      accounts are created the real way (Better Auth, hashed passwords);
-//      their per-run random passwords go to e2e/.auth/username-accounts.json.
+//      their per-run random passwords go to e2e/.auth/username-accounts.json;
+//   5. a third one on port 8082, set up like staging including its published
+//      plan catalog (version 2 of 2026-11-18: Free without Measure & Plan,
+//      Compare & Correct and GIFs), published the way an admin publishes,
+//      with username accounts on each plan (e2e/entitlements.spec.ts, which
+//      publishes other versions through the admin dashboard: nothing else
+//      runs against it). Passwords go to e2e/.auth/entitlement-accounts.json.
 // No login bypass exists in the app: tests are signed in the way a real
 // session is, and the server verifies them the same way.
 //
@@ -20,6 +26,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { createAuth } from '@/server/auth';
+import { catalogSpec, type Catalog } from '@/server/config/catalog';
+import { publishDraft, saveDraft } from '@/server/config/versions';
 import { migrate } from '@/server/db/migrate';
 import { createMailer } from '@/server/mail/mailer';
 import { createUsernameAccount, holdInitialPassword } from '@/server/password-accounts';
@@ -30,6 +38,16 @@ const SECRET = randomBytes(32).toString('base64');
 const DB_NAME = 'studio_e2e';
 const GOOGLE_ONLY_PORT = 8081;
 const GOOGLE_ONLY_DB = 'studio_e2e_google_only';
+const ENTITLEMENTS_PORT = 8082;
+const ENTITLEMENTS_DB = 'studio_e2e_entitlements';
+/** The plan catalog published on staging (version 2, 2026-11-18). */
+const STAGING_CATALOG: Catalog = {
+  plans: {
+    free: { features: ['tool.study', 'tool.color', 'tool.grid', 'export.image'], quotas: {} },
+    pro: { features: ['tool.measure', 'tool.study', 'tool.color', 'tool.grid', 'tool.compare', 'export.image', 'export.gif', 'export.gif_large', 'export.gif_difference'], quotas: {} },
+  },
+  disabled: [],
+};
 // The sealing key of initial passwords comes from the environment's auth
 // settings (src/server/security/secret-box.ts); each server gets its own URL.
 process.env.BETTER_AUTH_SECRET = SECRET;
@@ -182,6 +200,47 @@ for (const name of ['ivrit-chromium', 'ivrit-iphone-webkit', 'ivrit-switch']) {
   await holdInitialPassword(googleOnly, new ObjectId(testers.QA_Reveal.id), testers.QA_Reveal.password, 'cli');
   writeFileSync('e2e/.auth/username-accounts.json', JSON.stringify(testers));
 }
+// The plan-enforcement server's database: staging's published catalog, an
+// admin who publishes others and changes plans (its sign-in counts as recent
+// for the whole run), and username accounts on each plan, one per scenario.
+{
+  const entitlements = client.db(ENTITLEMENTS_DB);
+  await migrate(entitlements);
+  if ((await saveDraft(entitlements, catalogSpec, STAGING_CATALOG, 'cli', 'As on staging (version 2, 2026-11-18)')).status !== 'saved') throw new Error('Could not save the staging catalog');
+  if ((await publishDraft(entitlements, catalogSpec, 'cli')).status !== 'published') throw new Error('Could not publish the staging catalog');
+  await seedSignedInUser(entitlements, 'ent-admin', 'admin', 'free', false, ALL_TOOLS, -60);
+  const auth = createAuth({
+    db: entitlements,
+    client,
+    baseURL: `http://localhost:${ENTITLEMENTS_PORT}`,
+    secret: SECRET,
+    google: null,
+    signups: { mode: 'open' },
+    usernamePassword: true,
+    mailer: createMailer(entitlements, 'disabled'),
+  });
+  const accounts: Record<string, { username: string; password: string; id: string }> = {};
+  const ACCOUNTS: [string, 'free' | 'pro', 'en' | 'he'][] = [
+    ['ENT_Free', 'free', 'en'],
+    ['ENT_Pro', 'pro', 'en'],
+    ['ENT_Ivrit', 'free', 'he'],
+    ['ENT_Phone', 'free', 'en'],
+    ['ENT_Phone_Pro', 'pro', 'en'],
+    ['ENT_Switch', 'free', 'en'],
+    ['ENT_Open', 'pro', 'en'],
+    ['ENT_Tabs', 'pro', 'en'],
+    ['ENT_Export', 'free', 'en'],
+    ['ENT_Both_Free', 'free', 'en'],
+    ['ENT_Both_Pro', 'pro', 'en'],
+  ];
+  for (const [username, plan, locale] of ACCOUNTS) {
+    const created = await createUsernameAccount(entitlements, auth, { username, plan, locale, test: true, actor: 'cli' });
+    if (created.status !== 'created') throw new Error(`Could not seed ${username}: ${created.status}`);
+    accounts[username] = { username, password: created.password, id: created.userId.toHexString() };
+    await entitlements.collection('users').updateOne({ _id: created.userId }, { $set: { introsSeen: ALL_TOOLS } });
+  }
+  writeFileSync('e2e/.auth/entitlement-accounts.json', JSON.stringify(accounts));
+}
 await client.close();
 
 /** The production server on `port`, with this run's database and secret; `overrides` change the settings. */
@@ -227,19 +286,15 @@ async function ready(port: number) {
   throw new Error(`The test server on port ${port} did not become ready`);
 }
 
-// The Google-only server first: Playwright waits for the main one only, so
-// by then both answer.
-const googleOnlyServer = startServer(GOOGLE_ONLY_PORT, {
-  MONGODB_DB: GOOGLE_ONLY_DB,
-  AUTH_SIGNUP_MODE: 'open',
-  AUTH_EMAIL_PASSWORD: 'off',
-  AUTH_USERNAME_PASSWORD: 'on',
-  MAIL_TRANSPORT: undefined,
-  AUTH_SIGNUP_ALLOWLIST: undefined,
-});
+// The staging-like servers first: Playwright waits for the main one only, so
+// by then all three answer.
+const stagingLike = { AUTH_SIGNUP_MODE: 'open', AUTH_EMAIL_PASSWORD: 'off', AUTH_USERNAME_PASSWORD: 'on', MAIL_TRANSPORT: undefined, AUTH_SIGNUP_ALLOWLIST: undefined };
+const googleOnlyServer = startServer(GOOGLE_ONLY_PORT, { MONGODB_DB: GOOGLE_ONLY_DB, ...stagingLike });
+const entitlementsServer = startServer(ENTITLEMENTS_PORT, { MONGODB_DB: ENTITLEMENTS_DB, ...stagingLike });
 await ready(GOOGLE_ONLY_PORT);
+await ready(ENTITLEMENTS_PORT);
 const server = startServer(PORT);
-const servers = [server, googleOnlyServer];
+const servers = [server, googleOnlyServer, entitlementsServer];
 
 let stopping = false;
 const stop = async (code = 0) => {

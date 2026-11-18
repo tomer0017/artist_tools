@@ -2,9 +2,12 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import SignInCard from '@/components/auth/SignInCard';
 import { signInErrorKey } from '@/components/auth/ui';
+import { hasAllTools } from '@/lib/plans';
 import { safeCallbackPath } from '@/lib/redirects';
 import { getT } from '@/i18n/server';
 import { emailPasswordAvailable, googleSignInAvailable, registrationMode, usernamePasswordAvailable } from '@/server/auth';
+import { getDb } from '@/server/db/client';
+import { describablePlanOffer } from '@/server/entitlements';
 import { getSession } from '@/server/session';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,8 +29,10 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const registration = registrationMode();
   const errorKey = signInErrorKey(first(params.error), registration);
   const t = await getT('auth');
+  const offer = await describablePlanOffer(getDb);
   return (
     <SignInCard
+      freeHasAllTools={offer !== null && hasAllTools(offer.free)}
       callbackPath={callbackPath}
       available={googleSignInAvailable()}
       registration={registration}

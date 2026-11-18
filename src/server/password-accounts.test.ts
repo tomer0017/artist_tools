@@ -7,7 +7,7 @@ import { collections } from '@/server/db/collections';
 import { USERNAME_EMAIL_DOMAIN } from '@/lib/username';
 import { settleBackground } from './background';
 import { createAuth, type Auth } from './auth';
-import { getEntitlements, clearPlanCache } from './entitlements';
+import { getEntitlements } from './entitlements';
 import { createMailer } from './mail/mailer';
 import { runMaintenance } from './maintenance';
 import { exportAccountData } from './account-management';
@@ -48,7 +48,6 @@ beforeAll(async () => {
   process.env.BETTER_AUTH_URL = BASE;
   mongo = await startTestMongo();
   await migrate(mongo.db);
-  clearPlanCache();
   const common = {
     db: mongo.db,
     client: mongo.client,

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useProject } from '@/hooks/useProjectStore';
+import { useToolAllowed } from '@/components/shell/account';
 import { isTool } from '@/components/shell/tools';
 import { useOnboarding } from './onboardingContext';
 import { ONBOARDING, AUTO_START_TUTORIALS } from './onboardingConfig';
@@ -14,6 +15,7 @@ import { hasSeenOnboarding } from './onboardingStorage';
 export default function OnboardingHost() {
   const { activeTab } = useProject();
   const { start, isOpen } = useOnboarding();
+  const allowed = useToolAllowed();
 
   // Don't re-trigger the same tool twice within a session even before the
   // "seen" flag is written (e.g. if the user tabs away before finishing).
@@ -25,7 +27,8 @@ export default function OnboardingHost() {
 
   useEffect(() => {
     if (!AUTO_START_TUTORIALS) return;
-    if (!isTool(activeTab)) return;
+    // Never over a tool the account may not use (it shows why it is locked).
+    if (!isTool(activeTab) || !allowed(activeTab)) return;
     const id = activeTab;
     if (!ONBOARDING[id]) return;
     if (hasSeenOnboarding(id)) return;
@@ -36,7 +39,7 @@ export default function OnboardingHost() {
       if (!openRef.current) start(id);
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [activeTab, start]);
+  }, [activeTab, start, allowed]);
 
   return null;
 }

@@ -14,8 +14,8 @@ import { Download, Loader2, Lock, X } from 'lucide-react';
 import { ProNotice } from '@/components/common/ProFeature';
 import { useSaveMedia } from '@/components/common/SaveMedia';
 import { useAccount, useHasFeature } from '@/components/shell/account';
-import { authorizeFeatures } from '@/lib/features-client';
-import type { FeatureId } from '@/lib/plans';
+import { authorizeUse } from '@/lib/features-client';
+import type { ExportFeatureId, FeatureId } from '@/lib/plans';
 import { canvasToBlob } from '@/lib/saveMedia';
 import { useCompare } from './compareArtState';
 import {
@@ -42,7 +42,7 @@ import {
 } from './compareArtGif';
 
 /** What went wrong, shown under the sheet (compareTool.export.errors). */
-type ExportError = 'prepare' | 'still' | 'limit' | 'gif';
+type ExportError = 'prepare' | 'still' | 'limit' | 'unverified' | 'gif';
 
 function Seg<T extends string>({
   value,
@@ -175,7 +175,7 @@ export default function CompareExportSheet() {
       });
       const cropped = applyCrop(canvas, session.crop);
       const blob = await canvasToBlob(cropped, 'image/png');
-      save({ blob, filename: `compare-${kind}-${Date.now()}.png`, mime: 'image/png' });
+      await save({ blob, filename: `compare-${kind}-${Date.now()}.png`, mime: 'image/png', tool: 'compare' });
     } catch (e) {
       console.error('[CompareExportSheet] still export failed:', e);
       setError('still');
@@ -199,17 +199,21 @@ export default function CompareExportSheet() {
     setError(null);
     setProNotice(null);
     setBusy('gif');
-    const needed: FeatureId[] = ['export.gif'];
+    const needed: ExportFeatureId[] = ['export.gif'];
     if (session.gif.size === 'high') needed.push('export.gif_large');
     if (session.gif.animation === 'compare-diff') needed.push('export.gif_difference');
-    const access = await authorizeFeatures(needed);
-    if (access !== 'ok' && access !== 'unavailable') {
+    // Authorized (and counted) before the frames are made, so a refusal costs
+    // no encoding; the tool itself must still be included. No answer from the
+    // server is a refusal too: nothing is made that cannot be verified.
+    const { access } = await authorizeUse({ tool: 'tool.compare', features: needed });
+    if (access !== 'ok') {
       setBusy(null);
       if (access === 'locked') {
         setProNotice(needed.find((f) => f !== 'export.gif') ?? 'refused');
         void account?.refresh();
       }
       if (access === 'limit') setError('limit');
+      if (access === 'unavailable') setError('unverified');
       return;
     }
     setProgress({ phase: 'frames', current: 0, total: gifFrames });
@@ -237,7 +241,7 @@ export default function CompareExportSheet() {
       );
       gifHandle.current = handle;
       const blob = await handle.promise;
-      save({ blob, filename: `compare-${session.gif.animation}-${Date.now()}.gif`, mime: 'image/gif' });
+      await save({ blob, filename: `compare-${session.gif.animation}-${Date.now()}.gif`, mime: 'image/gif', tool: 'compare', authorized: true });
     } catch (e) {
       if (e instanceof CancelledError) {
         // user cancelled — no error surfaced

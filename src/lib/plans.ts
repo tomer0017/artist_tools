@@ -1,11 +1,14 @@
+import type { ToolId } from './account';
+
 // ─── Features and plans ───────────────────────────────────────────────────────
-// The catalogue of capabilities and which plan includes which — shared by the
-// server, which decides (src/server/entitlements.ts), and the studio, which
-// only shows locks from a copy of that decision. Plans are defined here; the
-// database migration writes these definitions to the `plans` collection.
+// The catalogue of capabilities and the default of which plan includes which —
+// shared by the server, which decides (src/server/entitlements.ts), and the
+// studio, which follows a copy of that decision. What applies is the published
+// plan catalog (src/server/config/catalog.ts), which admins edit; the defaults
+// here are its version 1.
 //
-// Free keeps all five tools and every existing save; Pro adds the two heavier
-// GIF options. Admins get every feature, whatever their plan.
+// By default Free keeps all five tools and every existing save; Pro adds the
+// two heavier GIF options. Admins get every feature, whatever their plan.
 
 export const FEATURES = [
   'tool.measure',
@@ -59,6 +62,65 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   'export.gif_large': 'Large GIFs',
   'export.gif_difference': 'Compare + Difference GIFs',
 };
+
+/** The feature each tool needs (the studio's tool ids → catalog features). */
+export const TOOL_FEATURES: Record<ToolId, ToolFeatureId> = {
+  measure: 'tool.measure',
+  value: 'tool.study',
+  color: 'tool.color',
+  grid: 'tool.grid',
+  compare: 'tool.compare',
+};
+
+/** The tools' features: a tool is on or off per plan (it has no quota). */
+export const TOOL_FEATURE_IDS = ['tool.measure', 'tool.study', 'tool.color', 'tool.grid', 'tool.compare'] as const satisfies readonly FeatureId[];
+export type ToolFeatureId = (typeof TOOL_FEATURE_IDS)[number];
+
+/** Everything that saves or exports something; each use is authorized (and counted) by the server. */
+export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_large', 'export.gif_difference'] as const satisfies readonly FeatureId[];
+export type ExportFeatureId = (typeof EXPORT_FEATURE_IDS)[number];
+
+export const isToolFeature = (feature: FeatureId): feature is ToolFeatureId => (TOOL_FEATURE_IDS as readonly FeatureId[]).includes(feature);
+
+/** What each plan includes as published (the `plans` collection); empty for a plan that is switched off. */
+export type PlanOffer = Record<PlanId, FeatureId[]>;
+
+/** The tools in the order people meet them (Home, plan comparisons). */
+const TOOL_ORDER: ToolId[] = ['measure', 'value', 'color', 'grid', 'compare'];
+
+export type FeatureRow =
+  | { kind: 'group'; id: (typeof FEATURE_MATRIX)[number]['id']; features: FeatureId[] }
+  | { kind: 'tool'; id: ToolId; features: FeatureId[] };
+
+/**
+ * The rows people read (the account page, plan comparisons) for these feature
+ * sets: one "All five tools" row while every set has all five tools or none,
+ * otherwise one row per tool, so a tool that one plan lacks is never shown as
+ * included (or all five as missing).
+ */
+export function featureRows(sets: readonly (readonly FeatureId[])[]): FeatureRow[] {
+  const tools = TOOL_ORDER.map((tool) => TOOL_FEATURES[tool]);
+  const together = sets.every((set) => tools.every((f) => set.includes(f)) || tools.every((f) => !set.includes(f)));
+  return FEATURE_MATRIX.flatMap((row): FeatureRow[] =>
+    row.id === 'tools' && !together
+      ? TOOL_ORDER.map((tool) => ({ kind: 'tool', id: tool, features: [TOOL_FEATURES[tool]] }))
+      : [{ kind: 'group', id: row.id, features: row.features }],
+  );
+}
+
+/** Whether a set of features has every one of the five tools. */
+export const hasAllTools = (features: readonly FeatureId[]): boolean => TOOL_FEATURE_IDS.every((f) => features.includes(f));
+
+/**
+ * Whether the published plans split as the default texts describe them: Free
+ * has all five tools, and Pro adds exactly the large and Compare + Difference
+ * GIFs. Otherwise pages use wording that holds for any split and point to the
+ * comparison, which is built from the published plans.
+ */
+export function isDefaultSplit(offer: PlanOffer): boolean {
+  const added = offer.pro.filter((f) => !offer.free.includes(f));
+  return hasAllTools(offer.free) && added.length === PRO_FEATURES.length && PRO_FEATURES.every((f) => added.includes(f));
+}
 
 /** Better of two plans (Pro outranks Free). */
 export const betterPlan = (a: PlanId, b: PlanId | null): PlanId => (a === 'pro' || b === 'pro' ? 'pro' : 'free');

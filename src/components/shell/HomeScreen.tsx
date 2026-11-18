@@ -1,9 +1,9 @@
 import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Lock } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { BrandMark } from './BrandMark';
-import { AccountButton, AccountLine } from './account';
+import { AccountButton, AccountLine, useToolAllowed } from './account';
 import { HOME_ORDER, TOOLS, TOOL_ART, pathForView } from './tools';
 import type { TabId } from '@/types/project';
 
@@ -94,6 +94,8 @@ export default function HomeScreen() {
 function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; eager: boolean }) {
   const t = useTranslations('studio');
   const tt = useTranslations(`tools.${id}`);
+  // A tool the plan does not include stays on Home, marked, and opens to say why.
+  const locked = !useToolAllowed()(id);
   const art = TOOL_ART[id];
   const Icon = TOOLS[id].icon;
   const title = tt('title');
@@ -122,6 +124,11 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
           <div className="flex items-center gap-2">
             <Icon className="h-[18px] w-[18px] shrink-0 text-primary md:h-6 md:w-6" aria-hidden="true" />
             <h3 className="text-[15px] font-semibold leading-tight text-foreground md:text-xl">{title}</h3>
+            {locked && (
+              <span data-locked-badge className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-foreground/80">
+                <Lock className="h-3 w-3" aria-hidden="true" /> {t('locked.badge')}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-[13px] leading-snug text-muted-foreground md:mt-1.5 md:text-[15px]">{description}</p>
           <ul className="mt-2.5 hidden flex-wrap gap-1.5 sm:flex" aria-label={t('includes')}>

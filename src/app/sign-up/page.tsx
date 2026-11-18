@@ -3,8 +3,11 @@ import { localizedPath } from '@/i18n/config';
 import { addressLocale, getT } from '@/i18n/server';
 import { redirect } from 'next/navigation';
 import SignUpCard from '@/components/auth/SignUpCard';
+import { hasAllTools } from '@/lib/plans';
 import { safeCallbackPath } from '@/lib/redirects';
 import { emailPasswordAvailable, registrationMode } from '@/server/auth';
+import { getDb } from '@/server/db/client';
+import { describablePlanOffer } from '@/server/entitlements';
 import { getSession } from '@/server/session';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -23,5 +26,6 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
   const callbackPath = safeCallbackPath(first((await searchParams).callbackURL));
   if (!emailPasswordAvailable()) redirect(`${localizedPath('/sign-in', await addressLocale())}?callbackURL=${encodeURIComponent(callbackPath)}`);
   if (await getSession()) redirect(callbackPath);
-  return <SignUpCard callbackPath={callbackPath} registration={registrationMode()} />;
+  const offer = await describablePlanOffer(getDb);
+  return <SignUpCard callbackPath={callbackPath} registration={registrationMode()} freeHasAllTools={offer !== null && hasAllTools(offer.free)} />;
 }

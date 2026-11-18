@@ -10,7 +10,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { SaveMediaProvider } from '@/components/common/SaveMedia';
 import { ProjectProvider, useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { ViewId } from '@/types/project';
+import type { TabId, ViewId } from '@/types/project';
 import MeasureTab from '@/components/measure/MeasureTab';
 import ValueTab from '@/components/value/ValueTab';
 import ColorTab from '@/components/color/ColorTab';
@@ -18,12 +18,13 @@ import GridTab from '@/components/grid/GridTab';
 import HomeScreen from '@/components/shell/HomeScreen';
 import ProfileScreen from '@/components/shell/ProfileScreen';
 import PlansScreen from '@/components/shell/PlansScreen';
+import ToolLocked from '@/components/shell/ToolLocked';
 import { ToolIntroHost } from '@/components/shell/ToolIntro';
 import { ToolOpenTracker } from '@/components/shell/ToolOpenTracker';
 import { BottomNav, TopNav } from '@/components/shell/AppNav';
-import { pathForView, viewFromPathname } from '@/components/shell/tools';
+import { isTool, pathForView, viewFromPathname } from '@/components/shell/tools';
 import { OnboardingProvider, OnboardingHost } from '@/onboarding';
-import { AccountProvider, type StudioAccount } from '@/components/shell/account';
+import { useToolAllowed } from '@/components/shell/account';
 
 // Compare Art (with its gifenc dependency) is code-split so it never weighs down
 // the initial load of the other workspaces.
@@ -117,7 +118,9 @@ function useTypingFocus() {
  * Mounts a tool the first time it is opened and then keeps it alive while
  * hidden, so switching tools never throws away in-memory work (a Study image
  * loaded just for that tool, Compare's full-resolution images and undo
- * history, the colour being explored).
+ * history, the colour being explored). A tool the account may no longer use
+ * stays hidden the same way (its work kept, nothing usable) and is never
+ * mounted if it was not open already.
  */
 function KeepAlive({ active, children }: { active: boolean; children: React.ReactNode }) {
   const [mounted, setMounted] = useState(active);
@@ -139,6 +142,13 @@ function Workspace() {
   const typing = useTypingFocus();
   useAppHeight();
   useViewRouting();
+  // The server's latest answer for this account (src/server/entitlements.ts):
+  // a tool opens only if its plan includes it; otherwise its place shows why
+  // it is locked, however it was reached (a link, the address bar, a reload,
+  // a hand-off from another tool, a tab left open while access changed).
+  const allowed = useToolAllowed();
+  const open = (tool: TabId) => activeTab === tool && allowed(tool);
+  const locked = isTool(activeTab) && !allowed(activeTab) ? activeTab : null;
 
   return (
     <div
@@ -158,11 +168,11 @@ function Workspace() {
         {/* Measure keeps all of its work in the persisted project store and
             listens for keyboard shortcuts on window, so it mounts only while
             visible rather than being kept alive. Grid is fully persisted too. */}
-        {activeTab === 'measure' && <MeasureTab />}
-        {activeTab === 'grid' && <GridTab />}
-        <KeepAlive active={activeTab === 'value'}><ValueTab /></KeepAlive>
-        <KeepAlive active={activeTab === 'color'}><ColorTab /></KeepAlive>
-        <KeepAlive active={activeTab === 'compare'}>
+        {open('measure') && <MeasureTab />}
+        {open('grid') && <GridTab />}
+        <KeepAlive active={open('value')}><ValueTab /></KeepAlive>
+        <KeepAlive active={open('color')}><ColorTab /></KeepAlive>
+        <KeepAlive active={open('compare')}>
           <Suspense
             fallback={
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -173,29 +183,32 @@ function Workspace() {
             <CompareArt />
           </Suspense>
         </KeepAlive>
+        {locked && <ToolLocked key={locked} tool={locked} />}
       </main>
       {isMobile && !typing && <BottomNav />}
     </div>
   );
 }
 
-/** The whole studio: Home, every tool, the account and plans pages, with the providers they share. */
-export default function Studio({ account }: { account: StudioAccount }) {
+/**
+ * The whole studio: Home, every tool, the account and plans pages, with the
+ * providers they share. The account (AccountProvider) is provided by the
+ * layout around it, so that every page can hand it a fresh copy.
+ */
+export default function Studio() {
   return (
-    <AccountProvider initial={account}>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <SaveMediaProvider>
-            <ProjectProvider>
-              <OnboardingProvider>
-                <Workspace />
-              </OnboardingProvider>
-            </ProjectProvider>
-          </SaveMediaProvider>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </AccountProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <SaveMediaProvider>
+          <ProjectProvider>
+            <OnboardingProvider>
+              <Workspace />
+            </OnboardingProvider>
+          </ProjectProvider>
+        </SaveMediaProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }

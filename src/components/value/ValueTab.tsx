@@ -590,7 +590,7 @@ export default function ValueTab() {
 
   const saveDataUrl = (dataUrl: string, name: string, mime: string) => {
     dataUrlToBlob(dataUrl)
-      .then((blob) => save({ blob, filename: name, mime, title: t('save.imageTitle') }))
+      .then((blob) => save({ blob, filename: name, mime, title: t('save.imageTitle'), tool: 'value' }))
       .catch((error) => console.error('[ValueTab] Failed to prepare image for saving:', error));
   };
 
@@ -604,7 +604,7 @@ export default function ValueTab() {
       const result = await drawing.savePng();
       if (!result) return;
       const filename = sketch.style === 'pencil' ? 'pencil-study.png' : 'clean-outline.png';
-      save({ blob: result.blob, filename, mime: 'image/png', title: t('save.imageTitle') });
+      await save({ blob: result.blob, filename, mime: 'image/png', title: t('save.imageTitle'), tool: 'value' });
     } catch (error) {
       console.error('[ValueTab] Failed to export the sketch:', error);
     } finally {
@@ -628,7 +628,7 @@ export default function ValueTab() {
     setSavingSketch(true);
     try {
       const blob = await drawing.saveSvg();
-      if (blob) save({ blob, filename: 'clean-outline.svg', mime: 'image/svg+xml', title: t('save.svgTitle') });
+      if (blob) await save({ blob, filename: 'clean-outline.svg', mime: 'image/svg+xml', title: t('save.svgTitle'), tool: 'value' });
     } catch (error) {
       console.error('[ValueTab] Failed to export sketch SVG:', error);
     } finally {

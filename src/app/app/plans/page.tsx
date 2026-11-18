@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { requireUser } from '@/server/session';
+import { AccountSync } from '@/components/shell/account';
+import { requireStudioAccount } from '@/server/studio-account';
 
 export const metadata: Metadata = { title: 'Plans · Studio Companion', robots: { index: false, follow: false } };
 
@@ -7,8 +8,9 @@ export const metadata: Metadata = { title: 'Plans · Studio Companion', robots: 
 export const dynamic = 'force-dynamic';
 
 // The plans view is rendered by the studio in ../layout.tsx (so the tools stay
-// alive behind it); this page re-verifies the session for every request.
+// alive behind it); this page re-verifies the session for every request and
+// sends the account (and what each plan includes) as it is now.
 export default async function PlansPage() {
-  await requireUser('/app/plans');
-  return null;
+  const { account } = await requireStudioAccount('/app/plans');
+  return <AccountSync account={account} />;
 }

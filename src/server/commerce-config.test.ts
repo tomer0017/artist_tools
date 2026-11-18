@@ -12,7 +12,7 @@ import { catalogSpec, defaultCatalog, describeCatalogChanges } from './config/ca
 import { pricingSpec } from './config/pricing';
 import { discardDraft, getPublished, listVersions, publishDraft, publishedDocument, restoreAsDraft, saveDraft } from './config/versions';
 import { checkCoupon, createCoupon, discountedAmount, setCouponStatus } from './coupons';
-import { authorizeFeatureUse, clearPlanCache, getEntitlements } from './entitlements';
+import { authorizeFeatureUse, getEntitlements } from './entitlements';
 
 // Versioned configuration, quotas, prices, coupons and analytics against a
 // real database.
@@ -25,7 +25,6 @@ beforeAll(async () => {
   mongo = await startTestMongo();
   db = mongo.db;
   await migrate(db);
-  clearPlanCache();
 }, MONGO_STARTUP_TIMEOUT);
 
 afterAll(async () => mongo?.stop());

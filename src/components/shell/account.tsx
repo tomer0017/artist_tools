@@ -5,18 +5,20 @@ import { useTranslations } from 'use-intl';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AccountSummary, ToolId } from '@/lib/account';
 import { clearDeviceWork } from '@/lib/device-data';
-import type { FeatureId } from '@/lib/plans';
+import { TOOL_FEATURES, type FeatureId } from '@/lib/plans';
 import { signInPath } from '@/lib/redirects';
 import { accountIdentity } from '@/lib/username';
 import { pathForView } from './tools';
 
-/** Who is signed in and what their account includes, as the server reported it (display only). */
+/** Who is signed in and what their account may use, as the server last reported it. */
 export type StudioAccount = AccountSummary;
 
 interface AccountState {
   account: StudioAccount;
   /** Re-read the account from the server (/api/me). */
   refresh: () => Promise<void>;
+  /** Take a copy the server sent with a page (AccountSync); an older copy than the one held is ignored. */
+  receive: (account: StudioAccount) => void;
   /** Remember (on the account) that a tool's first-visit introduction was dismissed. */
   markIntroSeen: (tool: ToolId) => void;
   /** Show every tool's introduction again. */
@@ -25,46 +27,94 @@ interface AccountState {
 
 const AccountContext = createContext<AccountState | null>(null);
 
-/** Coming back to the studio re-reads the account at most this often. */
-const REFRESH_AFTER_MS = 30_000;
+/** While the studio is in view, the account is re-read this often (a plan change, a newly published catalog). */
+export const ACCOUNT_CHECK_MS = 60_000;
+/** Coming back to the studio re-reads the account if the last copy is older than this. */
+const RETURN_CHECK_MS = 10_000;
+/** Tabs of the same account tell each other when what it may use changes. */
+const CHANNEL = 'studio-account';
+
+/** Whether two copies of the account differ in what it may use (worth telling the other tabs). */
+const accessKey = (a: StudioAccount) => JSON.stringify([a.role, a.access, a.plan, [...a.features].sort(), a.offer, a.quotas]);
 
 /**
- * Holds the account the server rendered the studio with, and keeps it current:
- * a plan or role change made by an admin shows up when the studio comes back
- * into view (or the profile opens). If the session has ended, it sends the
- * person to sign in and back to where they were.
+ * Holds the account the server rendered the studio with, and keeps it current,
+ * so a plan or role change made by an admin, or a newly published plan
+ * catalog, reaches an open studio without signing in again: every navigation
+ * inside the studio brings a fresh copy from the server (AccountSync); while
+ * the studio is in view it asks every minute, and again when it comes back
+ * into view; and an open tab tells the account's other tabs as soon as it
+ * learns of a change. A copy older than the one held never replaces it. If
+ * the session has ended, it sends the person to sign in and back to where
+ * they were; if the browser is now signed in to another account, the page
+ * reloads as that account.
  */
 export function AccountProvider({ initial, children }: { initial: StudioAccount; children: React.ReactNode }) {
   const [account, setAccount] = useState(initial);
-  const lastRefresh = useRef(Date.now());
+  const current = useRef(initial);
+  const lastCheck = useRef(Date.now());
+  const channel = useRef<BroadcastChannel | null>(null);
+
+  const apply = useCallback((next: StudioAccount, tellOtherTabs: boolean) => {
+    const held = current.current;
+    if (next.id !== held.id || Date.parse(next.asOf) <= Date.parse(held.asOf)) return;
+    current.current = next;
+    lastCheck.current = Date.now();
+    setAccount(next);
+    if (tellOtherTabs && accessKey(next) !== accessKey(held)) channel.current?.postMessage({ type: 'account', account: next });
+  }, []);
 
   const refresh = useCallback(async () => {
-    lastRefresh.current = Date.now();
+    lastCheck.current = Date.now();
     try {
-      const response = await fetch('/api/me', { cache: 'no-store', credentials: 'same-origin' });
+      const response = await fetch('/api/me?check=1', { cache: 'no-store', credentials: 'same-origin' });
       if (response.status === 401) {
         window.location.assign(signInPath(window.location.pathname));
         return;
       }
       if (!response.ok) return;
       const body = (await response.json()) as { user: StudioAccount };
-      setAccount(body.user);
+      if (body.user.id !== current.current.id) {
+        window.location.reload();
+        return;
+      }
+      apply(body.user, true);
     } catch {
-      // Offline or the server is restarting: keep what we have.
+      // Offline or the server is restarting: keep the server's last answer.
     }
-  }, []);
+  }, [apply]);
+
+  const receive = useCallback((next: StudioAccount) => apply(next, true), [apply]);
 
   useEffect(() => {
+    const inView = () => document.visibilityState === 'visible';
     const onReturn = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastRefresh.current > REFRESH_AFTER_MS) void refresh();
+      if (inView() && Date.now() - lastCheck.current > RETURN_CHECK_MS) void refresh();
     };
+    const timer = window.setInterval(() => {
+      if (inView() && Date.now() - lastCheck.current >= ACCOUNT_CHECK_MS - 1_000) void refresh();
+    }, ACCOUNT_CHECK_MS);
     document.addEventListener('visibilitychange', onReturn);
     window.addEventListener('focus', onReturn);
     return () => {
+      window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onReturn);
       window.removeEventListener('focus', onReturn);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const tabs = new BroadcastChannel(CHANNEL);
+    channel.current = tabs;
+    tabs.onmessage = (event: MessageEvent<{ type?: string; account?: StudioAccount }>) => {
+      if (event.data?.type === 'account' && event.data.account) apply(event.data.account, false);
+    };
+    return () => {
+      tabs.close();
+      channel.current = null;
+    };
+  }, [apply]);
 
   const markIntroSeen = useCallback((tool: ToolId) => {
     // Shown as dismissed at once, and on this device even if saving fails.
@@ -92,8 +142,17 @@ export function AccountProvider({ initial, children }: { initial: StudioAccount;
     }
   }, [initial.id]);
 
-  const value = useMemo(() => ({ account, refresh, markIntroSeen, resetIntros }), [account, refresh, markIntroSeen, resetIntros]);
+  const value = useMemo(() => ({ account, refresh, receive, markIntroSeen, resetIntros }), [account, refresh, receive, markIntroSeen, resetIntros]);
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
+}
+
+/** Hands the studio the account a server page sent with this navigation (read from the database just now). Renders nothing. */
+export function AccountSync({ account }: { account: StudioAccount }) {
+  const receive = useContext(AccountContext)?.receive;
+  useEffect(() => {
+    receive?.(account);
+  }, [account, receive]);
+  return null;
 }
 
 // A per-device copy of dismissed introductions (keyed by account), so one is
@@ -127,12 +186,19 @@ function forgetIntrosLocally(userId: string) {
 export const useAccount = () => useContext(AccountContext);
 
 /**
- * Whether the account includes a feature — a copy of the server's decision,
- * for showing locks. The server checks again before the feature is used.
+ * Whether the account includes a feature — the server's latest decision, for
+ * what the studio offers. Saves and exports are authorized by the server again
+ * when they happen (src/components/common/SaveMedia.tsx).
  */
 export function useHasFeature(feature: FeatureId): boolean {
   const state = useContext(AccountContext);
   return state ? state.account.features.includes(feature) : false;
+}
+
+/** Whether the account may open each tool now (the server's latest decision); no account: nothing opens. */
+export function useToolAllowed(): (tool: ToolId) => boolean {
+  const features = useContext(AccountContext)?.account.features;
+  return useCallback((tool: ToolId) => features?.includes(TOOL_FEATURES[tool]) === true, [features]);
 }
 
 /**

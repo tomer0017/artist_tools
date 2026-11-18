@@ -3,23 +3,24 @@
 import Link from 'next/link';
 import { useTranslations } from 'use-intl';
 import { Check, Clock, Crown, Minus, Sparkles } from 'lucide-react';
-import { FEATURE_MATRIX, PLAN_FEATURES, PRO_FEATURES, type PlanId } from '@/lib/plans';
+import { featureRows, hasAllTools, isDefaultSplit, type FeatureRow, type PlanId, type PlanOffer } from '@/lib/plans';
 
 // ─── Plans ────────────────────────────────────────────────────────────────────
-// Free and Pro side by side, from the same matrix the server enforces
-// (src/lib/plans.ts). There are no prices and nothing to buy: Free is
-// available now, Pro is "coming soon", and the page says so plainly. Used by
-// the public /pricing page and by the studio's /app/plans view.
-
-const proOnly = FEATURE_MATRIX.filter((row) => row.features.some((f) => PRO_FEATURES.includes(f)));
-const inFree = FEATURE_MATRIX.filter((row) => row.features.every((f) => PLAN_FEATURES.free.includes(f)));
+// Free and Pro side by side, from the published plans the server enforces
+// (`offer`, read from the database: src/server/entitlements.ts), so what this
+// page says is what the studio opens. There are no prices and nothing to buy:
+// Free is available now, Pro is "coming soon", and the page says so plainly.
+// Used by the public /pricing page and by the studio's /app/plans view.
 
 export function PlanComparison({
+  offer,
   current,
   isAdmin = false,
   freeAction,
   registration,
 }: {
+  /** What each plan includes as published. */
+  offer: PlanOffer;
   /** The signed-in person's plan in force, or null on the public page. */
   current: PlanId | null;
   isAdmin?: boolean;
@@ -29,14 +30,22 @@ export function PlanComparison({
   registration?: 'open' | 'invite' | null;
 }) {
   const t = useTranslations('plans');
+  const tg = useTranslations();
+  const rows = featureRows([offer.free, offer.pro]);
+  const includes = (plan: PlanId, row: FeatureRow) => row.features.every((f) => offer[plan].includes(f));
+  const inFree = rows.filter((row) => includes('free', row));
+  const proOnly = rows.filter((row) => includes('pro', row) && !includes('free', row));
+  const label = (row: FeatureRow) => (row.kind === 'tool' ? tg(`tools.${row.id}.title`) : t(`rows.${row.id}.label`));
+  const detail = (row: FeatureRow) => (row.kind === 'tool' ? tg(`tools.${row.id}.description`) : t(`rows.${row.id}.detail`));
+  const defaults = isDefaultSplit(offer);
   const questions = [
-    { q: t('faq.freeQ'), a: t('faq.freeA') },
+    { q: t('faq.freeQ'), a: hasAllTools(offer.free) ? t('faq.freeA') : t('faq.freeAPartial') },
     ...(registration === 'invite'
       ? [{ q: t('faq.accountQ'), a: t('faq.accountInviteA') }]
       : registration === 'open'
         ? [{ q: t('faq.accountQ'), a: t('faq.accountOpenA') }]
         : []),
-    { q: t('faq.proQ'), a: t('faq.proA') },
+    { q: t('faq.proQ'), a: defaults ? t('faq.proA') : t('faq.proAPartial') },
     { q: t('faq.buyQ'), a: t('faq.buyA') },
     { q: t('faq.uploadQ'), a: t('faq.uploadA') },
   ];
@@ -55,11 +64,11 @@ export function PlanComparison({
           </div>
           <ul className="mt-5 space-y-3" aria-label={t('includedInFree')}>
             {inFree.map((row) => (
-              <li key={row.id} className="flex gap-3">
+              <li key={`${row.kind}-${row.id}`} className="flex gap-3">
                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium text-foreground">{t(`rows.${row.id}.label`)}</span>
-                  <span className="block text-xs text-muted-foreground">{t(`rows.${row.id}.detail`)}</span>
+                  <span className="block text-sm font-medium text-foreground">{label(row)}</span>
+                  <span className="block text-xs text-muted-foreground">{detail(row)}</span>
                 </span>
               </li>
             ))}
@@ -94,11 +103,11 @@ export function PlanComparison({
           <p className="mt-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('everythingPlus')}</p>
           <ul className="mt-3 space-y-3" aria-label={t('addedInPro')}>
             {proOnly.map((row) => (
-              <li key={row.id} className="flex gap-3">
+              <li key={`${row.kind}-${row.id}`} className="flex gap-3">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium text-foreground">{t(`rows.${row.id}.label`)}</span>
-                  <span className="block text-xs text-muted-foreground">{t(`rows.${row.id}.detail`)}</span>
+                  <span className="block text-sm font-medium text-foreground">{label(row)}</span>
+                  <span className="block text-xs text-muted-foreground">{detail(row)}</span>
                 </span>
               </li>
             ))}
@@ -137,15 +146,15 @@ export function PlanComparison({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {FEATURE_MATRIX.map((row) => (
-              <tr key={row.id}>
+            {rows.map((row) => (
+              <tr key={`${row.kind}-${row.id}`}>
                 <th scope="row" className="px-4 py-3 text-start font-normal md:px-5">
-                  <span className="block font-medium text-foreground">{t(`rows.${row.id}.label`)}</span>
-                  <span className="block text-xs text-muted-foreground">{t(`rows.${row.id}.detail`)}</span>
+                  <span className="block font-medium text-foreground">{label(row)}</span>
+                  <span className="block text-xs text-muted-foreground">{detail(row)}</span>
                 </th>
                 {(['free', 'pro'] as const).map((plan) => (
                   <td key={plan} className="px-2 py-3 text-center">
-                    {row.features.every((f) => PLAN_FEATURES[plan].includes(f)) ? (
+                    {includes(plan, row) ? (
                       <Check className="mx-auto h-4 w-4 text-primary" aria-label={t('included')} />
                     ) : (
                       <Minus className="mx-auto h-4 w-4 text-muted-foreground" aria-label={t('notIncluded')} />

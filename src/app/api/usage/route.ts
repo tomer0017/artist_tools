@@ -1,22 +1,30 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { FEATURES } from '@/lib/plans';
+import { EXPORT_FEATURE_IDS, TOOL_FEATURE_IDS } from '@/lib/plans';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
-import { authorizeFeatureUse } from '@/server/entitlements';
+import { authorizeToolUse } from '@/server/entitlements';
 import { log } from '@/server/log';
 import { BodyTooLarge, fromOwnOrigin, readJsonBody } from '@/server/request';
 import { getSession } from '@/server/session';
 
-// The studio asks here right before it uses a counted or plan-limited feature
-// (e.g. a Large GIF). The server decides from the database whether this
-// account may, and counts the use; the browser only follows the answer.
+// The studio asks here right before every save or export (and before saving
+// a project file): `tool` is the tool it comes from, which must be included in
+// the account's plan (checked, not counted); `features` are what is exported
+// (an image, a GIF, a large GIF…), each authorized and counted. The server
+// decides from the database alone; the browser only follows the answer, and
+// treats no answer as a refusal.
 
 export const dynamic = 'force-dynamic';
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 
-const Body = z.object({ features: z.array(z.enum(FEATURES)).min(1).max(FEATURES.length) });
+const Body = z
+  .object({
+    tool: z.enum(TOOL_FEATURE_IDS).optional(),
+    features: z.array(z.enum(EXPORT_FEATURE_IDS)).max(EXPORT_FEATURE_IDS.length).default([]),
+  })
+  .refine((body) => body.tool !== undefined || body.features.length > 0, 'nothing to authorize');
 
 export async function POST(request: Request) {
   if (!fromOwnOrigin(request)) return json({ error: 'forbidden' }, 403);
@@ -27,7 +35,7 @@ export async function POST(request: Request) {
     const body = Body.safeParse(await readJsonBody(request, 4 * 1024));
     if (!body.success) return json({ error: 'invalid_request' }, 400);
 
-    const result = await authorizeFeatureUse(getDb(), userId, body.data.features);
+    const result = await authorizeToolUse(getDb(), userId, { tool: body.data.tool ?? null, features: body.data.features });
     if (result.status === 'denied') {
       return result.reason === 'limit_reached'
         ? json({ error: 'limit_reached', features: result.missing }, 429)

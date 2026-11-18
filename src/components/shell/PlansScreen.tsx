@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useTranslations } from 'use-intl';
 import { PlanComparison } from '@/components/plans/PlanComparison';
+import { hasAllTools } from '@/lib/plans';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAccount } from './account';
 import { BrandMark } from './BrandMark';
@@ -38,10 +39,14 @@ export default function PlansScreen() {
         <h1 id="plans-screen-title" className="text-[26px] font-bold leading-tight tracking-tight text-foreground md:text-3xl">
           {t('plans.title')}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground md:text-base">{t('studio.plansLead')}</p>
-        <div className="mt-5">
-          <PlanComparison current={state?.account.plan.effective ?? null} isAdmin={state?.account.role === 'admin'} />
-        </div>
+        <p className="mt-1 text-sm text-muted-foreground md:text-base">
+          {state && !hasAllTools(state.account.offer.free) ? t('studio.plansLeadPartial') : t('studio.plansLead')}
+        </p>
+        {state && (
+          <div className="mt-5">
+            <PlanComparison offer={state.account.offer} current={state.account.plan.effective} isAdmin={state.account.role === 'admin'} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -109,7 +109,7 @@ export default function MeasureMobile() {
   >(null);
 
   // Image export goes through the shared Save-to-Photos flow.
-  const { save } = useSaveMedia();
+  const { save, authorize } = useSaveMedia();
 
   const selectedLine = measurements.find(m => m.id === selectedLineId) || null;
 
@@ -637,7 +637,7 @@ export default function MeasureMobile() {
 
       const finish = (blob: Blob | null) => {
         if (!blob) return;
-        save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle') });
+        void save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure' });
       };
       if (c.toBlob) c.toBlob(finish, 'image/png');
       else {
@@ -658,15 +658,17 @@ export default function MeasureMobile() {
     img.src = image;
   }, [image, measurements, layers, getRealSize, save, t]);
 
-  const exportJSON = useCallback(() => {
+  const exportJSON = useCallback(async () => {
     setSheet(null);
+    // A protected operation of the tool: only while the plan still includes Measure.
+    if (!(await authorize({ tool: 'measure', features: [] }))) return;
     try {
       const blob = new Blob([exportProjectJSON()], { type: 'application/json' });
       triggerDownload(blob, 'studio-companion-project.json');
     } catch (error) {
       console.error('[MeasureMobile] Failed to export project JSON:', error);
     }
-  }, [exportProjectJSON, triggerDownload]);
+  }, [exportProjectJSON, triggerDownload, authorize]);
 
   // ---------- Render ----------
   if (!image) {

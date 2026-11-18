@@ -4,7 +4,7 @@ import { BadgeCheck, Check, Crown, Lock, LogOut, RotateCcw, ShieldCheck, Sparkle
 import { useLocale, useTranslations } from 'use-intl';
 import { DataCard, DevicesCard, NameEditor, PreferencesCard, SignInMethodsCard } from '@/components/account/ProfileSections';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { FEATURE_MATRIX, type FeatureId } from '@/lib/plans';
+import { featureRows, hasAllTools, isDefaultSplit, type FeatureId } from '@/lib/plans';
 import { AccountAvatar, useAccount, useSignOut, type StudioAccount } from './account';
 import { BrandMark } from './BrandMark';
 import { pathForView } from './tools';
@@ -26,7 +26,8 @@ function planSummary(account: StudioAccount, t: T, longDate: (iso: string) => st
     if (account.grant?.planId === 'pro') return t('plan.summaryGrant', { date: longDate(account.grant.endsAt) });
     return t('plan.summarySubscription');
   }
-  return t('plan.summaryFree');
+  // "All five tools" only while the plan in force really includes them (the published catalog decides).
+  return hasAllTools(account.features) ? t('plan.summaryFree') : t('plan.summaryFreePartial');
 }
 
 /** A feature's name in the page language (usage limits). */
@@ -182,21 +183,26 @@ export default function ProfileScreen() {
             </ul>
           )}
 
+          {/* What this account may use right now, one row per tool when they differ: the same answer the tools follow. */}
           <ul aria-label={t('plan.includes')} className="mt-4 divide-y divide-border border-t border-border">
-            {FEATURE_MATRIX.map((row) => {
+            {featureRows([account.features]).map((row) => {
               const has = row.features.every((f) => included.has(f));
+              // "Pro" only where Pro really includes it (the published plans), and not for a Pro account.
+              const inPro = plan !== 'pro' && row.features.every((f) => account.offer.pro.includes(f));
               return (
-                <li key={row.id} className="flex items-start gap-3 py-2.5">
+                <li key={`${row.kind}-${row.id}`} className="flex items-start gap-3 py-2.5">
                   {has ? (
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-label={tg('plans.included')} />
                   ) : (
                     <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-label={tg('plans.notIncluded')} />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium ${has ? 'text-foreground' : 'text-muted-foreground'}`}>{tg(`plans.rows.${row.id}.label`)}</p>
-                    <p className="text-xs text-muted-foreground">{tg(`plans.rows.${row.id}.detail`)}</p>
+                    <p className={`text-sm font-medium ${has ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      {row.kind === 'tool' ? tg(`tools.${row.id}.title`) : tg(`plans.rows.${row.id}.label`)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{row.kind === 'tool' ? tg(`tools.${row.id}.description`) : tg(`plans.rows.${row.id}.detail`)}</p>
                   </div>
-                  {!has && <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">Pro</span>}
+                  {!has && inPro && <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">Pro</span>}
                 </li>
               );
             })}
@@ -205,7 +211,7 @@ export default function ProfileScreen() {
           {!isAdmin && plan === 'free' && (
             <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
               <p className="font-semibold text-foreground">{t('plan.upgradeTitle')}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{t('plan.upgradeLead')}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{isDefaultSplit(account.offer) ? t('plan.upgradeLead') : t('plan.upgradeLeadPartial')}</p>
               <button
                 type="button"
                 disabled
