@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-18 17:24:48 | `6f2159a` | **Create a Grid improvements, Learn milestone M1** (approved by the owner; includes `f2f7b91`). Rotation left or right 90° or by 180°: only the drawing turns, never the stored photo. Exact A4 portrait and landscape. Square cells of a set size. **Save blank grid** (the same lines on white, for paper), through the same authorized save. Exact zoom and moves beside drag, pinch and wheel. The geometry is shared in `src/lib/grid`. Grids saved before M1 open and save byte for byte as before. No Learn screens, content, migrations or feature IDs. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 17:24:43, `mongodb-20261118T172443Z`) |
 | 2026-11-18 15:52:59 | `224bb65` | **Rolling back never resets or widens the published plans** (ADR-0014; approved by the owner as a separate security fix; includes `9c38661`). An older release keeps the feature IDs and sections a newer one published, and applies none of them. A setting it cannot apply withholds that feature (fail closed). An unreadable catalog leaves `plans` as it is, never the defaults. Admin → Plans says so and turns editing off. New read-only `npm run db -- catalog-status`. No feature ID added. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 15:52:54, `mongodb-20261118T155254Z`) |
 | 2026-11-18 12:49:17 | `be6890c` | The staging checks (`login-test`, `entitlement-test`) try a request again, up to five times, when it could not be made: the server's resolver sometimes takes 5–15 s for staging's own sslip.io name. App unchanged | 44 indexes ensured; no data changed | yes (release step, 12:49:12) |
 | 2026-11-18 12:34:24 | `cc98437` | The publication check never overwrites an admin: it records the live version and content first, and publishes the temporary version and the restore only over the version it expects (`publishIfUnchanged`); scripts are type-checked in CI. App unchanged | 44 indexes ensured; no data changed | yes (release step, 12:34:18) |
@@ -44,6 +45,59 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Create a Grid improvements (Learn M1) on staging, `6f2159a` (2026-11-18, 17:23–17:40Z)
+
+Approved by the owner as M1 only (no Learn screens, content or migrations).
+Nothing was published: the published plan settings stay as they are.
+Production and GitHub Pages are untouched.
+
+- **Before:**
+  - CI run 33 (`6f2159a`) green.
+  - CI run 32 (`f2f7b91`) failed one new e2e test: it read the project from
+    storage before the 300 ms auto-save had written it. The test was fixed
+    in `6f2159a`; the app was unchanged.
+  - Capture: catalog version 6 `f8a1a43e4cedbed7`, `plans`
+    `48f75a1f7925d6c5`, no draft.
+- **The release:**
+  - the dump `mongodb-20261118T172443Z`;
+  - "0 plans updated", then "Catalog version 6: applied";
+  - healthy at 17:24:48.
+- **After, on real staging:**
+  - The capture is identical: catalog, history, and `plans` with their
+    update times.
+  - `catalog-status` ok and in step.
+  - Smoke 22/22, `login-test` 13/13, `entitlement-test` (read only) 11/11.
+- **M1 in real browsers** (temporary Free, Pro and Hebrew accounts; removed;
+  passwords only in a 0600 file, deleted): 8/8 passed.
+  - **Free, rotation:** the photo in storage is unchanged; the server is
+    asked first (`tool.grid`, `export.image`: 200); the saved PNG
+    (2400 × 3360) is turned, read back pixel by pixel.
+  - **Free, A4 with 3 cm squares:** the blank grid PNG (2400 × 3394) is
+    white with black lines exactly at the 3 cm positions, read back.
+  - **Free, zoom and moves:** −/+ 1 %, typed 150 %, moves of 0.1 cm, then
+    drag and wheel; axe clean with every control open.
+  - **Free, a grid saved before M1:** it opens and saves as before (name,
+    size, pixels).
+  - **Free, failing closed:** with no answer from the server, no blank grid
+    is saved; after "Try again" it is.
+  - **Pro:** both saves.
+  - **Hebrew:** translated, the canvas left to right, axe clean.
+  - **iPhone emulation:** the rotations, square cells and both saves sit
+    above the navigation.
+- **The earlier plan-enforcement checks** on the same build: 6/6 passed
+  (the test that publishes was skipped).
+  - A first run hit staging's own limit of 5 sign-ins a minute per network
+    ("Too many attempts from this network…"), after `login-test` and
+    `entitlement-test`. It passed after a minute.
+- **Locally:**
+  - 408 unit/integration and 219 e2e tests.
+  - **A/B in one Chromium:** `224bb65` and M1 saved five grids saved before
+    M1 as byte-identical PNGs.
+  - **The preview's canvas calls,** recorded in the browser, match the
+    earlier first pass call for call. Before M1, the preview drew the grid
+    twice over itself on first load, so lines outside the photo looked
+    darker than in the saved image; M1 draws each frame cleanly.
 
 ## Rollback safety on staging, `224bb65` (2026-11-18, 15:50–16:01Z)
 

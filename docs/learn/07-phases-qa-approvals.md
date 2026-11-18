@@ -29,6 +29,7 @@ implemented or tested yet: no Learn code exists.
 ## Milestones
 
 ### M1 — Create a Grid: rotation, A4, square cells, blank grid
+- **Status:** approved; on staging since 2026-11-18 (`6f2159a`). M2 waits for the owner's approval.
 - **Scope:**
   - move the grid geometry into `src/lib/grid` unchanged (parity tests);
   - rotate 90° left/right and 180°;
