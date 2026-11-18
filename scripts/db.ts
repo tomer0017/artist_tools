@@ -277,7 +277,7 @@ async function loginTest(db: ReturnType<typeof getDb>): Promise<number> {
     console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${label}`);
   };
   const signIn = async (password: string) => {
-    const response = await fetch(`${base}/api/auth/sign-in/username`, {
+    const response = await fetchRetrying(`${base}/api/auth/sign-in/username`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ username, password }),
@@ -288,10 +288,10 @@ async function loginTest(db: ReturnType<typeof getDb>): Promise<number> {
     return { status: response.status, code: body?.code, cookie: cookies.map((c) => c.split(';')[0]).join('; '), raw: cookies };
   };
   const me = async (cookie: string) => {
-    const response = await fetch(`${base}/api/me`, { headers: { cookie } });
+    const response = await fetchRetrying(`${base}/api/me`, { headers: { cookie } });
     return { status: response.status, body: (await response.json().catch(() => null)) as { user?: { username?: string; role?: string; features?: string[]; plan?: { effective?: string } } } | null };
   };
-  const status = async (path: string, cookie: string) => (await fetch(`${base}${path}`, { headers: { cookie }, redirect: 'manual' })).status;
+  const status = async (path: string, cookie: string) => (await fetchRetrying(`${base}${path}`, { headers: { cookie }, redirect: 'manual' })).status;
 
   console.log(`Username sign-in test against ${base} with a temporary account (${username}):`);
   const created = await createUsernameAccount(db, auth, { username, plan: 'free', locale: 'en', test: true, actor: 'cli' });
@@ -346,16 +346,17 @@ async function loginTest(db: ReturnType<typeof getDb>): Promise<number> {
 }
 
 /**
- * fetch, tried again (up to three times, two seconds apart) when the request
- * could not be made at all — e.g. this server failing for a moment to resolve
- * its own public name — but never after an answer, whatever it is.
+ * fetch, tried again (up to five times, two seconds apart) when the request
+ * could not be made at all — this server's resolver sometimes takes 5 to 15 s
+ * to resolve its own public (sslip.io) name — but never after an answer,
+ * whatever it is.
  */
 async function fetchRetrying(url: string, init?: RequestInit): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await fetch(url, init);
     } catch (error) {
-      if (attempt >= 3) throw error;
+      if (attempt >= 5) throw error;
       await new Promise((resolve) => setTimeout(resolve, 2_000));
     }
   }
