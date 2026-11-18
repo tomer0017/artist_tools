@@ -26,11 +26,21 @@ describe('authConfig', () => {
       signups: { mode: 'invite', invited: [] },
       appEnv: null,
       emailPassword: false,
+      usernamePassword: false,
       adminMfaRequired: false,
       mail: { transport: 'disabled', from: 'Studio Companion <no-reply@studio-companion.invalid>', smtp: null },
     });
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
     expect(authConfig().google).toBeNull();
+  });
+
+  it('offers username sign-in only when AUTH_USERNAME_PASSWORD=on, and needs no mail for it', () => {
+    withEnv({ ...BASE, AUTH_USERNAME_PASSWORD: 'on' });
+    expect(authConfig()).toMatchObject({ usernamePassword: true, emailPassword: false, mail: { transport: 'disabled' } });
+    withEnv({ ...BASE, AUTH_USERNAME_PASSWORD: 'off' });
+    expect(authConfig().usernamePassword).toBe(false);
+    withEnv({ ...BASE, AUTH_USERNAME_PASSWORD: 'yes' });
+    expect(() => authConfig()).toThrow('AUTH_USERNAME_PASSWORD must be "on" or "off"');
   });
 
   it('requires two-factor verification for admins only when ADMIN_MFA_REQUIRED=on', () => {

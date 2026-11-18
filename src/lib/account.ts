@@ -14,7 +14,10 @@ export type ToolId = (typeof TOOL_IDS)[number];
 export interface AccountSummary {
   id: string;
   name: string;
+  /** A username account's is only a placeholder (src/lib/username.ts): show `username` instead. */
   email: string;
+  /** Accounts an administrator created for a tester sign in with this username (as given); null otherwise. */
+  username: string | null;
   emailVerified: boolean;
   image: string | null;
   role: 'user' | 'admin';
@@ -38,4 +41,6 @@ export interface AccountSummary {
   methods: { google: boolean; password: boolean };
   /** Whether this server offers email + password (adding a password, connecting Google to one). */
   emailPasswordEnabled: boolean;
+  /** Whether this server offers username sign-in (a username account can then change its password). */
+  usernamePasswordEnabled: boolean;
 }

@@ -50,6 +50,16 @@ export interface UserDoc {
   suspendReason?: SuspendReason | null;
   /** Test accounts are left out of product analytics and revenue figures. */
   testAccount?: boolean;
+  /**
+   * Accounts an administrator created for a tester sign in with this username
+   * (lower case; `displayUsername` keeps the capitals it was given) and a
+   * password. Only the server sets it, at creation; Google accounts never have
+   * one. Their `email` is a placeholder under `.invalid` (src/lib/username.ts).
+   */
+  username?: string | null;
+  displayUsername?: string | null;
+  /** Who created a username account: 'admin:<id>' or 'cli'. */
+  createdBy?: string | null;
 }
 
 /** Why an account was suspended (an enum, never free text). */
@@ -258,6 +268,21 @@ export interface AdminMfaSessionDoc {
   expiresAt: Date;
 }
 
+/**
+ * An initial password waiting to be revealed once to an administrator
+ * (src/server/password-accounts.ts): sealed, removed when revealed, when the
+ * password is reset or changed, or when it expires (TTL). `_id` is the user id.
+ */
+export interface PasswordHandoffDoc {
+  _id: ObjectId;
+  /** The password, sealed for this purpose only (src/server/security/secret-box.ts). */
+  sealed: string;
+  /** 'admin:<id>' or 'cli'. */
+  createdBy: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
 /** One group of errors seen in browsers or on the server (src/server/error-reports.ts); no personal data. */
 export interface ErrorReportDoc {
   /** Fingerprint of the source, message and top stack line. */
@@ -321,6 +346,11 @@ export type AuditEventType =
   | 'admin.account_suspended'
   | 'admin.account_reactivated'
   | 'admin.test_flag_changed'
+  | 'admin.account_created'
+  | 'admin.account_removed'
+  | 'admin.password_reset'
+  | 'admin.sessions_revoked'
+  | 'admin.initial_password_revealed'
   | 'admin.grant_created'
   | 'admin.grant_revoked'
   | 'admin.audit_exported'
@@ -475,6 +505,7 @@ export function collections(db: Db) {
     adminMfaSessions: db.collection<AdminMfaSessionDoc>('admin_mfa_sessions'),
     errorReports: db.collection<ErrorReportDoc>('error_reports'),
     couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
+    passwordHandoffs: db.collection<PasswordHandoffDoc>('password_handoffs'),
   };
 }
 

@@ -1,11 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
-// The public sign-in exactly as staging runs it: Google only, open to every
-// Google-verified account, email and password switched off, no mail at all.
-// These run against the second test server (port 8081, with its own
-// database; scripts/e2e-server.ts). Google itself is never contacted: the
-// browser's redirect to it is caught.
+// The public sign-in exactly as staging runs it: Google, open to every
+// Google-verified account; email and password switched off; no mail at all;
+// and a username form for testers whose accounts an admin created (no
+// registration with it; e2e/username-accounts.spec.ts). These run against
+// the second test server (port 8081, with its own database;
+// scripts/e2e-server.ts). Google itself is never contacted: the browser's
+// redirect to it is caught.
 
 const signedOut = { storageState: { cookies: [], origins: [] } };
 const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
@@ -14,24 +16,30 @@ const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 test.describe('signed out', () => {
   test.use(signedOut);
 
-  test('the sign-in page has one action, Continue with Google, and nothing about passwords, registration or invitations', async ({ page }) => {
+  test('the sign-in page offers Continue with Google, and a username form for invited testers, with no registration, email or reset', async ({ page }) => {
     await page.goto('/sign-in');
     await expect(page.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeEnabled();
     await expect(page.getByText(/your free account is created automatically/)).toBeVisible();
-    await expect(page.getByRole('textbox')).toHaveCount(0);
-    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    const form = page.getByRole('form', { name: 'Sign in with a username' });
+    await expect(form.getByLabel('Username')).toHaveAttribute('autocomplete', 'username');
+    await expect(form.locator('input[type="password"]')).toHaveAttribute('autocomplete', 'current-password');
+    // Two fields, the username and its password: no email address anywhere.
+    await expect(page.locator('input:not([type="hidden"])')).toHaveCount(2);
+    await expect(page.locator('input[type="email"]')).toHaveCount(0);
     await expect(page.getByRole('link', { name: /create an account|forgot/i })).toHaveCount(0);
-    await expect(page.locator('body')).not.toContainText(/invite|create an account|forgot/i);
+    await expect(page.getByText(/there is no sign-up with one/)).toBeVisible();
+    await expect(page.locator('body')).not.toContainText(/invite-only|create an account|email address and a password/i);
     expect((await new AxeBuilder({ page }).withTags(WCAG).analyze()).violations.map((v) => v.id)).toEqual([]);
   });
 
-  test('in Hebrew the one action reads המשך עם Google', async ({ page }) => {
+  test('in Hebrew the actions read המשך עם Google and כניסה עם שם משתמש', async ({ page }) => {
     await page.goto('/he/sign-in');
     await expect(page.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'המשך עם Google' })).toBeEnabled();
-    await expect(page.getByRole('textbox')).toHaveCount(0);
-    await expect(page.locator('body')).not.toContainText(/הזמנה|יצירת חשבון|שכחת/);
+    await expect(page.getByRole('form', { name: 'כניסה עם שם משתמש' }).getByLabel('שם משתמש')).toBeVisible();
+    await expect(page.locator('input:not([type="hidden"])')).toHaveCount(2);
+    await expect(page.locator('body')).not.toContainText(/בהזמנה בלבד|יצירת חשבון|שכחת/);
     expect((await new AxeBuilder({ page }).withTags(WCAG).analyze()).violations.map((v) => v.id)).toEqual([]);
   });
 
@@ -48,14 +56,30 @@ test.describe('signed out', () => {
     await expect(page).toHaveURL(/\/he\/sign-in$/);
   });
 
-  test('the password endpoints do not exist', async ({ request }) => {
-    for (const path of ['sign-up/email', 'sign-in/email', 'request-password-reset', 'reset-password', 'send-verification-email']) {
+  test('the email password endpoints, the username lookup and the server-only account endpoints do not exist', async ({ request }) => {
+    for (const path of [
+      'sign-up/email',
+      'sign-in/email',
+      'request-password-reset',
+      'reset-password',
+      'send-verification-email',
+      'is-username-available',
+      'studio/create-username-account',
+      'studio/set-username-password',
+    ]) {
       const response = await request.post(`/api/auth/${path}`, {
         headers: { origin: 'http://localhost:8081' },
-        data: { email: 'someone@example.com', password: 'violet cactus harbor 42', name: 'Someone' },
+        data: { email: 'someone@example.com', password: 'violet cactus harbor 42', name: 'Someone', username: 'someone', plan: 'pro', locale: 'en' },
       });
       expect(response.status(), path).toBe(404);
     }
+    // Username sign-in exists, and says nothing about whether a username does.
+    const signIn = await request.post('/api/auth/sign-in/username', {
+      headers: { origin: 'http://localhost:8081', 'x-real-ip': '10.67.0.1' },
+      data: { username: 'nobody_at_all', password: 'violet cactus harbor 42' },
+    });
+    expect(signIn.status()).toBe(401);
+    expect((await signIn.json()).code).toBe('INVALID_USERNAME_OR_PASSWORD');
   });
 
   test('Continue with Google sends anyone to Google, asking only for openid, email and profile, with state and PKCE', async ({ page }) => {

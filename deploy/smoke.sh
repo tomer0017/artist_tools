@@ -8,8 +8,10 @@
 # and Hebrew; signed-out visitors are sent to sign-in from the studio and the
 # admin; the security headers are present once each. Where email and
 # password sign-in is off (Google only), the registration and reset pages
-# lead to sign-in, the sign-in page has no password form and the password
-# endpoints do not exist. It never signs in and never changes anything.
+# lead to sign-in, the sign-in page has no email form and the password
+# endpoints do not exist; where username sign-in is on as well, it answers
+# and no endpoint tells whether a username exists. It never signs in and
+# never changes anything.
 set -uo pipefail
 BASE="${1:?usage: smoke.sh <base-url> <expected-commit>}"
 COMMIT="${2:?usage: smoke.sh <base-url> <expected-commit>}"
@@ -59,7 +61,20 @@ for page in /sign-up /forgot-password /he/sign-up; do
 done
 if [ "$google_only" = true ]; then
   code="$(fetch /sign-in)"
-  if [ "$code" = 200 ] && grep -q 'Continue with Google' "$TMP/body" && ! grep -q 'type="password"' "$TMP/body"; then
+  if grep -q 'name="username"' "$TMP/body"; then
+    # Google, plus username sign-in for accounts administrators create
+    # (AUTH_USERNAME_PASSWORD, ADR-0012): no email form and no registration.
+    if [ "$code" = 200 ] && grep -q 'Continue with Google' "$TMP/body" && ! grep -q 'type="email"' "$TMP/body"; then
+      ok "/sign-in: Google, and a username form for invited testers; no email form"
+    else
+      bad "/sign-in ($code)"
+    fi
+    # A malformed username is refused before anything is looked up or counted.
+    code="$(curl -s -m 20 -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "origin: $BASE" --data '{"username":"-","password":"-"}' "$BASE/api/auth/sign-in/username")"
+    if [ "$code" = 422 ]; then ok "username sign-in answers (422 for a malformed username)"; else bad "sign-in/username answered $code"; fi
+    code="$(curl -s -m 20 -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "origin: $BASE" --data '{"username":"someone"}' "$BASE/api/auth/is-username-available")"
+    if [ "$code" = 404 ]; then ok "no endpoint tells whether a username exists (404)"; else bad "is-username-available answered $code"; fi
+  elif [ "$code" = 200 ] && grep -q 'Continue with Google' "$TMP/body" && ! grep -q 'type="password"' "$TMP/body"; then
     ok "/sign-in: one Google button, no password form"
   else
     bad "/sign-in is not Google only ($code)"

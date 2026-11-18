@@ -31,6 +31,7 @@ const authSchema = z
       .enum(['development', 'test', 'staging', 'production'], { message: 'APP_ENV must be development, test, staging or production' })
       .optional(),
     AUTH_EMAIL_PASSWORD: z.enum(['on', 'off'], { message: 'AUTH_EMAIL_PASSWORD must be "on" or "off"' }).optional(),
+    AUTH_USERNAME_PASSWORD: z.enum(['on', 'off'], { message: 'AUTH_USERNAME_PASSWORD must be "on" or "off"' }).optional(),
     MAIL_TRANSPORT: z.enum(['disabled', 'outbox', 'smtp'], { message: 'MAIL_TRANSPORT must be "disabled", "outbox" or "smtp"' }).optional(),
     MAIL_FROM: z.string().max(200).optional(),
     // The email provider's SMTP submission server (MAIL_TRANSPORT=smtp).
@@ -138,6 +139,12 @@ export function authConfig() {
     appEnv: env.APP_ENV ?? null,
     /** Email and password sign-in (off unless AUTH_EMAIL_PASSWORD=on; always needs mail). */
     emailPassword: env.AUTH_EMAIL_PASSWORD === 'on',
+    /**
+     * Username and password sign-in for accounts that administrators create
+     * for invited testers (off unless AUTH_USERNAME_PASSWORD=on). Nobody can
+     * register this way and no email is involved (ADR-0012).
+     */
+    usernamePassword: env.AUTH_USERNAME_PASSWORD === 'on',
     /**
      * Every administrator must enrol two-factor verification before using the
      * admin dashboard (off unless ADMIN_MFA_REQUIRED=on; docs/security/admin-2fa.md).

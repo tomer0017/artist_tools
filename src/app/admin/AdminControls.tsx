@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Check, Copy } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +15,19 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ReauthPanel } from '@/components/account/parts';
 import { PLAN_NAMES, type PlanId } from '@/lib/plans';
-import { changePlan, changeRole, changeStatus, changeTestFlag, endAccess, giveAccess, type ActionResult } from './actions';
+import {
+  changePlan,
+  changeRole,
+  changeStatus,
+  changeTestFlag,
+  endAccess,
+  giveAccess,
+  resetPassword,
+  revealPassword,
+  signOutEverywhere,
+  type ActionResult,
+  type PasswordResult,
+} from './actions';
 
 // What an admin can change on an account, each behind a confirmation. The
 // server re-checks everything (see ./actions.ts); these controls only ask and
@@ -101,7 +114,22 @@ export function PlanControl({ userId, plan, name }: { userId: string; plan: Plan
   );
 }
 
-export function RoleControl({ userId, role, name, isSelf, viewer }: { userId: string; role: 'user' | 'admin'; name: string; isSelf: boolean; viewer: Viewer }) {
+export function RoleControl({
+  userId,
+  role,
+  name,
+  isSelf,
+  viewer,
+  usernameAccount = false,
+}: {
+  userId: string;
+  role: 'user' | 'admin';
+  name: string;
+  isSelf: boolean;
+  viewer: Viewer;
+  /** Signs in with a username: can never be made an admin (the server refuses too). */
+  usernameAccount?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -112,6 +140,13 @@ export function RoleControl({ userId, role, name, isSelf, viewer }: { userId: st
     return (
       <p className="text-sm text-muted-foreground">
         This is your own account. You cannot remove your own admin access here; another admin, or the server command line, can.
+      </p>
+    );
+  }
+  if (usernameAccount && role !== 'admin') {
+    return (
+      <p className="text-sm text-muted-foreground">
+        This account signs in with a username and a password from you, so it can never be made an admin. Admin access needs a Google sign-in.
       </p>
     );
   }
@@ -134,7 +169,7 @@ export function RoleControl({ userId, role, name, isSelf, viewer }: { userId: st
         className={`h-10 rounded-lg px-4 text-sm font-semibold transition-colors disabled:opacity-60 ${
           next === 'admin'
             ? 'border border-border bg-secondary/60 text-foreground hover:bg-secondary'
-            : 'border border-destructive/50 text-destructive hover:bg-destructive/10'
+            : 'border border-destructive/50 text-red-400 hover:bg-destructive/10'
         }`}
       >
         {next === 'admin' ? 'Make admin' : 'Remove admin access'}
@@ -197,7 +232,7 @@ export function StatusControl({ userId, status, name, isSelf, viewer }: { userId
           setOpen(true);
         }}
         className={`h-10 rounded-lg px-4 text-sm font-semibold transition-colors disabled:opacity-60 ${
-          suspending ? 'border border-destructive/50 text-destructive hover:bg-destructive/10' : 'border border-border bg-secondary/60 text-foreground hover:bg-secondary'
+          suspending ? 'border border-destructive/50 text-red-400 hover:bg-destructive/10' : 'border border-border bg-secondary/60 text-foreground hover:bg-secondary'
         }`}
       >
         {suspending ? 'Suspend account' : 'Reactivate account'}
@@ -388,6 +423,214 @@ export function GrantControl({ userId, name, grants }: { userId: string; name: s
               }
             >
               Give Pro
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+const UTC_TIME = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
+
+/**
+ * A password handed out once: shown with its username until "Done", never
+ * kept by the page (no storage), never shown again by the server.
+ */
+export function OneTimePassword({ credentials, onDone }: { credentials: { username: string; password: string }; onDone: () => void }) {
+  const [copied, setCopied] = useState<'ok' | 'failed' | null>(null);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(credentials.password);
+      setCopied('ok');
+    } catch {
+      setCopied('failed');
+    }
+  }
+  return (
+    <section aria-label="Password to hand over" className="mt-3 rounded-xl border border-primary/50 bg-primary/5 p-4">
+      <p className="text-sm font-semibold text-foreground">Shown once: copy it now</p>
+      <dl className="mt-3 space-y-3 text-sm">
+        <div>
+          <dt className="text-xs font-medium text-muted-foreground">Username</dt>
+          <dd dir="ltr" className="mt-0.5 break-all font-mono text-base text-foreground">
+            {credentials.username}
+          </dd>
+        </div>
+        <div>
+          <dt id="one-time-password" className="text-xs font-medium text-muted-foreground">
+            Password
+          </dt>
+          <dd className="mt-1">
+            <input
+              readOnly
+              value={credentials.password}
+              aria-labelledby="one-time-password"
+              dir="ltr"
+              autoComplete="off"
+              spellCheck={false}
+              onFocus={(e) => e.currentTarget.select()}
+              className="block h-12 w-full rounded-lg border border-border bg-background px-3 font-mono text-base tracking-wide text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        Give it to the tester in person or in a private message. It is not stored anywhere and cannot be shown again; if it is lost, reset the password. They can
+        change it on their account page.
+      </p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={copy}
+          className="flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          {copied === 'ok' ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+          {copied === 'ok' ? 'Copied' : 'Copy password'}
+        </button>
+        <button type="button" onClick={onDone} className="h-11 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-secondary">
+          Done
+        </button>
+      </div>
+      <p role="status" className={copied === 'failed' ? 'mt-2 text-xs text-destructive' : 'sr-only'}>
+        {copied === 'ok' ? 'Password copied.' : copied === 'failed' ? 'Could not copy here: select the password and copy it.' : ''}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * A username account's password: an initial one from the server command line
+ * waiting to be revealed once, and a reset that makes a new one. Both need a
+ * recent sign-in, and both show the password once.
+ */
+export function PasswordControl({
+  userId,
+  name,
+  viewer,
+  initialPassword,
+}: {
+  userId: string;
+  name: string;
+  viewer: Viewer;
+  /** ISO time until which an initial password can be revealed, or null. */
+  initialPassword: string | null;
+}) {
+  const [confirm, setConfirm] = useState<'reset' | 'reveal' | null>(null);
+  const [last, setLast] = useState<'reset' | 'reveal'>('reset');
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [credentials, setCredentials] = useState<PasswordResult['credentials'] | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const run = (what: 'reset' | 'reveal') => {
+    setLast(what);
+    startTransition(async () => {
+      const reply = what === 'reset' ? await resetPassword({ userId }) : await revealPassword({ userId });
+      setCredentials(reply.credentials ?? null);
+      setResult({ ok: reply.ok, message: reply.message, reauth: reply.reauth });
+      router.refresh();
+    });
+  };
+
+  return (
+    <div>
+      {initialPassword && !credentials && (
+        <div className="mb-4 rounded-xl border border-border bg-secondary/40 p-3">
+          <p className="text-sm font-medium text-foreground">An initial password is waiting</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Made on the server command line. It can be revealed once, until {UTC_TIME.format(new Date(initialPassword))} UTC; then it is gone.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setResult(null);
+              setConfirm('reveal');
+            }}
+            className="mt-3 h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            Reveal initial password
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          setResult(null);
+          setCredentials(null);
+          setConfirm('reset');
+        }}
+        className="h-10 rounded-lg border border-border bg-secondary/60 px-4 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-60"
+      >
+        Reset password
+      </button>
+      {result && !credentials && <Result result={result} />}
+      {result && credentials && <p role="status" className="mt-2 text-xs text-primary">{result.message}</p>}
+      <Reauth result={result} viewer={viewer} onConfirmed={() => { setResult(null); setConfirm(last); }} onCancel={() => setResult(null)} />
+      {credentials && <OneTimePassword credentials={credentials} onDone={() => { setCredentials(null); setResult(null); }} />}
+      <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirm === 'reveal' ? `Reveal ${name}'s initial password?` : `Reset ${name}'s password?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === 'reveal'
+                ? 'You see it once; it is then removed from the server, so make sure you can copy it now.'
+                : 'A new password replaces the current one, which stops working at once, and they are signed out on every device. You see the new password once.'}{' '}
+              This is recorded in the activity log (never the password).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirm && run(confirm)}>{confirm === 'reveal' ? 'Reveal' : 'Reset password'}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** End every session of an account (not the admin's own: that is on their account page). */
+export function SessionsControl({ userId, name, isSelf, active }: { userId: string; name: string; isSelf: boolean; active: number }) {
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  if (isSelf) return <p className="text-sm text-muted-foreground">Your own sessions are on your account page (Signed-in devices).</p>;
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          setResult(null);
+          setOpen(true);
+        }}
+        className="h-10 rounded-lg border border-border bg-secondary/60 px-4 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-60"
+      >
+        Sign out everywhere
+      </button>
+      <Result result={result} />
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign {name} out everywhere?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {active === 1 ? 'Its one active session ends' : `All ${active} active sessions end`} at once; they can sign in again. The change is recorded in the activity log.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                startTransition(async () => {
+                  setResult(await signOutEverywhere({ userId }));
+                  router.refresh();
+                })
+              }
+            >
+              Sign out everywhere
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

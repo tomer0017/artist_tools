@@ -9,7 +9,7 @@ import { signInMethods } from '@/server/account-management';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { requireAdmin } from '@/server/session';
-import { GrantControl, PlanControl, RoleControl, StatusControl, TestAccountControl, type Viewer } from '../../AdminControls';
+import { GrantControl, PasswordControl, PlanControl, RoleControl, SessionsControl, StatusControl, TestAccountControl, type Viewer } from '../../AdminControls';
 import { AdminShell } from '../../AdminShell';
 import { EventList } from '../../EventList';
 import { dateOnly, dateTime } from '../../format';
@@ -55,16 +55,24 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         <AccountAvatar account={{ name: user.name, email: user.email, image: user.image }} size={56} />
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{user.name}</h1>
-          <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-            <span className="truncate">{user.email}</span>
-            {user.emailVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" aria-label="Verified by Google" />}
-          </p>
+          {user.username ? (
+            // Its stored address is only a placeholder (src/lib/username.ts).
+            <p className="truncate text-sm text-muted-foreground">
+              Username <span className="font-medium text-foreground">{user.username}</span>
+            </p>
+          ) : (
+            <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+              <span className="truncate">{user.email}</span>
+              {user.emailVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" aria-label="Verified by Google" />}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-1.5">
             {user.role === 'admin' && <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Admin</span>}
             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${user.plan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border text-foreground'}`}>{PLAN_NAMES[user.plan]}</span>
             {user.status !== 'active' && <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-xs text-destructive">{user.status}</span>}
             {liveGrant && <span className="rounded-full border border-primary/40 px-2 py-0.5 text-xs text-primary">Pro given</span>}
             {user.testAccount && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Test</span>}
+            {user.username && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Username sign-in</span>}
             {isSelf && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">You</span>}
           </div>
         </div>
@@ -73,7 +81,14 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <Card title="Account">
           <dl className="space-y-2.5 text-sm">
-            <Row label="Email">{user.emailVerified ? (user.google.linked ? 'Verified by Google' : 'Verified') : 'Not verified'}</Row>
+            {user.username ? (
+              <>
+                <Row label="Signs in with">Username and password</Row>
+                <Row label="Email">None (no email is used)</Row>
+              </>
+            ) : (
+              <Row label="Email">{user.emailVerified ? (user.google.linked ? 'Verified by Google' : 'Verified') : 'Not verified'}</Row>
+            )}
             <Row label="Google account">{user.google.linked ? `Linked · id ${user.google.idHint} · since ${dateOnly(user.google.linkedAt)}` : 'Not linked'}</Row>
             <Row label="Password">{user.password ? `Set · since ${dateOnly(user.password.setAt)}` : 'None'}</Row>
             <Row label="Registered">{dateTime(user.createdAt)}</Row>
@@ -98,7 +113,29 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
           <p className="mb-3 text-sm text-muted-foreground">
             {user.role === 'admin' ? 'Administrator: can open this dashboard and change plans and roles.' : 'Member: uses the studio; no admin access.'} The role is separate from the plan: Pro never grants admin access.
           </p>
-          <RoleControl userId={user.id} role={user.role} name={user.name} isSelf={isSelf} viewer={viewer} />
+          <RoleControl userId={user.id} role={user.role} name={user.name} isSelf={isSelf} viewer={viewer} usernameAccount={user.username !== null} />
+        </Card>
+
+        <Card title="Password and sessions">
+          {user.username ? (
+            <>
+              <p className="mb-3 text-sm text-muted-foreground">
+                Signs in as <span className="font-medium text-foreground">{user.username}</span>. A reset makes a new password (you see it once), stops the old
+                one and signs them out on every device. Nobody can see the current password.
+              </p>
+              <PasswordControl userId={user.id} name={user.name} viewer={viewer} initialPassword={user.initialPassword?.expiresAt.toISOString() ?? null} />
+            </>
+          ) : (
+            <p className="mb-3 text-sm text-muted-foreground">
+              {user.google.linked ? 'Signs in with Google: there is no password here to reset.' : 'Passwords can be reset only for accounts that sign in with a username.'}
+            </p>
+          )}
+          <div className={`text-sm ${user.username ? 'mt-4 border-t border-border pt-4' : ''}`}>
+            <p className="mb-3 text-muted-foreground">
+              {user.sessions.active === 0 ? 'Not signed in anywhere right now.' : `Signed in on ${user.sessions.active} ${user.sessions.active === 1 ? 'device' : 'devices'}.`}
+            </p>
+            <SessionsControl userId={user.id} name={user.name} isSelf={isSelf} active={user.sessions.active} />
+          </div>
         </Card>
 
         <Card title="Status">

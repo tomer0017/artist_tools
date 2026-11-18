@@ -44,6 +44,37 @@ variables are kept, the previous file is saved as `<env>.env.previous`, and
 nothing restarts until you run `systemctl restart studio-companion-<env>`.
 Registration stays invite-only: an empty allowlist means no new accounts.
 
+### Username sign-in for invited testers
+
+Accounts that an admin creates for testers sign in with a username and a
+password: no Google account, no email, and no sign-up (ADR-0012). It is off
+unless `AUTH_USERNAME_PASSWORD=on`. Install the server side once (as root):
+`install -m 700 deploy/install-username-login.sh /usr/local/sbin/studio-set-username-login`.
+Then, on the server:
+
+```sh
+sudo studio-set-username-login staging on    # or off
+```
+
+It changes only that line (the previous file is kept as `<env>.env.previous`),
+restarts the app and puts the old file back if it does not come back healthy.
+Off, username accounts cannot sign in but are kept with their data.
+
+Creating accounts: in the admin dashboard (**Users → New tester account**, the
+password is shown once), or on the server, which never prints the password:
+
+```sh
+cd /home/studio-staging/app/current
+sudo runuser -u studio-staging -- bash -c 'set -a; . /etc/studio-companion/staging.env; set +a; npm run --silent db -- create-tester Tomerfree free'
+```
+
+The initial password can then be revealed once in the dashboard (the account →
+**Reveal initial password**) for 72 hours; after that, **Reset password** makes
+a new one. `create-tester` does nothing to a username that exists.
+`npm run db -- login-test` checks username sign-in end to end over the
+environment's own URL with a temporary account it removes afterwards, and
+`npm run db -- remove-tester <username>` deletes a username account.
+
 ### Changing who may create an account
 
 Install the server side once (as root): `install -m 700 deploy/install-invites.sh /usr/local/sbin/studio-set-invites`.

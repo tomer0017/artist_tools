@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { PasswordField } from '@/components/auth/AuthCard';
-import { authClient } from '@/lib/auth-client';
+import { authClient, signInWithUsername } from '@/lib/auth-client';
 import type { ActionResult } from '@/app/app/profile/actions';
 
 // Building blocks of the account page sections.
@@ -43,17 +43,21 @@ export function Busy({ busy, label, busyLabel }: { busy: boolean; label: string;
 
 /**
  * "Confirm it is you" for sensitive changes: a fresh sign-in, with the
- * password where the account has one, otherwise with Google (which comes back
- * to the account page). Calls `onConfirmed` once the new session exists.
+ * password where the account has one (by username for a username account),
+ * otherwise with Google (which comes back to the account page). Calls
+ * `onConfirmed` once the new session exists.
  */
 export function ReauthPanel({
   email,
+  username = null,
   hasPassword,
   onConfirmed,
   onCancel,
   returnTo = '/app/profile?confirmed=1',
 }: {
   email: string;
+  /** A username account signs in again with its username. */
+  username?: string | null;
   hasPassword: boolean;
   onConfirmed: () => void;
   onCancel: () => void;
@@ -70,11 +74,11 @@ export function ReauthPanel({
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const result = await authClient.signIn.email({ email, password });
+    const result = username ? await signInWithUsername({ username, password }) : await authClient.signIn.email({ email, password });
     setBusy(false);
     setPassword('');
     if (result.error) {
-      setError(result.error.code === 'INVALID_EMAIL_OR_PASSWORD' ? t('reauth.wrongPassword') : t('tryAgain'));
+      setError(result.error.code === 'INVALID_EMAIL_OR_PASSWORD' || result.error.code === 'INVALID_USERNAME_OR_PASSWORD' ? t('reauth.wrongPassword') : t('tryAgain'));
       return;
     }
     onConfirmed();

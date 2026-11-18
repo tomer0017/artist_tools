@@ -87,6 +87,11 @@ export const INDEXES: IndexPlan[] = [
   { collection: 'admin_mfa_sessions', key: { expiresAt: 1 }, options: { name: 'admin_mfa_session_ttl', expireAfterSeconds: 0 } },
   { collection: 'admin_mfa_sessions', key: { userId: 1 }, options: { name: 'admin_mfa_sessions_by_user' } },
   { collection: 'error_reports', key: { lastSeen: 1 }, options: { name: 'error_reports_ttl', expireAfterSeconds: 30 * 24 * 60 * 60 } },
+  // Username accounts (ADR-0012): one account per username, whatever races;
+  // accounts without one (every Google account) are not in the index at all.
+  { collection: 'users', key: { username: 1 }, options: { name: 'users_username_unique', unique: true, partialFilterExpression: { username: { $type: 'string' } } } },
+  // Initial passwords waiting to be revealed once remove themselves when they expire.
+  { collection: 'password_handoffs', key: { expiresAt: 1 }, options: { name: 'password_handoff_ttl', expireAfterSeconds: 0 } },
 ];
 
 export interface MigrationReport {

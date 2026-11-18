@@ -9,6 +9,7 @@ import { LOCALE_COOKIE } from '@/i18n/config';
 import { authClient } from '@/lib/auth-client';
 import { clearDeviceWork } from '@/lib/device-data';
 import { CURRENCIES, LOCALES, LOCALE_NAMES, type Currency, type Locale } from '@/lib/locale';
+import { accountIdentity } from '@/lib/username';
 import {
   addPassword,
   deleteMyAccount,
@@ -287,6 +288,48 @@ export function SignInMethodsCard({ account, onChanged }: { account: StudioAccou
     await onChanged();
   }
 
+  // A username account: its username and password are its only way in (it
+  // can never connect Google: its address is only a placeholder). It can
+  // change the password it was given while username sign-in is on.
+  if (account.username) {
+    return (
+      <section aria-label={t('methods.section')} className={CARD}>
+        <p className="font-semibold text-foreground">{t('methods.title')}</p>
+        <div className="mt-2 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> {t('methods.usernamePassword')}
+              </p>
+              <p className="text-xs text-muted-foreground">{t('methods.usernameSet', { username: account.username })}</p>
+            </div>
+            {mode === 'idle' && hasPassword && account.usernamePasswordEnabled && (
+              <button type="button" onClick={() => { setStatus(null); setMode('change-password'); }} className={SECONDARY_BUTTON}>
+                {t('methods.changePassword')}
+              </button>
+            )}
+          </div>
+          {mode === 'change-password' && (
+            <form onSubmit={submitChange} className="mt-3 space-y-3" aria-label={t('methods.changePassword')}>
+              <PasswordField label={t('methods.currentPassword')} autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+              <PasswordField label={t('methods.newPassword')} autoComplete="new-password" hint={ta('passwordHint')} error={error} value={password} onChange={(e) => setPassword(e.target.value)} />
+              <p className="text-xs text-muted-foreground">{t('methods.changeSignsOut')}</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button type="submit" disabled={busy || !current || password.length < 12} className={PRIMARY_SMALL_BUTTON}>
+                  <Busy busy={busy} label={t('methods.changePassword')} busyLabel={t('saving')} />
+                </button>
+                <button type="button" onClick={reset} className={SECONDARY_BUTTON}>
+                  {t('cancel')}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+        <StatusLine status={status} />
+      </section>
+    );
+  }
+
   return (
     <section aria-label={t('methods.section')} className={CARD}>
       <p className="font-semibold text-foreground">{t('methods.title')}</p>
@@ -542,7 +585,7 @@ export function DataCard({ account }: { account: StudioAccount }) {
             <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
             <AlertDialog.Content className="fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-2xl border border-border bg-card p-5 shadow-2xl outline-none md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-full md:max-w-md md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
               <AlertDialog.Title className="text-lg font-semibold text-foreground">{t('dialogTitle')}</AlertDialog.Title>
-              <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">{t('dialogLead', { email: account.email })}</AlertDialog.Description>
+              <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">{t('dialogLead', { email: accountIdentity(account) })}</AlertDialog.Description>
               <label className="mt-4 flex items-start gap-3 text-sm text-foreground">
                 <input type="checkbox" checked={clearDevice} onChange={(e) => setClearDevice(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[hsl(var(--primary))]" />
                 {t('clearDevice')}
@@ -572,6 +615,7 @@ export function DataCard({ account }: { account: StudioAccount }) {
         {reauth && (
           <ReauthPanel
             email={account.email}
+            username={account.username}
             hasPassword={account.methods.password}
             onConfirmed={() => {
               setReauth(false);

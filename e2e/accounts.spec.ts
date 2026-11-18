@@ -168,7 +168,7 @@ test.describe('admin', () => {
 
   test('finds an account by email and shows it without provider secrets', async ({ page }) => {
     await page.goto('/admin');
-    await page.getByRole('searchbox', { name: 'Search by email' }).fill('target@');
+    await page.getByRole('searchbox', { name: 'Search by username or email' }).fill('target@');
     await page.getByRole('button', { name: 'Search' }).click();
     await expect(page).toHaveURL(/\/admin\?q=target%40$/);
     const table = page.getByRole('table');

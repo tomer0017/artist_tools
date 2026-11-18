@@ -286,6 +286,27 @@ Staging on the VPS (details and commands in `deploy/README.md`):
   Google (same verified address) or add a password (fresh session); every
   added method is audited and emailed. Origin/callbackURL checks are forced on
   (Better Auth would skip them under tests).
+- **Username accounts for invited testers** (ADR-0012; off unless
+  `AUTH_USERNAME_PASSWORD=on`; staging has it on since 2026-11-18): a username
+  and a password, no Google and no email, created only by an admin
+  (`/admin/users/new`) or the operator CLI (`npm run db -- create-tester`),
+  never by sign-up. Creation and password changes go through Better Auth
+  endpoints marked `SERVER_ONLY` (never routed over HTTP;
+  `src/server/password-accounts.ts`), so the library's own hashing (scrypt)
+  and hooks run; Better Auth's admin plugin is not installed. Usernames: 3–30
+  `[A-Za-z0-9_.]`, stored lower case (`users.username`, unique), shown as given
+  (`displayUsername`); nobody can set or change one through the API, and the
+  username lookup endpoint is off. Their `email` is a placeholder under
+  `users.studio-companion.invalid` (never written to, never a way in, never a
+  Google address; `src/lib/username.ts`). Passwords are generated (16 of 56
+  characters, ~93 bits) and shown once to the admin who asked; the CLI never
+  prints one: it is sealed in `password_handoffs` for one reveal in the
+  dashboard within 72 h. A reset makes a new password and ends every session;
+  testers can change theirs on the account page. Username accounts are always
+  role `user` and can never be made admins. Sign-in: 5 per minute per IP, 10
+  wrong passwords per username pause it for 15 minutes, one answer for an
+  unknown username and a wrong password, 403 `ACCOUNT_SUSPENDED` only after the
+  right password of a suspended account.
 - **Abuse limits:** per-IP limits in MongoDB (`rateLimits`, from nginx's
   `X-Real-IP`) per auth endpoint; per-address throttles keyed on a hash of the
   address (`auth_throttles`): 10 wrong passwords per 15 minutes pause password

@@ -20,6 +20,7 @@ export function describeEvent(event: AdminAuditEvent): string {
     case 'user.registered':
       return m.provider === 'credential' ? 'Created an account with email and password' : 'Created an account with Google';
     case 'user.login':
+      if (m.method === 'username') return 'Signed in with username and password';
       return m.method === 'password' ? 'Signed in with password' : m.method === 'email_link' ? 'Signed in from a confirmation link' : 'Signed in';
     case 'user.logout':
       return 'Signed out';
@@ -46,7 +47,7 @@ export function describeEvent(event: AdminAuditEvent): string {
     case 'account.deleted':
       return 'Deleted their account';
     case 'auth.login_failed':
-      return 'Failed password sign-in';
+      return m.method === 'username' ? 'Failed username sign-in' : 'Failed password sign-in';
     case 'auth.throttled':
       if (m.purpose === 'signups') return 'New sign-ups paused: too many new accounts this hour or day';
       return m.purpose === 'mail' ? 'Email limit reached' : 'Sign-in paused after too many attempts';
@@ -62,6 +63,16 @@ export function describeEvent(event: AdminAuditEvent): string {
       return 'Account reactivated';
     case 'admin.test_flag_changed':
       return m.test ? 'Marked as a test account' : 'No longer a test account';
+    case 'admin.account_created':
+      return `Account created for username sign-in (${plan(m.plan)}${m.test ? ', test account' : ''})`;
+    case 'admin.account_removed':
+      return 'Username account removed from the server command line';
+    case 'admin.password_reset':
+      return `Password reset by an admin (${Number(m.sessionsEnded ?? 0)} ${Number(m.sessionsEnded) === 1 ? 'session' : 'sessions'} signed out)`;
+    case 'admin.sessions_revoked':
+      return `Signed out everywhere by an admin (${Number(m.count ?? 0)} ${Number(m.count) === 1 ? 'session' : 'sessions'})`;
+    case 'admin.initial_password_revealed':
+      return 'Initial password revealed to an admin (then removed from the server)';
     case 'admin.grant_created':
       return `${plan(m.planId)} given for ${Number(m.days ?? 0)} days (${String(m.reason ?? '')})`;
     case 'admin.grant_revoked':
@@ -118,6 +129,9 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
     types: [
       'user.password_changed',
       'user.password_reset',
+      'admin.password_reset',
+      'admin.initial_password_revealed',
+      'admin.sessions_revoked',
       'account.linked',
       'account.unlinked',
       'user.session_revoked',
@@ -141,6 +155,8 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
       'admin.account_suspended',
       'admin.account_reactivated',
       'admin.test_flag_changed',
+      'admin.account_created',
+      'admin.account_removed',
       'admin.grant_created',
       'admin.grant_revoked',
       'admin.audit_exported',

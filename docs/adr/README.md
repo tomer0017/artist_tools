@@ -17,5 +17,6 @@ change its decision; a new record supersedes it.
 | [0009](0009-internationalisation.md) | Internationalisation and RTL strategy (use-intl) | Accepted |
 | [0010](0010-account-deletion-export-and-audit-retention.md) | Account deletion, data export and audit retention | Accepted |
 | [0011](0011-first-party-privacy-preserving-analytics.md) | First-party, privacy-preserving analytics | Accepted |
+| [0012](0012-username-accounts-for-invited-testers.md) | Username accounts for invited testers, created only by administrators | Accepted |
 
 Format: Context · Decision · Consequences · Alternatives considered.

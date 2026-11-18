@@ -59,8 +59,8 @@ export default async function AdminActivityPage({ searchParams }: { searchParams
           </select>
         </label>
         <label className="col-span-2 text-xs font-medium text-muted-foreground sm:col-span-1">
-          Account email
-          <input name="email" type="email" inputMode="email" defaultValue={active.email} autoComplete="off" className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-2 text-base text-foreground md:text-sm" />
+          Account email or username
+          <input name="email" type="text" autoCapitalize="none" spellCheck={false} defaultValue={active.email} autoComplete="off" className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-2 text-base text-foreground md:text-sm" />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
           From

@@ -14,13 +14,13 @@ import { getEntitlements, type Entitlements } from '@/server/entitlements';
 export async function getAccountSummary(
   db: Db,
   userId: ObjectId,
-  options: { now?: Date; emailPasswordEnabled?: boolean } = {},
+  options: { now?: Date; emailPasswordEnabled?: boolean; usernamePasswordEnabled?: boolean } = {},
 ): Promise<{ account: AccountSummary; entitlements: Entitlements } | null> {
   const now = options.now ?? new Date();
   const [user, entitlements, accounts] = await Promise.all([
     collections(db).users.findOne(
       { _id: userId },
-      { projection: { name: 1, email: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, introsSeen: 1, locale: 1, currency: 1, marketingConsent: 1 } },
+      { projection: { name: 1, email: 1, username: 1, displayUsername: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, introsSeen: 1, locale: 1, currency: 1, marketingConsent: 1 } },
     ),
     getEntitlements(db, userId, now),
     collections(db).accounts.find({ userId }, { projection: { providerId: 1 } }).toArray(),
@@ -32,6 +32,7 @@ export async function getAccountSummary(
       id: user._id.toHexString(),
       name: user.name,
       email: user.email,
+      username: user.username ? (user.displayUsername || user.username) : null,
       emailVerified: user.emailVerified === true,
       image: user.image ?? null,
       role: entitlements.role,
@@ -49,6 +50,7 @@ export async function getAccountSummary(
       marketingConsent: user.marketingConsent === true,
       methods: { google: accounts.some((a) => a.providerId === 'google'), password: accounts.some((a) => a.providerId === 'credential') },
       emailPasswordEnabled: options.emailPasswordEnabled === true,
+      usernamePasswordEnabled: options.usernamePasswordEnabled === true,
     },
   };
 }

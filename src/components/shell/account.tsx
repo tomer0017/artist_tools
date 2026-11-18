@@ -7,6 +7,7 @@ import type { AccountSummary, ToolId } from '@/lib/account';
 import { clearDeviceWork } from '@/lib/device-data';
 import type { FeatureId } from '@/lib/plans';
 import { signInPath } from '@/lib/redirects';
+import { accountIdentity } from '@/lib/username';
 import { pathForView } from './tools';
 
 /** Who is signed in and what their account includes, as the server reported it (display only). */
@@ -218,7 +219,7 @@ export function AccountLine() {
   return (
     <p data-account-line className="mt-2 px-4 text-center text-xs text-muted-foreground md:px-6">
       {t.rich('studio.signedInAs', {
-        email: state.account.email,
+        email: accountIdentity(state.account),
         // An address reads left to right inside Hebrew text too.
         addr: (chunks) => (
           <span dir="ltr" className="text-foreground/80">

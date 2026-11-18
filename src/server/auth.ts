@@ -1,11 +1,15 @@
 import 'server-only';
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
-import { APIError, createAuthMiddleware, isAPIError } from 'better-auth/api';
+import { APIError, createAuthEndpoint, createAuthMiddleware, getSessionFromCtx, isAPIError } from 'better-auth/api';
 import { nextCookies } from 'better-auth/next-js';
+import { username as usernamePlugin } from 'better-auth/plugins/username';
 import type { Db, MongoClient } from 'mongodb';
+import { z } from 'zod';
 import { LOCALE_COOKIE, localeFromAcceptLanguage, localizedPath } from '@/i18n/config';
-import { DEFAULT_CURRENCY, DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/locale';
+import { DEFAULT_CURRENCY, DEFAULT_LOCALE, LOCALES, isLocale, type Locale } from '@/lib/locale';
+import { PLAN_IDS } from '@/lib/plans';
+import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, isUsernameEmail, normalizeUsername, usernameEmail, usernameProblem } from '@/lib/username';
 import { authConfig, type SignupPolicy } from '@/server/env';
 import { getMongo } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
@@ -20,11 +24,13 @@ import { EVERYONE, THROTTLES, clearThrottle, consumeThrottle, throttleCount } fr
 
 // ─── Authentication ────────────────────────────────────────────────────────────
 // Google sign-in (OpenID Connect: authorization code + state + PKCE, handled by
-// Better Auth) and, where enabled, email + password with a verified address,
-// on database sessions in MongoDB. A Google account is identified by its
-// Google `sub`, never by its email address, and accounts are never merged
-// because their addresses match: a second sign-in method is added only by its
-// owner, from a signed-in session (docs/adr/0002, 0003).
+// Better Auth); where enabled, email + password with a verified address; and,
+// where enabled, a username + password for accounts that administrators
+// create for invited testers (no registration, no email; ADR-0012). All on
+// database sessions in MongoDB. A Google account is identified by its Google
+// `sub`, never by its email address, and accounts are never merged because
+// their addresses match: a second sign-in method is added only by its owner,
+// from a signed-in session (docs/adr/0002, 0003).
 
 /** Session cookies are `sc.session_token` (`__Secure-sc.…` over HTTPS). */
 export const COOKIE_PREFIX = 'sc';
@@ -40,6 +46,8 @@ interface AuthDeps {
   signups: SignupPolicy;
   /** Email + password sign-in, with verification and resets sent through `mailer`. */
   emailPassword?: boolean;
+  /** Username + password sign-in, for accounts administrators create (no sign-up, no email). */
+  usernamePassword?: boolean;
   /** Account email (verification, reset, security notices). */
   mailer: Mailer;
   /** Next.js cookie integration for server actions; off where there is no request scope (tests). */
@@ -54,7 +62,9 @@ export type SignupMethod = 'google' | 'email-password';
 /**
  * Every endpoint of email + password sign-in. Where that method is off they
  * do not exist (404): nobody can sign up, sign in, reset, verify or check a
- * password. The code stays, for when it is switched back on.
+ * password. The code stays, for when it is switched back on. With username
+ * sign-in on, `/change-password` stays, for a tester to replace the password
+ * they were given (it needs the current one).
  */
 export const PASSWORD_ENDPOINTS = [
   '/sign-up/email',
@@ -67,6 +77,109 @@ export const PASSWORD_ENDPOINTS = [
   '/send-verification-email',
   '/verify-email',
 ];
+
+/** Username sign-in (Better Auth's username plugin): absent unless it is on. */
+export const USERNAME_ENDPOINTS = ['/sign-in/username'];
+
+/** Never offered: it would tell anyone whether a username exists. */
+export const NEVER_ENDPOINTS = ['/is-username-available'];
+
+/** The endpoints that do not exist on a server with these sign-in methods. */
+export function disabledEndpoints(methods: { emailPassword?: boolean; usernamePassword?: boolean }): string[] {
+  const keep = methods.usernamePassword ? ['/change-password'] : [];
+  return [
+    ...NEVER_ENDPOINTS,
+    ...(methods.emailPassword ? [] : PASSWORD_ENDPOINTS.filter((path) => !keep.includes(path))),
+    ...(methods.usernamePassword ? [] : USERNAME_ENDPOINTS),
+  ];
+}
+
+/**
+ * Server-only: create a username account (src/server/password-accounts.ts).
+ * Never routed over HTTP (SERVER_ONLY); reached only through `auth.api` by an
+ * administrator's verified action or the operator CLI.
+ */
+export const CREATE_USERNAME_ACCOUNT_PATH = '/studio/create-username-account';
+
+/** Server-only: replace a username account's password (the caller signs it out everywhere). */
+export const SET_USERNAME_PASSWORD_PATH = '/studio/set-username-password';
+
+/** Failed sign-ins are counted per username under this "address" (hashed, see throttle.ts). */
+export const usernameThrottleKey = (username: string) => `username:${normalizeUsername(username)}`;
+
+const createUsernameAccountBody = z.object({
+  username: z.string(),
+  name: z.string().min(1).max(80),
+  password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
+  plan: z.enum(PLAN_IDS),
+  locale: z.enum(LOCALES),
+});
+
+/**
+ * Better Auth endpoints for the app's own server code. They create and
+ * update accounts the way Better Auth's admin plugin does (its internal
+ * adapter and password hasher), inside an endpoint context so every database
+ * hook and validation runs; the admin plugin itself is not installed (its
+ * HTTP endpoints would bypass this app's roles, two-factor gate and audit).
+ */
+const studioAccounts = () => ({
+  id: 'studio-accounts',
+  endpoints: {
+    createUsernameAccount: createAuthEndpoint(
+      CREATE_USERNAME_ACCOUNT_PATH,
+      { method: 'POST', body: createUsernameAccountBody, metadata: { SERVER_ONLY: true } },
+      async (ctx) => {
+        const { username, name, password, plan, locale } = ctx.body;
+        if (usernameProblem(username)) throw new APIError('BAD_REQUEST', { code: 'INVALID_USERNAME', message: 'Username is invalid' });
+        const hash = await ctx.context.password.hash(password);
+        // The username plugin's own hook checks the name is free and stores it in lower case.
+        const user = await ctx.context.internalAdapter.createUser(
+          {
+            email: usernameEmail(username),
+            // Nothing to verify: the placeholder can never receive mail (src/lib/username.ts).
+            emailVerified: true,
+            name,
+            username,
+            displayUsername: username,
+            role: 'user',
+            status: 'active',
+            plan,
+            locale,
+            currency: locale === 'he' ? 'ILS' : DEFAULT_CURRENCY,
+            marketingConsent: false,
+          },
+          { method: 'admin' },
+        );
+        if (!user) throw new APIError('INTERNAL_SERVER_ERROR', { code: 'FAILED_TO_CREATE_USER', message: 'Failed to create user' });
+        try {
+          await ctx.context.internalAdapter.linkAccount({ userId: user.id, providerId: 'credential', accountId: user.id, password: hash });
+        } catch (error) {
+          // Never leave a username that has no password.
+          await ctx.context.internalAdapter.deleteUser(user.id);
+          throw error;
+        }
+        return ctx.json({ userId: user.id });
+      },
+    ),
+    setUsernamePassword: createAuthEndpoint(
+      SET_USERNAME_PASSWORD_PATH,
+      {
+        method: 'POST',
+        body: z.object({ userId: z.string(), password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH) }),
+        metadata: { SERVER_ONLY: true },
+      },
+      async (ctx) => {
+        const user = await ctx.context.internalAdapter.findUserById(ctx.body.userId);
+        const account = user ? await ctx.context.internalAdapter.findCredentialAccount(user.id) : null;
+        if (!user || !(user as { username?: unknown }).username || !account) {
+          throw new APIError('NOT_FOUND', { code: 'NOT_A_USERNAME_ACCOUNT', message: 'Not a username account' });
+        }
+        await ctx.context.internalAdapter.updatePassword(user.id, await ctx.context.password.hash(ctx.body.password));
+        return ctx.json({ status: true });
+      },
+    ),
+  },
+});
 
 /**
  * Whether a brand-new account may be created. Only gates registration: no
@@ -99,7 +212,15 @@ function requestLocale(headers: Headers | null): Locale {
 
 /** The sign-in method behind a Better Auth request, from its endpoint path. */
 const methodOf = (path: string | undefined) =>
-  path === '/sign-in/email' ? 'password' : path === '/verify-email' ? 'email_link' : path?.startsWith('/callback/') ? 'google' : 'other';
+  path === '/sign-in/email'
+    ? 'password'
+    : path === '/sign-in/username'
+      ? 'username'
+      : path === '/verify-email'
+        ? 'email_link'
+        : path?.startsWith('/callback/')
+          ? 'google'
+          : 'other';
 
 /** Side work after sign-in must never undo a sign-in that already succeeded. */
 async function safely(event: string, work: () => Promise<unknown>) {
@@ -122,6 +243,7 @@ export function createAuth(deps: AuthDeps) {
   const { db, mailer } = deps;
   const appURL = new URL(deps.baseURL).origin;
   const users = () => collections(db).users;
+  const disabled = disabledEndpoints(deps);
 
   /** The language an account's emails are written in, and its pages' addresses in that language. */
   const localeOf = (user: unknown) => (user as { locale?: unknown } | null)?.locale;
@@ -137,9 +259,10 @@ export function createAuth(deps: AuthDeps) {
   }
 
   // Mail goes out in the background: a response takes the same time whether
-  // or not the address has an account.
+  // or not the address has an account. A username account's placeholder
+  // address is never written to.
   const send = async (mail: RenderedMail, user: { email?: string | null; id?: string | null }) => {
-    if (user.email) await mailer.deliver(mail, { address: user.email, userId: user.id ?? null });
+    if (user.email && !isUsernameEmail(user.email)) await mailer.deliver(mail, { address: user.email, userId: user.id ?? null });
   };
 
   // New accounts from everyone together: past the hourly or the daily limit,
@@ -205,7 +328,9 @@ export function createAuth(deps: AuthDeps) {
             );
           },
         }
-      : { enabled: false },
+      : // Off: nobody signs in or up with an email address. The lengths still
+        // apply where a username account changes its password.
+        { enabled: false, minPasswordLength: PASSWORD_MIN_LENGTH, maxPasswordLength: PASSWORD_MAX_LENGTH },
     emailVerification: deps.emailPassword
       ? {
           sendOnSignUp: true,
@@ -225,9 +350,9 @@ export function createAuth(deps: AuthDeps) {
           },
         }
       : undefined,
-    // Off means absent: the password endpoints answer 404 before any other
-    // work (the one with a token in its path is caught in the hook below).
-    disabledPaths: deps.emailPassword ? [] : PASSWORD_ENDPOINTS,
+    // Off means absent: those endpoints answer 404 before any other work
+    // (the one with a token in its path is caught in the hook below).
+    disabledPaths: disabled,
     // Tokens kept in `verifications` (resets, OAuth state) are stored as
     // SHA-256 hashes, so reading the database is not enough to use one.
     verification: { storeIdentifier: 'hashed' },
@@ -266,6 +391,10 @@ export function createAuth(deps: AuthDeps) {
       // Past the global limits on new accounts, sign-ups pause (see above).
       validateUserInfo: async ({ user, source }) => {
         if (source.action !== 'create-user') return;
+        // An administrator creating a username account (the server-only
+        // endpoint above, never reachable over HTTP): not a registration, so
+        // neither the invitation list nor the sign-up limits apply.
+        if (source.method === 'admin') return;
         const method: SignupMethod = source.method === 'email-password' ? 'email-password' : 'google';
         if (!signupAllowed(deps.signups, user, method)) {
           const unverified = method === 'google' && !user.emailVerified;
@@ -305,6 +434,7 @@ export function createAuth(deps: AuthDeps) {
         '/sign-in/social': { window: 60, max: 10 },
         '/callback/*': { window: 60, max: 20 },
         '/sign-in/email': { window: 60, max: 5 },
+        '/sign-in/username': { window: 60, max: 5 },
         '/sign-up/email': { window: 10 * 60, max: 5 },
         '/request-password-reset': { window: 15 * 60, max: 5 },
         '/reset-password': { window: 15 * 60, max: 10 },
@@ -319,17 +449,39 @@ export function createAuth(deps: AuthDeps) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         const body = (ctx.body ?? {}) as Record<string, unknown>;
-        if (!deps.emailPassword && PASSWORD_ENDPOINTS.includes(ctx.path)) throw new APIError('NOT_FOUND');
+        if (disabled.includes(ctx.path)) throw new APIError('NOT_FOUND');
+        // Usernames are given by administrators: nobody chooses or changes
+        // one through the API (the plugin would otherwise accept them here).
+        if ((ctx.path === '/update-user' || ctx.path === '/sign-up/email') && ('username' in body || 'displayUsername' in body)) {
+          throw new APIError('BAD_REQUEST', { code: 'USERNAME_NOT_ALLOWED', message: 'Usernames are given by an administrator.' });
+        }
+        // A username account's placeholder address is not a way in: it signs
+        // in with its username, under that username's own throttle.
+        if (ctx.path === '/sign-in/email' && isUsernameEmail(typeof body.email === 'string' ? body.email : null)) {
+          throw new APIError('UNAUTHORIZED', { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' });
+        }
+        // Too many wrong passwords for this username (whether or not it
+        // exists): pause its sign-in until the window ends.
+        if (ctx.path === '/sign-in/username' && typeof body.username === 'string') {
+          if ((await throttleCount(db, 'signin-fail', usernameThrottleKey(body.username))) >= THROTTLES.signInFailures.limit) {
+            await safely('auth.audit_failed', () => recordAudit(db, { type: 'auth.throttled', userId: null, actor: 'system', metadata: { purpose: 'sign_in' } }));
+            throw new APIError('TOO_MANY_REQUESTS', { code: 'TOO_MANY_ATTEMPTS', message: 'Too many attempts. Please wait 15 minutes.' });
+          }
+        }
         // Sign-ups paused: the same answer for every address, given before
         // the library looks up whether the address already has an account.
         if (ctx.path === '/sign-up/email' && (await signupsPaused())) {
           throw new APIError('TOO_MANY_REQUESTS', { code: 'SIGNUPS_PAUSED', message: 'New sign-ups are paused for a short while. Please try again later.' });
         }
-        // Password policy, on every way a password is chosen.
+        // Password policy, on every way a password is chosen. A change comes
+        // from a signed-in person, whose session is read here (it is not
+        // loaded yet before the endpoint runs), so their name, address or
+        // username is checked too.
         if (ctx.path === '/sign-up/email' || ctx.path === '/reset-password' || ctx.path === '/change-password') {
           const password = ctx.path === '/sign-up/email' ? body.password : body.newPassword;
-          const email = typeof body.email === 'string' ? body.email : ctx.context.session?.user.email;
-          const name = typeof body.name === 'string' ? body.name : ctx.context.session?.user.name;
+          const session = ctx.path === '/change-password' ? (ctx.context.session ?? (await getSessionFromCtx(ctx).catch(() => null))) : null;
+          const email = typeof body.email === 'string' ? body.email : session?.user.email;
+          const name = typeof body.name === 'string' ? body.name : session?.user.name;
           const problem = typeof password === 'string' ? checkPassword(password, { email, name }) : null;
           if (problem) throw new APIError('BAD_REQUEST', { code: `PASSWORD_${problem.toUpperCase()}`, message: PASSWORD_MESSAGES[problem] });
         }
@@ -366,6 +518,20 @@ export function createAuth(deps: AuthDeps) {
             await clearThrottle(db, 'signin-fail', body.email);
           }
         }
+        // Username sign-in: one answer for an unknown username and a wrong
+        // password (the library's), counted per username.
+        if (ctx.path === '/sign-in/username' && typeof body.username === 'string') {
+          const key = usernameThrottleKey(body.username);
+          if (failed && returned.statusCode === 401) {
+            await consumeThrottle(db, 'signin-fail', key, THROTTLES.signInFailures);
+            const known = await users().findOne({ username: normalizeUsername(body.username) }, { projection: { _id: 1 } });
+            await safely('auth.audit_failed', () =>
+              recordAudit(db, { type: 'auth.login_failed', userId: known?._id ?? null, actor: 'system', metadata: { method: 'username' } }),
+            );
+          } else if (!failed) {
+            await clearThrottle(db, 'signin-fail', key);
+          }
+        }
         if (ctx.path === '/unlink-account' && !failed && ctx.context.session && typeof body.providerId === 'string') {
           const user = ctx.context.session.user;
           await safely('auth.audit_failed', () =>
@@ -375,6 +541,8 @@ export function createAuth(deps: AuthDeps) {
         if (ctx.path === '/change-password' && !failed && ctx.context.session) {
           const user = ctx.context.session.user;
           await safely('auth.audit_failed', () => recordAudit(db, { type: 'user.password_changed', userId: user.id, actor: `user:${user.id}`, metadata: {} }));
+          // An initial password still waiting to be revealed is no longer the password.
+          await safely('auth.handoff_cleanup_failed', () => collections(db).passwordHandoffs.deleteOne({ _id: toObjectId(user.id)! }));
           runInBackground(send(mailTemplates(localeOf(user)).passwordChanged(user.name, `${appURL}${pageFor(user, '/sign-in')}`), user));
         }
       }),
@@ -398,6 +566,9 @@ export function createAuth(deps: AuthDeps) {
           // skipped user.validateUserInfo above. Only the password sign-up
           // endpoint may create an unverified account.
           before: async (user, ctx) => {
+            // An administrator's username account: its language and the rest
+            // were chosen by the endpoint that creates it.
+            if (ctx?.path === CREATE_USERNAME_ACCOUNT_PATH) return { data: user };
             const method: SignupMethod = ctx?.path === '/sign-up/email' ? 'email-password' : 'google';
             if (!signupAllowed(deps.signups, user, method)) {
               log.error('auth.signup_gate_bypassed', { method });
@@ -409,6 +580,8 @@ export function createAuth(deps: AuthDeps) {
             return { data: { ...user, locale, currency: locale === 'he' ? 'ILS' : DEFAULT_CURRENCY } };
           },
           after: async (user, ctx) => {
+            // Username accounts are recorded by whoever created them (admin.account_created).
+            if (ctx?.path === CREATE_USERNAME_ACCOUNT_PATH) return;
             const provider = ctx?.path === '/sign-up/email' ? 'credential' : 'google';
             await safely('auth.audit_failed', () =>
               recordAudit(deps.db, { type: 'user.registered', userId: user.id, actor: `user:${user.id}`, metadata: { provider } }),
@@ -424,10 +597,16 @@ export function createAuth(deps: AuthDeps) {
       },
       session: {
         create: {
-          // Suspended accounts cannot start new sessions.
-          before: async (session) => {
+          // Suspended accounts cannot start new sessions. Username sign-in
+          // reaches this only after the password was checked, so it may say
+          // plainly why (instead of the library's "failed to create
+          // session"); a wrong password gets the same answer as anyone's.
+          before: async (session, ctx) => {
             const user = await collections(deps.db).users.findOne({ _id: toObjectId(session.userId) }, { projection: { status: 1 } });
-            if (user?.status && user.status !== 'active') return false;
+            if (user?.status && user.status !== 'active') {
+              if (ctx?.path === '/sign-in/username') throw new APIError('FORBIDDEN', { code: 'ACCOUNT_SUSPENDED', message: 'This account is suspended.' });
+              return false;
+            }
           },
           after: async (session, ctx) => {
             await safely('auth.login_bookkeeping_failed', async () => {
@@ -459,7 +638,13 @@ export function createAuth(deps: AuthDeps) {
         update: { before: async (account) => ({ data: withoutTokens(account) }) },
       },
     },
-    plugins: deps.nextjs ? [nextCookies()] : [],
+    plugins: [
+      // Sign-in by username (POST /sign-in/username, where it is on). Same
+      // rules as src/lib/username.ts; stored in lower case.
+      usernamePlugin({ minUsernameLength: USERNAME_MIN_LENGTH, maxUsernameLength: USERNAME_MAX_LENGTH }),
+      studioAccounts(),
+      ...(deps.nextjs ? [nextCookies()] : []),
+    ],
   });
 }
 
@@ -469,12 +654,15 @@ let instance: Auth | undefined;
 
 /** The app's auth instance, created on first use from the environment. */
 export function getAuth(): Auth {
-  if (!instance) {
-    const { baseURL, secret, google, signups, emailPassword, mail } = authConfig();
-    const { client, db } = getMongo();
-    instance = createAuth({ db, client, baseURL, secret, google, signups, emailPassword, mailer: createMailer(db, mail.transport, mail), nextjs: true });
-  }
+  if (!instance) instance = authFromEnvironment({ nextjs: true });
   return instance;
+}
+
+/** An auth instance configured from the environment; the operator CLI uses one without Next.js cookies. */
+export function authFromEnvironment(options: { nextjs: boolean }): Auth {
+  const { baseURL, secret, google, signups, emailPassword, usernamePassword, mail } = authConfig();
+  const { client, db } = getMongo();
+  return createAuth({ db, client, baseURL, secret, google, signups, emailPassword, usernamePassword, mailer: createMailer(db, mail.transport, mail), nextjs: options.nextjs });
 }
 
 /** Whether this server can offer Google sign-in (its OAuth client is configured). */
@@ -482,6 +670,9 @@ export const googleSignInAvailable = (): boolean => authConfig().google !== null
 
 /** Whether this server offers email + password sign-in. */
 export const emailPasswordAvailable = (): boolean => authConfig().emailPassword;
+
+/** Whether this server offers username + password sign-in (accounts administrators create). */
+export const usernamePasswordAvailable = (): boolean => authConfig().usernamePassword;
 
 /** Whether new visitors can create an account themselves ('open') or need an invitation ('invite'). */
 export const registrationMode = (): SignupPolicy['mode'] => authConfig().signups.mode;

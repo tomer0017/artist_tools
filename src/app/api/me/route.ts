@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAccountSummary } from '@/server/account';
 import { recordActiveDay } from '@/server/analytics';
-import { emailPasswordAvailable } from '@/server/auth';
+import { emailPasswordAvailable, usernamePasswordAvailable } from '@/server/auth';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { log } from '@/server/log';
@@ -20,7 +20,7 @@ export async function GET() {
   try {
     const session = await getSession();
     if (!session) return json({ error: 'unauthorized' }, 401);
-    const summary = await getAccountSummary(getDb(), toObjectId(session.user.id)!, { emailPasswordEnabled: emailPasswordAvailable() });
+    const summary = await getAccountSummary(getDb(), toObjectId(session.user.id)!, { emailPasswordEnabled: emailPasswordAvailable(), usernamePasswordEnabled: usernamePasswordAvailable() });
     if (!summary) return json({ error: 'unauthorized' }, 401);
     await recordActiveDay(getDb(), session.user.id).catch((error) => log.warn('analytics.active_day_failed', { error }));
     return json({ user: summary.account, entitlements: summary.entitlements });

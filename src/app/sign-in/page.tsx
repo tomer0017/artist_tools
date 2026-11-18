@@ -4,7 +4,7 @@ import SignInCard from '@/components/auth/SignInCard';
 import { signInErrorKey } from '@/components/auth/ui';
 import { safeCallbackPath } from '@/lib/redirects';
 import { getT } from '@/i18n/server';
-import { emailPasswordAvailable, googleSignInAvailable, registrationMode } from '@/server/auth';
+import { emailPasswordAvailable, googleSignInAvailable, registrationMode, usernamePasswordAvailable } from '@/server/auth';
 import { getSession } from '@/server/session';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -32,6 +32,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
       available={googleSignInAvailable()}
       registration={registration}
       emailPassword={emailPasswordAvailable()}
+      usernamePassword={usernamePasswordAvailable()}
       error={errorKey ? t(`errors.${errorKey}`) : null}
     />
   );

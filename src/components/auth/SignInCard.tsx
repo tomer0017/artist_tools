@@ -5,9 +5,9 @@ import { useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import { Check, Loader2 } from 'lucide-react';
 import { localizedPath } from '@/i18n/config';
-import { authClient } from '@/lib/auth-client';
+import { authClient, signInWithUsername } from '@/lib/auth-client';
 import { AuthCard, Notice, PasswordField, TextField, useEarlyInput } from './AuthCard';
-import { PRIMARY_BUTTON, authErrorKey, verifiedReturn } from './ui';
+import { PRIMARY_BUTTON, authErrorKey, usernameErrorKey, verifiedReturn } from './ui';
 
 function GoogleLogo() {
   return (
@@ -27,6 +27,7 @@ export default function SignInCard({
   error,
   registration,
   emailPassword = false,
+  usernamePassword = false,
 }: {
   callbackPath: string;
   /** False until this server's Google OAuth client is configured. */
@@ -36,15 +37,22 @@ export default function SignInCard({
   registration: 'open' | 'invite';
   /** Whether this server offers email + password sign-in. */
   emailPassword?: boolean;
+  /** Whether this server offers username + password sign-in (accounts administrators create; no registration). */
+  usernamePassword?: boolean;
 }) {
   const t = useTranslations('auth');
   const locale = useLocale();
-  const included = [t('includedTools'), emailPassword ? t('includedMethods') : t('includedGoogleOnly'), t('includedPrivacy')];
+  const included = [
+    t('includedTools'),
+    emailPassword ? t('includedMethods') : usernamePassword ? t('includedUsername') : t('includedGoogleOnly'),
+    t('includedPrivacy'),
+  ];
   const [state, setState] = useState<'idle' | 'redirecting' | 'failed'>('idle');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const emailForm = useRef<HTMLFormElement>(null);
-  useEarlyInput(emailForm, { email: setEmail, password: setPassword });
+  // The one field holds an email address, a username or either (when both are on).
+  useEarlyInput(emailForm, { email: setEmail, username: setEmail, password: setPassword });
   const [emailState, setEmailState] = useState<{ status: 'idle' | 'busy' } | { status: 'error'; message: string } | { status: 'unverified'; email: string }>({ status: 'idle' });
 
   async function signIn() {
@@ -62,6 +70,15 @@ export default function SignInCard({
     event.preventDefault();
     setEmailState({ status: 'busy' });
     const address = email.trim();
+    // A username never contains "@" (src/lib/username.ts).
+    if (usernamePassword && !(emailPassword && address.includes('@'))) {
+      const result = await signInWithUsername({ username: address, password });
+      // Into the studio, with a full page load so it starts signed in.
+      if (!result.error) return window.location.assign(callbackPath);
+      setPassword('');
+      setEmailState({ status: 'error', message: t(`errors.${usernameErrorKey(result.error)}`) });
+      return;
+    }
     const result = await authClient.signIn.email({ email: address, password, callbackURL: verifiedReturn(callbackPath, locale) });
     // On success the browser is already on its way back into the studio.
     if (!result.error) return;
@@ -96,18 +113,24 @@ export default function SignInCard({
         {state === 'redirecting' ? t('openingGoogle') : t('continueGoogle')}
       </button>
 
-      {emailPassword && (
+      {(emailPassword || usernamePassword) && (
         <>
           <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-wider text-muted-foreground" aria-hidden="true">
             <span className="h-px flex-1 bg-border" /> {t('or')} <span className="h-px flex-1 bg-border" />
           </div>
-          <form ref={emailForm} onSubmit={signInWithEmail} aria-label={t('signInWithEmail')} className="space-y-4" noValidate>
+          <form
+            ref={emailForm}
+            onSubmit={signInWithEmail}
+            aria-label={emailPassword ? t('signInWithEmail') : t('signInWithUsername')}
+            className="space-y-4"
+            noValidate
+          >
             <TextField
-              label={t('email')}
-              type="email"
-              name="email"
+              label={emailPassword ? (usernamePassword ? t('emailOrUsername') : t('email')) : t('username')}
+              type={emailPassword && !usernamePassword ? 'email' : 'text'}
+              name={emailPassword ? 'email' : 'username'}
               autoComplete="username"
-              inputMode="email"
+              inputMode={emailPassword && !usernamePassword ? 'email' : undefined}
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -117,11 +140,13 @@ export default function SignInCard({
               onChange={(e) => setEmail(e.target.value)}
             />
             <PasswordField label={t('password')} name="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-            <div className="-mt-1 text-end">
-              <Link href={localizedPath('/forgot-password', locale)} className="text-sm font-medium text-primary underline-offset-2 hover:underline">
-                {t('forgot')}
-              </Link>
-            </div>
+            {emailPassword && (
+              <div className="-mt-1 text-end">
+                <Link href={localizedPath('/forgot-password', locale)} className="text-sm font-medium text-primary underline-offset-2 hover:underline">
+                  {t('forgot')}
+                </Link>
+              </div>
+            )}
             <button type="submit" disabled={emailState.status === 'busy' || !email.trim() || !password} className={PRIMARY_BUTTON}>
               {emailState.status === 'busy' && <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />}
               {emailState.status === 'busy' ? t('signingIn') : t('signIn')}
@@ -131,17 +156,22 @@ export default function SignInCard({
           {emailState.status === 'unverified' && (
             <Notice tone="info">{t('unverified', { email: emailState.email })}</Notice>
           )}
-          <p className="mt-5 text-sm text-muted-foreground">
-            {t('newHere')}{' '}
-            <Link href={createAccount} className="font-medium text-primary underline-offset-2 hover:underline">
-              {t('createAccount')}
-            </Link>
-          </p>
+          {emailPassword ? (
+            <p className="mt-5 text-sm text-muted-foreground">
+              {t('newHere')}{' '}
+              <Link href={createAccount} className="font-medium text-primary underline-offset-2 hover:underline">
+                {t('createAccount')}
+              </Link>
+            </p>
+          ) : (
+            // Nobody registers with a username: the team creates these accounts.
+            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{t('usernameNote')}</p>
+          )}
         </>
       )}
 
       <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
-        {emailPassword ? t('googleDataNoteWithEmail') : t('googleDataNote')} {t('noMarketing')}
+        {emailPassword || usernamePassword ? t('googleDataNoteWithEmail') : t('googleDataNote')} {t('noMarketing')}
       </p>
       <p className="mt-3 text-xs text-muted-foreground">
         {t.rich('plansLink', {

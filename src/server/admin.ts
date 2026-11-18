@@ -17,6 +17,7 @@ import {
 } from '@/server/db/collections';
 import { activeGrant, listGrants } from '@/server/grants';
 import { assignedPlanOf, effectivePlan, getEntitlements, type Entitlements } from '@/server/entitlements';
+import { pendingInitialPassword } from '@/server/password-accounts';
 import { getUsage, usagePeriod } from '@/server/usage';
 
 // Read models and operations for application administrators. Everything here
@@ -39,10 +40,16 @@ const byUser = (collection: string, match: Record<string, unknown>[] = [], extra
   },
 });
 
+/** How an account is named in admin screens: its username (username accounts have no real email), else its email. */
+export const identityOf = (user: { email: string; username?: string | null; displayUsername?: string | null }) =>
+  user.username ? (user.displayUsername || user.username) : user.email;
+
 export interface AdminUserRow {
   id: string;
   name: string;
   email: string;
+  /** Username accounts (ADR-0012): the username as given; their `email` is only a placeholder. */
+  username: string | null;
   emailVerified: boolean;
   image: string | null;
   createdAt: Date;
@@ -69,6 +76,8 @@ interface RawUserRow {
   _id: ObjectId;
   name: string;
   email: string;
+  username?: string | null;
+  displayUsername?: string | null;
   emailVerified?: boolean;
   image?: string | null;
   createdAt: Date;
@@ -88,7 +97,7 @@ interface RawUserRow {
 export interface UserListQuery {
   page?: number;
   pageSize?: number;
-  /** Part of an email address. */
+  /** Part of an email address or a username. */
   search?: string;
   role?: UserRole;
   plan?: PlanId;
@@ -106,7 +115,7 @@ export interface UserListQuery {
 export async function userFilter(db: Db, query: UserListQuery): Promise<Filter<UserDoc>> {
   const filter: Filter<UserDoc> = {};
   const search = (query.search ?? '').trim().slice(0, 100);
-  if (search) filter.email = { $regex: escapeRegExp(search), $options: 'i' };
+  if (search) filter.$or = [{ email: { $regex: escapeRegExp(search), $options: 'i' } }, { username: { $regex: escapeRegExp(search.toLowerCase()) } }];
   if (query.role) filter.role = query.role === 'admin' ? 'admin' : { $ne: 'admin' };
   // A missing plan is Free; a missing status is active.
   if (query.plan) filter.plan = query.plan === 'pro' ? 'pro' : { $ne: 'pro' };
@@ -151,7 +160,7 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
       byUser('audit_events', [{ $eq: ['$type', 'user.login'] }], [{ $count: 'n' }], 'logins'),
       {
         $project: {
-          name: 1, email: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, status: 1, role: 1, plan: 1, testAccount: 1,
+          name: 1, email: 1, username: 1, displayUsername: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, status: 1, role: 1, plan: 1, testAccount: 1,
           subscription: 1, usage: 1, google: 1, password: 1, grants: 1, logins: 1,
         },
       },
@@ -165,6 +174,7 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
       id: u._id.toHexString(),
       name: u.name,
       email: u.email,
+      username: u.username ? (u.displayUsername || u.username) : null,
       emailVerified: u.emailVerified === true,
       image: u.image ?? null,
       createdAt: u.createdAt,
@@ -255,9 +265,10 @@ export async function listAuditEvents(db: Db, query: AuditQuery = {}): Promise<A
     if (e.actor.id) ids.add(e.actor.id);
   }
   const people = await users
-    .find({ _id: { $in: [...ids].map((id) => toObjectId(id)!).filter(Boolean) } }, { projection: { email: 1 } })
+    .find({ _id: { $in: [...ids].map((id) => toObjectId(id)!).filter(Boolean) } }, { projection: { email: 1, username: 1, displayUsername: 1 } })
     .toArray();
-  const emails = new Map(people.map((p) => [p._id.toHexString(), p.email]));
+  // Username accounts are named by their username (their address is a placeholder).
+  const emails = new Map(people.map((p) => [p._id.toHexString(), identityOf(p)]));
   for (const e of shaped) {
     if (e.subject) e.subject.email = emails.get(e.subject.id) ?? null;
     if (e.actor.id) e.actor.email = emails.get(e.actor.id) ?? null;
@@ -269,6 +280,10 @@ export interface AdminUserDetail {
   id: string;
   name: string;
   email: string;
+  /** Username accounts (ADR-0012): the username as given. */
+  username: string | null;
+  /** An initial password from the CLI waiting to be revealed once, and until when. */
+  initialPassword: { expiresAt: Date } | null;
   emailVerified: boolean;
   image: string | null;
   createdAt: Date;
@@ -294,7 +309,7 @@ export async function getUserDetail(db: Db, userId: ObjectId, now = new Date()):
   const { users, accounts, sessions, subscriptions, auditEvents } = collections(db);
   const user = await users.findOne({ _id: userId });
   if (!user) return null;
-  const [google, password, grants, activeSessions, lastSession, subscription, entitlements, usageThisMonth, logins, events] = await Promise.all([
+  const [google, password, grants, activeSessions, lastSession, subscription, entitlements, usageThisMonth, logins, events, initialPassword] = await Promise.all([
     accounts.findOne({ userId, providerId: 'google' }, { sort: { createdAt: 1 }, projection: { accountId: 1, createdAt: 1 } }),
     accounts.findOne({ userId, providerId: 'credential' }, { projection: { createdAt: 1 } }),
     listGrants(db, userId),
@@ -305,11 +320,14 @@ export async function getUserDetail(db: Db, userId: ObjectId, now = new Date()):
     getUsage(db, userId, usagePeriod(now)),
     auditEvents.countDocuments({ userId, type: 'user.login' }),
     listAuditEvents(db, { userId, limit: 50 }),
+    pendingInitialPassword(db, userId, now),
   ]);
   return {
     id: user._id.toHexString(),
     name: user.name,
     email: user.email,
+    username: user.username ? (user.displayUsername || user.username) : null,
+    initialPassword: user.username ? initialPassword : null,
     emailVerified: user.emailVerified === true,
     image: user.image ?? null,
     createdAt: user.createdAt,
@@ -369,9 +387,11 @@ export async function setUserPlan(db: Db, change: { userId: ObjectId; plan: Plan
 
 /**
  * 'self': admins cannot take away their own admin role (from the dashboard);
- * 'last_admin': the last active admin always stays one.
+ * 'last_admin': the last active admin always stays one;
+ * 'username_account': an account that signs in with a username and a
+ * password an administrator handed out never becomes an admin (ADR-0012).
  */
-export type RoleChange = 'updated' | 'unchanged' | 'not_found' | 'self' | 'last_admin';
+export type RoleChange = 'updated' | 'unchanged' | 'not_found' | 'self' | 'last_admin' | 'username_account';
 
 /** Grant or revoke the admin role by user id; audited. */
 export async function setUserRole(
@@ -379,11 +399,12 @@ export async function setUserRole(
   change: { userId: ObjectId; role: UserRole; actor: string; actorUserId?: ObjectId | null },
 ): Promise<RoleChange> {
   const { users } = collections(db);
-  const target = await users.findOne({ _id: change.userId }, { projection: { role: 1 } });
+  const target = await users.findOne({ _id: change.userId }, { projection: { role: 1, username: 1 } });
   if (!target) return 'not_found';
   if ((target.role === 'admin' ? 'admin' : 'user') === change.role) return 'unchanged';
 
   if (change.role === 'admin') {
+    if (target.username) return 'username_account';
     await users.updateOne({ _id: change.userId }, { $set: { role: 'admin', updatedAt: new Date() } });
   } else {
     if (change.actorUserId?.equals(change.userId)) return 'self';

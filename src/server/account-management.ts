@@ -154,6 +154,8 @@ export async function exportAccountData(db: Db, userId: ObjectId, now = new Date
       id: user._id.toHexString(),
       name: user.name,
       email: user.email,
+      // Accounts an admin created for a tester (their email is only a placeholder).
+      username: user.username ? (user.displayUsername || user.username) : null,
       emailVerified: user.emailVerified === true,
       profileImage: user.image ?? null,
       createdAt: iso(user.createdAt),

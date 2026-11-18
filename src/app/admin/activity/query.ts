@@ -6,7 +6,8 @@ import { collections } from '@/server/db/collections';
 import { EVENT_GROUPS } from '../format';
 
 // The activity filter, read from the URL (the page and its CSV export share
-// it). Unknown values are ignored; an unknown account email matches nothing.
+// it). Unknown values are ignored; an unknown account email (or username, for
+// accounts that sign in with one) matches nothing.
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? '';
 const day = (value: string, offsetDays = 0) =>
@@ -33,7 +34,8 @@ export async function auditQueryFrom(params: Record<string, string | string[] | 
   query.before = day(v('to'), 1);
   const email = v('email').trim().toLowerCase().slice(0, 200);
   if (email) {
-    const user = await collections(getDb()).users.findOne({ email }, { projection: { _id: 1 } });
+    // An address has an "@"; a username never does (src/lib/username.ts).
+    const user = await collections(getDb()).users.findOne(email.includes('@') ? { email } : { username: email }, { projection: { _id: 1 } });
     query.userId = user?._id ?? NOBODY;
   }
   const active: Record<string, string> = {};

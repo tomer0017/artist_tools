@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Search, UserPlus } from 'lucide-react';
 import { AccountAvatar } from '@/components/shell/account';
 import { PLAN_NAMES, isPlanId } from '@/lib/plans';
 import { listAuditEvents, listUsers, userStats, type AdminUserRow, type UserListQuery } from '@/server/admin';
-import { registrationMode } from '@/server/auth';
+import { registrationMode, usernamePasswordAvailable } from '@/server/auth';
 import { getDb } from '@/server/db/client';
 import { requireAdmin } from '@/server/session';
 import { AdminShell } from './AdminShell';
@@ -58,6 +58,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   const filtered = Object.keys(active).length > 0;
   const pageLink = (n: number) => `/admin?${new URLSearchParams({ ...(search ? { q: search } : {}), ...active, page: String(n) })}`;
   const invite = registrationMode() === 'invite';
+  const usernames = usernamePasswordAvailable();
 
   return (
     <AdminShell active="users">
@@ -66,7 +67,16 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Users</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Registration is {invite ? 'invite-only' : 'open'}. Plans and promotional access can be changed here; billing is not live.
+            {usernames && ' Testers can also sign in with a username and password you give them.'}
           </p>
+          {usernames && (
+            <Link
+              href="/admin/users/new"
+              className="mt-3 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              <UserPlus className="h-4 w-4" aria-hidden="true" /> New tester account
+            </Link>
+          )}
         </div>
         <dl className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
           <Stat label="Accounts" value={stats.total} />
@@ -79,17 +89,18 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
       </div>
 
       <form role="search" method="get" action="/admin" className="mt-5 flex gap-2">
-        <label htmlFor="admin-search" className="sr-only">Search by email</label>
+        <label htmlFor="admin-search" className="sr-only">Search by username or email</label>
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input
             id="admin-search"
             name="q"
             type="search"
-            inputMode="email"
             autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
             defaultValue={search}
-            placeholder="Search by email"
+            placeholder="Search by username or email"
             className="h-11 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
           />
         </div>
@@ -150,10 +161,12 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                   <AccountAvatar account={{ name: u.name, email: u.email, image: u.image }} size={40} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">{u.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                    <p className="truncate text-xs text-muted-foreground">{u.username ? `Username: ${u.username}` : u.email}</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <Badges user={u} />
-                      <span className="text-[11px] text-muted-foreground">Last login {dateOnly(u.lastLoginAt)}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Registered {dateOnly(u.createdAt)} · Last login {dateOnly(u.lastLoginAt)}
+                      </span>
                     </div>
                   </div>
                   <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -186,11 +199,13 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                         <AccountAvatar account={{ name: u.name, email: u.email, image: u.image }} size={32} />
                         <span className="min-w-0">
                           <span className="block font-medium text-foreground">{u.name}</span>
-                          <span className="block text-xs text-muted-foreground">{u.email}</span>
+                          <span className="block text-xs text-muted-foreground">{u.username ? `Username: ${u.username}` : u.email}</span>
                         </span>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{[u.google.linked ? `Google · ${u.google.idHint}` : null, u.password ? 'Password' : null].filter(Boolean).join(' + ') || '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {[u.google.linked ? `Google · ${u.google.idHint}` : null, u.password ? (u.username ? 'Username' : 'Password') : null].filter(Boolean).join(' + ') || '—'}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">{dateOnly(u.createdAt)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{dateTime(u.lastLoginAt)}</td>
                     <td className="px-4 py-3">{u.role === 'admin' ? 'Admin' : 'User'}{u.status !== 'active' && <span className="ml-1 text-destructive">({u.status})</span>}</td>

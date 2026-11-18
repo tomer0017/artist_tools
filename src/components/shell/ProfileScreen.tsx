@@ -119,10 +119,17 @@ export default function ProfileScreen() {
             <AccountAvatar account={account} size={56} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-lg font-semibold text-foreground">{account.name}</p>
-              <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-                <span className="truncate">{account.email}</span>
-                {account.emailVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" aria-label={t('verified')} />}
-              </p>
+              {account.username ? (
+                // A username account has no email address (its stored one is only a placeholder).
+                <p className="truncate text-sm text-muted-foreground">
+                  {t('username')}: <span dir="ltr" className="text-foreground/80">{account.username}</span>
+                </p>
+              ) : (
+                <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                  <span className="truncate">{account.email}</span>
+                  {account.emailVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" aria-label={t('verified')} />}
+                </p>
+              )}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${plan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border bg-secondary/60 text-foreground'}`}>
                   {plan === 'pro' && <Crown className="h-3 w-3" aria-hidden="true" />}
@@ -138,7 +145,11 @@ export default function ProfileScreen() {
           </div>
           <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
             <Detail label={t('signedInWith')} value={signInWith(account, t)} />
-            <Detail label={t('email')} value={account.emailVerified ? (account.methods.google ? t('verifiedByGoogle') : t('verified')) : t('notVerified')} />
+            {account.username ? (
+              <Detail label={t('username')} value={account.username} />
+            ) : (
+              <Detail label={t('email')} value={account.emailVerified ? (account.methods.google ? t('verifiedByGoogle') : t('verified')) : t('notVerified')} />
+            )}
             <Detail label={t('memberSince')} value={longDate(account.createdAt)} />
             <Detail label={t('role')} value={isAdmin ? t('administrator') : t('member')} />
           </dl>
@@ -273,6 +284,7 @@ export default function ProfileScreen() {
 
 function signInWith(account: StudioAccount, t: T): string {
   const { google, password } = account.methods;
+  if (account.username) return t('methodUsername');
   if (google && password) return t('methodBoth');
   return password ? t('methodPassword') : t('methodGoogle');
 }

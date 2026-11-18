@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { en } from '@/i18n/messages/en';
 import { he } from '@/i18n/messages/he';
-import { authErrorKey, signInErrorKey } from './ui';
+import { authErrorKey, signInErrorKey, usernameErrorKey } from './ui';
 
 describe('sign-in error messages', () => {
   it('explains each known code, and anything else generically', () => {
@@ -30,5 +30,18 @@ describe('sign-in error messages', () => {
     expect(authErrorKey({ status: 429, code: 'SIGNUPS_PAUSED' })).toBe('SIGNUPS_PAUSED');
     expect(authErrorKey({ status: 429 })).toBe('RATE_LIMITED');
     expect(en.auth.errors.SIGNUPS_PAUSED).toContain('paused');
+  });
+
+  it('words username refusals without hinting at accounts or at a reset by email', () => {
+    expect(usernameErrorKey({ status: 401, code: 'INVALID_USERNAME_OR_PASSWORD' })).toBe('INVALID_USERNAME_OR_PASSWORD');
+    // A malformed username: the same words as a wrong password.
+    for (const code of ['USERNAME_TOO_SHORT', 'USERNAME_TOO_LONG', 'INVALID_USERNAME']) expect(usernameErrorKey({ status: 422, code })).toBe('INVALID_USERNAME_OR_PASSWORD');
+    expect(usernameErrorKey({ status: 429, code: 'TOO_MANY_ATTEMPTS' })).toBe('TOO_MANY_ATTEMPTS_USERNAME');
+    expect(usernameErrorKey({ status: 403, code: 'ACCOUNT_SUSPENDED' })).toBe('ACCOUNT_SUSPENDED');
+    expect(usernameErrorKey({ status: 429 })).toBe('RATE_LIMITED');
+    for (const messages of [en, he]) {
+      expect(messages.auth.errors.TOO_MANY_ATTEMPTS_USERNAME).not.toMatch(/reset|לאפס/i);
+      expect(messages.auth.errors.INVALID_USERNAME_OR_PASSWORD).not.toMatch(/reset|לאפס/i);
+    }
   });
 });

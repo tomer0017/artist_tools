@@ -5,8 +5,11 @@
 //      cookies are written to e2e/.auth/<name>.json for Playwright;
 //   3. the production (standalone) server, pointed at that database;
 //   4. a second one on port 8081 configured like staging's public sign-in:
-//      Google only, open to every Google-verified account, no mail at all,
-//      with its own database (e2e/google-only.spec.ts).
+//      Google, open to every Google-verified account, plus username sign-in
+//      for accounts an admin creates, no mail at all, with its own database
+//      (e2e/google-only.spec.ts, e2e/username-accounts.spec.ts). Its username
+//      accounts are created the real way (Better Auth, hashed passwords);
+//      their per-run random passwords go to e2e/.auth/username-accounts.json.
 // No login bypass exists in the app: tests are signed in the way a real
 // session is, and the server verifies them the same way.
 //
@@ -16,7 +19,10 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
+import { createAuth } from '@/server/auth';
 import { migrate } from '@/server/db/migrate';
+import { createMailer } from '@/server/mail/mailer';
+import { createUsernameAccount, holdInitialPassword } from '@/server/password-accounts';
 
 const PORT = 8080;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -24,6 +30,10 @@ const SECRET = randomBytes(32).toString('base64');
 const DB_NAME = 'studio_e2e';
 const GOOGLE_ONLY_PORT = 8081;
 const GOOGLE_ONLY_DB = 'studio_e2e_google_only';
+// The sealing key of initial passwords comes from the environment's auth
+// settings (src/server/security/secret-box.ts); each server gets its own URL.
+process.env.BETTER_AUTH_SECRET = SECRET;
+process.env.BETTER_AUTH_URL = BASE_URL;
 
 /** The signed cookie value Better Auth expects: `token.HMAC-SHA256(token)`, URL-encoded. */
 const signedCookie = (token: string) => encodeURIComponent(`${token}.${createHmac('sha256', SECRET).update(token).digest('base64')}`);
@@ -126,12 +136,51 @@ for (const name of ['ivrit-chromium', 'ivrit-iphone-webkit', 'ivrit-switch']) {
   await db.collection('users').updateOne({ email: `${name}@e2e.test` }, { $set: { locale: 'he', currency: 'ILS' } });
 }
 // The Google-only server's own accounts: one that has just registered with
-// Google (no tool introductions seen yet) and an admin.
+// Google (no tool introductions seen yet), an admin, and the username accounts
+// of e2e/username-accounts.spec.ts.
 {
   const googleOnly = client.db(GOOGLE_ONLY_DB);
   await migrate(googleOnly);
   await seedSignedInUser(googleOnly, 'google-newcomer', 'user', 'free', false, []);
   await seedSignedInUser(googleOnly, 'google-admin', 'admin');
+  // The admin that resets and reveals passwords: "signed in" 20 minutes from
+  // now, so its sign-in still counts as recent however long the run takes
+  // (the rule itself is tested with admin-settled in admin.spec.ts).
+  await seedSignedInUser(googleOnly, 'google-admin-qa', 'admin', 'free', false, ALL_TOOLS, -20);
+  const auth = createAuth({
+    db: googleOnly,
+    client,
+    baseURL: `http://localhost:${GOOGLE_ONLY_PORT}`,
+    secret: SECRET,
+    google: null,
+    signups: { mode: 'open' },
+    usernamePassword: true,
+    mailer: createMailer(googleOnly, 'disabled'),
+  });
+  const testers: Record<string, { username: string; password: string; id: string }> = {};
+  const TESTERS: [string, 'free' | 'pro', 'en' | 'he'][] = [
+    ['QA_Free', 'free', 'en'],
+    ['QA_Pro', 'pro', 'en'],
+    ['QA_Ivrit', 'free', 'he'],
+    ['QA_Phone', 'free', 'en'],
+    ['QA_Phone_He', 'free', 'he'],
+    ['QA_Wrong', 'free', 'en'],
+    ['QA_Plan', 'free', 'en'],
+    ['QA_Reset', 'free', 'en'],
+    ['QA_Sessions', 'free', 'en'],
+    ['QA_Suspend', 'free', 'en'],
+    ['QA_Reveal', 'free', 'en'],
+    ['QA_Change', 'free', 'en'],
+  ];
+  for (const [username, plan, locale] of TESTERS) {
+    const created = await createUsernameAccount(googleOnly, auth, { username, plan, locale, test: true, actor: 'cli' });
+    if (created.status !== 'created') throw new Error(`Could not seed ${username}: ${created.status}`);
+    testers[username] = { username, password: created.password, id: created.userId.toHexString() };
+    // Tools already introduced, so specs see the plain tool.
+    await googleOnly.collection('users').updateOne({ _id: created.userId }, { $set: { introsSeen: ALL_TOOLS } });
+  }
+  await holdInitialPassword(googleOnly, new ObjectId(testers.QA_Reveal.id), testers.QA_Reveal.password, 'cli');
+  writeFileSync('e2e/.auth/username-accounts.json', JSON.stringify(testers));
 }
 await client.close();
 
@@ -184,6 +233,7 @@ const googleOnlyServer = startServer(GOOGLE_ONLY_PORT, {
   MONGODB_DB: GOOGLE_ONLY_DB,
   AUTH_SIGNUP_MODE: 'open',
   AUTH_EMAIL_PASSWORD: 'off',
+  AUTH_USERNAME_PASSWORD: 'on',
   MAIL_TRANSPORT: undefined,
   AUTH_SIGNUP_ALLOWLIST: undefined,
 });

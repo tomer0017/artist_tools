@@ -31,25 +31,28 @@ export default defineConfig({
         },
       ]
     : [
-        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity|google-only/ },
+        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity|google-only|username-accounts/ },
         // Safari/WebKit on iPhone — the mobile navigation, touch and sign-in checks.
         {
           name: "iphone-webkit",
           use: { ...devices["iPhone 13"], ...signedIn },
           testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch|color)\.spec\.ts/,
+          // (username-accounts.spec.ts runs on the staging-like server: google-only-iphone below.)
+          testIgnore: /username-accounts/,
           grep: /mobile/,
         },
-        // The public sign-in as staging runs it: Google only, open to everyone
-        // (the second test server, scripts/e2e-server.ts).
+        // The public sign-in as staging runs it: Google, open to everyone, and
+        // username accounts for invited testers (the second test server,
+        // scripts/e2e-server.ts).
         {
           name: "google-only",
           use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:8081" },
-          testMatch: /google-only\.spec\.ts/,
+          testMatch: /(google-only|username-accounts)\.spec\.ts/,
         },
         {
           name: "google-only-iphone",
           use: { ...devices["iPhone 13"], baseURL: "http://localhost:8081" },
-          testMatch: /google-only\.spec\.ts/,
+          testMatch: /(google-only|username-accounts)\.spec\.ts/,
           grep: /mobile/,
         },
       ],

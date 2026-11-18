@@ -33,7 +33,10 @@ export function monthsBefore(now: Date, months: number): Date {
 export async function runMaintenance(db: Db, now = new Date()) {
   const { users, accounts, rateLimits, analyticsEvents, auditEvents } = collections(db);
   const stale = await users
-    .find({ emailVerified: false, createdAt: { $lt: new Date(now.getTime() - UNVERIFIED_LIFETIME_MS) } }, { projection: { email: 1 } })
+    // Username accounts are created by administrators and have no address to
+    // confirm (ADR-0012): never an abandoned sign-up, whatever their flags say.
+    // (`username: null` matches a missing or empty one alike.)
+    .find({ emailVerified: false, username: null, createdAt: { $lt: new Date(now.getTime() - UNVERIFIED_LIFETIME_MS) } }, { projection: { email: 1 } })
     .toArray();
   let unverifiedRemoved = 0;
   for (const user of stale) {
