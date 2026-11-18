@@ -45,11 +45,11 @@ const OWNER: Catalog = {
 const NEWER = () => ({
   plans: {
     free: {
-      features: ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.pdf'],
-      quotas: { 'export.pdf': { limit: 5, period: 'month' } },
+      features: ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.worksheets'],
+      quotas: { 'export.worksheets': { limit: 5, period: 'month' } },
       learn: { curriculum: { rule: 'selected', ids: ['D-START-01', 'D-SHAPE-01'] } },
     },
-    pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.pdf'], quotas: {}, learn: { curriculum: { rule: 'all' } } },
+    pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.worksheets'], quotas: {}, learn: { curriculum: { rule: 'all' } } },
   },
   disabled: ['learn.color'],
   learnPreviews: 'title_and_thumbnail',
@@ -57,8 +57,8 @@ const NEWER = () => ({
 
 /** The `plans` documents that newer release writes (with its feature ids). */
 const NEWER_PLANS = {
-  free: { features: [...OWNER.plans.free.features, 'learn.curriculum', 'export.pdf'], limits: { 'export.pdf': 5 } },
-  pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.pdf'] },
+  free: { features: [...OWNER.plans.free.features, 'learn.curriculum', 'export.worksheets'], limits: { 'export.worksheets': 5 } },
+  pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.worksheets'] },
 };
 
 /** Publish as an admin does here: a draft, then publish it. */
@@ -145,9 +145,9 @@ describe('rolling back after a newer release published new feature ids and secti
     expect(read.status).toBe('ok');
     if (read.status === 'unreadable') return;
     expect(read.catalog).toEqual(OWNER);
-    expect(read.unknown).toEqual({ features: ['export.pdf', 'learn.color', 'learn.curriculum'], sections: ['learnPreviews', 'plans.free.learn', 'plans.pro.learn'] });
+    expect(read.unknown).toEqual({ features: ['export.worksheets', 'learn.color', 'learn.curriculum'], sections: ['learnPreviews', 'plans.free.learn', 'plans.pro.learn'] });
     expect(catalogReadNotes(read)).toEqual([
-      'Feature ids this version of the app does not know: export.pdf, learn.color, learn.curriculum.',
+      'Feature ids this version of the app does not know: export.worksheets, learn.color, learn.curriculum.',
       'Settings this version of the app does not know: learnPreviews, plans.free.learn, plans.pro.learn.',
     ]);
   });
@@ -170,7 +170,7 @@ describe('what a newer release added survives editing, publishing and restoring 
 
     const expected = NEWER();
     // Kept in place; the new one added at the end.
-    expected.plans.free.features = ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.pdf', 'tool.compare'];
+    expected.plans.free.features = ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.worksheets', 'tool.compare'];
     expect((await getPublished(db, catalogSpec))!.document).toEqual(expected);
     const free = await account(db, 'free');
     expect((await getEntitlements(db, free)).features).toEqual(['tool.study', 'tool.color', 'tool.grid', 'tool.compare', 'export.image']);
@@ -386,11 +386,13 @@ describe('restoring a database', () => {
 });
 
 describe('compatibility with the releases before this one (be6890c and earlier)', () => {
-  // Their catalog schema, copied verbatim (src/server/config/catalog.ts at be6890c).
-  const Feature = z.enum(FEATURES);
+  // Their feature ids (src/lib/plans.ts at be6890c), and their catalog schema, copied verbatim
+  // (src/server/config/catalog.ts at be6890c).
+  const BE6890C_FEATURES = ['tool.measure', 'tool.study', 'tool.color', 'tool.grid', 'tool.compare', 'export.image', 'export.gif', 'export.gif_large', 'export.gif_difference'] as const;
+  const Feature = z.enum(BE6890C_FEATURES);
   const Quota = z.object({ limit: z.number().int().min(1).max(1_000_000), period: z.enum(['day', 'month']) });
   const PlanEntry = z.object({
-    features: z.array(Feature).max(FEATURES.length),
+    features: z.array(Feature).max(BE6890C_FEATURES.length),
     quotas: z
       .record(Feature, Quota)
       .default({})
@@ -402,7 +404,7 @@ describe('compatibility with the releases before this one (be6890c and earlier)'
       for (const planId of PLAN_IDS) {
         const plan = catalog.plans[planId];
         if (new Set(plan.features).size !== plan.features.length) ctx.addIssue({ code: 'custom', path: ['plans', planId, 'features'], message: 'lists a feature twice' });
-        for (const feature of Object.keys(plan.quotas) as FeatureId[]) {
+        for (const feature of Object.keys(plan.quotas) as (typeof BE6890C_FEATURES)[number][]) {
           if (!plan.features.includes(feature)) ctx.addIssue({ code: 'custom', path: ['plans', planId, 'quotas', feature], message: 'has a quota but is not included' });
         }
       }
@@ -458,7 +460,7 @@ describe('compatibility with the releases before this one (be6890c and earlier)'
         const wanted = planDocsFor(input)[planId];
         expect({ name: doc.name, active: doc.active, features: doc.features, limits: doc.limits, dailyLimits: doc.dailyLimits }).toEqual(wanted);
         // be6890c's syncPlans: features in the canonical order minus switched-off ones; monthly caps in `limits`, daily in `dailyLimits`.
-        expect(doc.features).toEqual(FEATURES.filter((f) => input.plans[planId].features.includes(f) && !input.disabled.includes(f)));
+        expect(doc.features).toEqual(BE6890C_FEATURES.filter((f) => input.plans[planId].features.includes(f) && !input.disabled.includes(f)));
       }
     }
   });

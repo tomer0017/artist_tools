@@ -17,7 +17,18 @@ import GridTab from './GridTab';
 const mobile = vi.hoisted(() => ({ value: false }));
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => mobile.value }));
 const save = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => true));
-vi.mock('@/components/common/SaveMedia', () => ({ useSaveMedia: () => ({ save, authorize: vi.fn(async () => true) }) }));
+const authorize = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => true));
+vi.mock('@/components/common/SaveMedia', () => ({ useSaveMedia: () => ({ save, authorize }) }));
+// What the account has, and what each plan offers (the PDF is in no plan unless a test says so).
+const account = vi.hoisted(() => ({ features: [] as string[], offer: { free: [] as string[], pro: [] as string[] } }));
+vi.mock('@/components/shell/account', () => ({
+  useHasFeature: (feature: string) => account.features.includes(feature),
+  useAccount: () => ({ account: { offer: account.offer } }),
+}));
+// The PDF itself is built by jsPDF (tested on its own, src/lib/print): here, what Create a Grid hands it.
+const buildGridPdf = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => new ArrayBuffer(8)));
+vi.mock('@/lib/print/gridPdf', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/print/gridPdf')>()), buildGridPdf }));
+vi.mock('jspdf', () => ({ jsPDF: class {}, GState: class {} }));
 vi.mock('@/lib/saveMedia', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/saveMedia')>()),
   canvasToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
@@ -75,6 +86,11 @@ const withoutImage = (log: Call[]) => log.map((c) => (c[0] === 'drawImage' ? ['d
 beforeEach(() => {
   logs.clear();
   save.mockClear();
+  authorize.mockClear();
+  authorize.mockResolvedValue(true);
+  buildGridPdf.mockClear();
+  account.features = [];
+  account.offer = { free: [], pro: [] };
   mobile.value = false;
   localStorage.clear();
   vi.stubGlobal('Image', FakeImage);
@@ -343,5 +359,75 @@ describe('on a phone, and in Hebrew', () => {
     expect(screen.getByRole('tab', { name: 'משבצות ריבועיות' })).toBeInTheDocument();
     const { media } = await saveVia('שמירת רשת ריקה');
     expect(media).toMatchObject({ title: 'שמירת רשת ריקה', filename: 'grid-blank-3x5-40x50cm.png' });
+  });
+});
+
+describe('the A4 PDF', () => {
+  const pdfButton = () => screen.queryByRole('button', { name: 'Save PDF (A4)' });
+
+  it('is offered only where it can be had: hidden while no plan has it, locked where another plan does, ready where included', async () => {
+    const view = await renderGrid();
+    expect(pdfButton()).toBeNull();
+    view.unmount();
+    account.offer = { free: [], pro: ['export.pdf'] };
+    const locked = await renderGrid();
+    // Locked in words as well as by the icon.
+    expect(pdfButton()).toBeNull();
+    const lockedButton = screen.getByRole('button', { name: 'Save PDF (A4) (Locked)' });
+    expect(lockedButton.querySelector('.lucide-lock')).not.toBeNull();
+    locked.unmount();
+    account.features = ['export.pdf'];
+    await renderGrid();
+    expect(pdfButton()!.querySelector('.lucide-lock')).toBeNull();
+  });
+
+  it('asks the server first: a refusal makes nothing; a yes makes both pages and saves them as one authorized PDF', async () => {
+    account.features = ['export.pdf'];
+    authorize.mockResolvedValueOnce(false);
+    await renderGrid(oldProject({ ...OLD_GRID, canvasWidth: 21, canvasHeight: 29.7, cellMode: 'square', cellSize: 3 }));
+    fireEvent.click(pdfButton()!);
+    await waitFor(() => expect(authorize).toHaveBeenCalledWith({ tool: 'grid', features: ['export.pdf'] }));
+    await act(async () => {});
+    expect(buildGridPdf).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+
+    fireEvent.click(pdfButton()!);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(authorize).toHaveBeenCalledTimes(2);
+    const input = buildGridPdf.mock.calls[0][1] as { layout: { orientation: string; scale: number }; reference: Uint8Array; words: Record<string, string>; rtl: boolean };
+    expect(input.layout.orientation).toBe('portrait');
+    expect(input.reference).toBeInstanceOf(Uint8Array);
+    expect(input.rtl).toBe(false);
+    expect(input.words).toEqual({
+      title: 'Grid for a 21×29.7 cm canvas',
+      reference: 'Reference with grid',
+      blank: 'Blank grid',
+      detail: ['3 cm squares (25.3 mm on this page)', '84.4% of 21×29.7 cm'],
+      print: 'Print at 100% (Actual size). The bar below must measure 50 mm.',
+      bar: '50 mm',
+    });
+    const media = save.mock.calls[0][0] as Record<string, unknown>;
+    expect(media).toMatchObject({ filename: 'grid-3cm-squares-21x29.7cm-a4.pdf', mime: 'application/pdf', title: 'Save PDF (A4)', tool: 'grid', authorized: true });
+    expect((media.blob as Blob).type).toBe('application/pdf');
+    expect(media.preview).toBeInstanceOf(Blob);
+  });
+
+  it('in Hebrew: the words on the pages are Hebrew, right to left', async () => {
+    account.features = ['export.pdf'];
+    await renderGrid(oldProject(), 'he');
+    fireEvent.click(screen.getByRole('button', { name: 'שמירת PDF\u200f (A4)' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const input = buildGridPdf.mock.calls[0][1] as { words: Record<string, string>; rtl: boolean };
+    expect(input.rtl).toBe(true);
+    expect(input.words.print).toBe('להדפיס ב־100%, בגודל אמיתי. הפס שלמטה צריך להיות באורך 50 מ״מ.');
+    expect(input.words.reference).toBe('תמונת הייחוס עם הרשת');
+  });
+
+  it('on a phone: short labels under the grid, their full names kept', async () => {
+    mobile.value = true;
+    account.features = ['export.pdf'];
+    await renderGrid();
+    expect(screen.getByRole('button', { name: 'Save blank grid' })).toHaveTextContent('Blank grid');
+    expect(screen.getByRole('button', { name: 'Save PDF (A4)' })).toHaveTextContent('PDF');
   });
 });

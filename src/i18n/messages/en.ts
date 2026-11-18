@@ -153,6 +153,7 @@ export const en = {
       gifs: { label: 'Comparison GIFs', detail: 'Opacity pulse and blink, small and medium sizes' },
       large: { label: 'Large GIFs', detail: 'Up to 800 px, for sharing and printing' },
       difference: { label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs' },
+      pdf: { label: 'Print-ready PDFs', detail: 'A4: the reference with its grid and a matching blank grid, to scale' },
     },
     faq: {
       freeQ: 'Is Studio Companion free?',
@@ -262,6 +263,7 @@ export const en = {
       exportGif: 'GIFs',
       exportGifLarge: 'Large GIFs',
       exportGifDifference: 'Compare + Difference GIFs',
+      exportPdf: 'Grid PDFs (A4)',
     },
     intros: {
       title: 'Tool introductions',

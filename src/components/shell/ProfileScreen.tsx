@@ -53,6 +53,8 @@ function useFeatureLabel() {
         return t('account.features.exportGifLarge');
       case 'export.gif_difference':
         return t('account.features.exportGifDifference');
+      case 'export.pdf':
+        return t('account.features.exportPdf');
     }
   };
 }

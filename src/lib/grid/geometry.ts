@@ -64,6 +64,27 @@ export function gridLines(gs: LineSettings, w: number, h: number): GridLines {
   return { xs: divisionLines(gs.columns, w), ys: divisionLines(gs.rows, h) };
 }
 
+/**
+ * Where the inner lines fall, as fractions (0–1) of each side, unrounded: for
+ * drawing the same grid at any size, such as exact vectors in a PDF. The same
+ * lines as gridLines() (same count, same tests at the edges).
+ */
+export function gridFractions(gs: LineSettings): GridLines {
+  if (gs.cellMode === 'square' && gs.cellSize !== undefined && gs.cellSize > 0) {
+    return { xs: squareFractions(gs.cellSize, gs.canvasWidth), ys: squareFractions(gs.cellSize, gs.canvasHeight) };
+  }
+  const even = (n: number) => Array.from({ length: Math.max(0, n - 1) }, (_, i) => (i + 1) / n);
+  return { xs: even(gs.columns), ys: even(gs.rows) };
+}
+
+function squareFractions(cell: number, length: number): number[] {
+  const out: number[] = [];
+  if (!(cell > 0) || !(length > 0)) return out;
+  const end = length - length * 1e-9;
+  for (let i = 1; i * cell < end && out.length < MAX_LINES; i++) out.push((i * cell) / length);
+  return out;
+}
+
 /** How many cells across and down, counting a partial one at the right or bottom edge. */
 export function cellCounts(gs: LineSettings): { across: number; down: number; partial: boolean } {
   if (gs.cellMode === 'square' && gs.cellSize !== undefined && gs.cellSize > 0) {

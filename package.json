@@ -54,6 +54,7 @@
     "embla-carousel-react": "^8.6.0",
     "gifenc": "^1.0.3",
     "input-otp": "^1.4.2",
+    "jspdf": "4.2.1",
     "lucide-react": "^0.462.0",
     "mongodb": "^7.8.0",
     "next": "^16.4.6",
@@ -119,6 +120,8 @@
     "yaml@^2": "2.8.3",
     "caniuse-lite": "1.0.30001819",
     "electron-to-chromium": "1.5.467",
-    "node-releases": "2.0.60"
+    "node-releases": "2.0.60",
+    "@babel/runtime": "7.29.13",
+    "dompurify": "3.4.17"
   }
 }

@@ -1,6 +1,8 @@
+import { writeFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { photo } from './fixtures/photo';
+import { inspectPdf, type InspectedPage, type InspectedPdf, type PlacedImage } from '../src/test/pdfInspect';
 
 // Create a Grid in real browsers (M1 of the Learn plan):
 // - rotation turns the image on the grid, never the photo itself, and the
@@ -12,7 +14,11 @@ import { photo } from './fixtures/photo';
 // - every save is authorized first (Create a Grid and saving images) and
 //   fails closed;
 // - English, Hebrew, WCAG A/AA (axe);
-// - the phone layout (Chromium phone emulation, and WebKit iPhone 13).
+// - the phone layout (Chromium phone emulation, and WebKit iPhone 13);
+// - the A4 PDF (M2), read back from the downloaded file: exact A4, the same
+//   canvas, grid and bar on both pages, the photo placed as in the saved
+//   image; offered only to accounts that have it (admins, until the owner
+//   publishes it for a plan), asked of the server first, failing closed.
 
 const PROJECT_KEY = 'painter-studio-project';
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
@@ -38,12 +44,12 @@ function pngSize(bytes: Buffer) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-/** Red, green, blue and alpha of a saved PNG at some points, decoded by the browser. */
-function samples(page: Page, png: Buffer, points: [number, number][]): Promise<number[][]> {
+/** Red, green, blue and alpha of a saved PNG (or JPEG) at some points, decoded by the browser. */
+function samples(page: Page, png: Buffer, points: [number, number][], type = 'image/png'): Promise<number[][]> {
   return page.evaluate(
-    async ({ b64, points }) => {
+    async ({ b64, points, type }) => {
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+      const bitmap = await createImageBitmap(new Blob([bytes], { type }));
       const canvas = document.createElement('canvas');
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
@@ -51,7 +57,7 @@ function samples(page: Page, png: Buffer, points: [number, number][]): Promise<n
       ctx.drawImage(bitmap, 0, 0);
       return points.map(([x, y]) => Array.from(ctx.getImageData(x, y, 1, 1).data));
     },
-    { b64: png.toString('base64'), points },
+    { b64: png.toString('base64'), points, type },
   );
 }
 
@@ -245,5 +251,322 @@ test.describe('Create a Grid on a phone', () => {
 
     await page.getByRole('button', { name: 'Save blank grid' }).click();
     await expect(page.getByAltText('Image preview')).toBeVisible();
+  });
+});
+
+// ─── The A4 PDF (M2) ──────────────────────────────────────────────────────────
+// Before the owner publishes grid PDFs for a plan, only admins have them: the
+// tests that make one are signed in as this server's admin.
+
+const ADMIN = 'e2e/.auth/admin.json';
+/** A4 in points, as each page's MediaBox must say. */
+const A4_PT = { portrait: [0, 0, 595.28, 841.89], landscape: [0, 0, 841.89, 595.28] };
+const MARGIN_MM = 12.7;
+const FOOTER_MM = 21;
+/** Grid settings as the studio saves them (its defaults: 50×70 cm, 4×4). */
+const GRID = { canvasWidth: 50, canvasHeight: 70, unit: 'cm', columns: 4, rows: 4, lineColor: '#ffffff', lineOpacity: 0.5, lineWidth: 1, imageOffsetX: 0, imageOffsetY: 0, imageScale: 1, rotation: 0, cellMode: 'divisions', cellSize: 3 };
+/** 50×70 cm on portrait A4: 35.8 % (the 250.6 mm above the words, over 700 mm), so 179 × 250.6 mm, centred. */
+const REDUCED_FRAME = { x: 15.5, y: 12.7, w: 179, h: 250.6 };
+
+type Box = { x: number; y: number; w: number; h: number };
+type Line = InspectedPage['lines'][number];
+const near = (actual: number, expected: number, tolerance = 0.01) =>
+  expect(Math.abs(actual - expected), `${actual} should be ${expected} ± ${tolerance}`).toBeLessThanOrEqual(tolerance);
+const sameBox = (a: Box, b: Box, tolerance = 0.01) => (['x', 'y', 'w', 'h'] as const).every((k) => Math.abs(a[k] - b[k]) <= tolerance);
+const sorted = (values: number[]) => [...values].sort((a, b) => a - b);
+
+/** Open Create a Grid with a project this browser saved earlier: the test photo and these settings. */
+async function openSaved(page: Page, settings: Record<string, unknown>) {
+  const photoUrl = `data:image/png;base64,${photo.buffer.toString('base64')}`;
+  const project = { image: photoUrl, calibration: null, measurements: [], sampledColors: [], gridSettings: { ...GRID, ...settings }, gridImage: photoUrl, gridImageInitialized: true, savedAt: 1_763_000_000_000 };
+  await page.addInitScript(([key, value]) => {
+    if (!sessionStorage.getItem('seeded')) {
+      localStorage.setItem(key, value);
+      sessionStorage.setItem('seeded', '1');
+    }
+  }, [PROJECT_KEY, JSON.stringify(project)]);
+  await page.goto('/app/grid');
+}
+
+/** The picture of the PDF's pages in its sheet, by its description. */
+const PDF_PREVIEW = { en: 'The PDF’s pages: the reference with its grid, and the blank grid', he: 'הדפים של קובץ ה־PDF: תמונת הייחוס עם הרשת, והרשת הריקה' };
+
+/** Ask for the PDF: the server is asked first (Create a Grid, grid PDFs), then the PDF's sheet opens with a picture of its pages. */
+async function openPdfSheet(page: Page, button = 'Save PDF (A4)', preview = PDF_PREVIEW.en) {
+  const asked = page.waitForRequest((r) => r.url().endsWith('/api/usage') && r.method() === 'POST' && (r.postData() ?? '').includes('export.pdf'));
+  await page.getByRole('button', { name: button, exact: true }).first().click();
+  expect((await asked).postDataJSON()).toEqual({ tool: 'tool.grid', features: ['export.pdf'] });
+  const sheet = page.getByRole('dialog', { name: button });
+  await expect(sheet.getByRole('img', { name: preview })).toBeVisible();
+  return sheet;
+}
+
+/** Save the PDF from its sheet and read the file back. */
+async function downloadPdf(page: Page, sheet: Locator, button = 'Save PDF') {
+  const file = await readDownload(page, () => sheet.getByRole('button', { name: button, exact: true }).click());
+  await expect(sheet).toHaveCount(0);
+  expect(file.bytes.subarray(0, 5).toString()).toBe('%PDF-');
+  // Kept with the test's results, to open and print when checking by eye.
+  writeFileSync(test.info().outputPath(file.name), file.bytes);
+  return { name: file.name, pdf: inspectPdf(file.bytes) };
+}
+
+/**
+ * Both pages as the file has them: exact A4 in this orientation, printing at
+ * actual size asked for; the canvas frame at `frame` on both; the photo
+ * filling it on page 1 only, at 300 dpi of its printed size; the same grid
+ * lines on both (black on page 2); the bar exactly 50 mm between its end
+ * marks, in the same place on both; the words under the canvas, inside the
+ * margins, from the reading side.
+ */
+function expectPages(pdf: InspectedPdf, orientation: 'portrait' | 'landscape', frame: Box, rtl = false) {
+  const pageW = orientation === 'portrait' ? 210 : 297;
+  const pageH = orientation === 'portrait' ? 297 : 210;
+  const footerTop = pageH - MARGIN_MM - FOOTER_MM;
+  expect(pdf.pages).toHaveLength(2);
+  expect(pdf.printScalingNone).toBe(true);
+  for (const p of pdf.pages) {
+    expect(p.mediaBox).toEqual(A4_PT[orientation]);
+    expect(p.rects).toHaveLength(1);
+    expect(sameBox(p.rects[0], frame), `the frame ${JSON.stringify(p.rects[0])}`).toBe(true);
+  }
+  expect(frame.y + frame.h).toBeLessThanOrEqual(footerTop + 0.01);
+
+  const [first, second] = pdf.pages;
+  const photos = first.images.filter((i) => sameBox(i, frame));
+  expect(photos).toHaveLength(1);
+  expect(second.images.filter((i) => sameBox(i, frame, 1))).toHaveLength(0);
+  const reference = pdf.images[pdf.xobjects[photos[0].name]];
+  expect(reference.filter).toBe('DCTDecode');
+  expect([reference.width, reference.height]).toEqual([Math.round((frame.w / 25.4) * 300), Math.round((frame.h / 25.4) * 300)]);
+
+  const inside = (l: Line) =>
+    Math.min(l.x1, l.x2) >= frame.x - 0.01 && Math.max(l.x1, l.x2) <= frame.x + frame.w + 0.01 && Math.min(l.y1, l.y2) >= frame.y - 0.01 && Math.max(l.y1, l.y2) <= frame.y + frame.h + 0.01;
+  const shape = (l: Line) => [l.x1, l.y1, l.x2, l.y2, l.width, l.opacity].map((v) => Math.round(v * 1000) / 1000);
+  const grid = pdf.pages.map((p) => p.lines.filter(inside));
+  expect(grid[0].length).toBeGreaterThan(0);
+  expect(grid[1].map(shape)).toEqual(grid[0].map(shape));
+  for (const l of grid[1]) expect(l.color).toBe('#000000');
+
+  const barStarts = pdf.pages.map((p) => {
+    const marks = p.lines.filter((l) => !inside(l));
+    expect(marks).toHaveLength(3);
+    for (const m of marks) {
+      expect(m.color).toBe('#000000');
+      near(m.width, 0.35, 0.001);
+    }
+    const bar = marks.find((m) => Math.abs(m.y1 - m.y2) < 1e-6)!;
+    const ends = sorted(marks.filter((m) => Math.abs(m.x1 - m.x2) < 1e-6).map((m) => m.x1));
+    const [from, to] = sorted([bar.x1, bar.x2]);
+    near(to - from, 50, 0.001);
+    expect(ends).toHaveLength(2);
+    near(ends[0], from, 0.001);
+    near(ends[1], to, 0.001);
+    near(bar.y1, pageH - MARGIN_MM - 3, 0.001);
+    return from;
+  });
+  near(barStarts[1], barStarts[0], 0.0001);
+  near(barStarts[0], rtl ? pageW - MARGIN_MM - 50 : MARGIN_MM, 0.001);
+
+  for (const p of pdf.pages) {
+    const words = p.images.filter((i) => !sameBox(i, frame));
+    expect(words).toHaveLength(3);
+    for (const w of words) {
+      expect(w.x).toBeGreaterThanOrEqual(MARGIN_MM - 0.01);
+      expect(w.x + w.w).toBeLessThanOrEqual(pageW - MARGIN_MM + 0.01);
+      expect(w.y).toBeGreaterThanOrEqual(footerTop - 0.01);
+      expect(w.y + w.h).toBeLessThanOrEqual(pageH - MARGIN_MM + 0.01);
+    }
+    const lines = words.filter((w) => [1.5, 7.5].some((d) => Math.abs(w.y - (footerTop + d)) < 0.01));
+    expect(lines).toHaveLength(2);
+    for (const w of lines) near(rtl ? w.x + w.w : w.x, rtl ? pageW - MARGIN_MM : MARGIN_MM);
+  }
+  return { photo: photos[0], reference, grid: grid[0] };
+}
+
+/** The test photo's light half, its dark half, the canvas around it, or unclear. */
+function tone([r, g, b]: number[]) {
+  if (r > 180 && g > 130) return 'light';
+  if (r < 100 && b > 95 && b > r + 30) return 'dark';
+  if (r < 70 && g < 70 && b < 70 && Math.abs(r - b) < 15) return 'canvas';
+  return null;
+}
+
+/** The photo on the PDF's first page is where the saved grid image has it: the same tone at 64 places across the canvas. */
+async function expectPlacedAsSaved(page: Page, png: Buffer, photoOnPage: PlacedImage, pdf: InspectedPdf) {
+  const { width, height } = pngSize(png);
+  const jpeg = pdf.images[pdf.xobjects[photoOnPage.name]];
+  // Away from the grid's lines (at quarters): the middle of each eighth.
+  const at = Array.from({ length: 64 }, (_, k) => [((k % 8) + 0.5) / 8, (Math.floor(k / 8) + 0.5) / 8]);
+  const saved = await samples(page, png, at.map(([fx, fy]) => [Math.floor(fx * width), Math.floor(fy * height)]));
+  const printed = await samples(page, jpeg.bytes, at.map(([fx, fy]) => [Math.floor(fx * jpeg.width), Math.floor(fy * jpeg.height)]), 'image/jpeg');
+  const pairs = at.map((where, i) => ({ where, saved: tone(saved[i]), printed: tone(printed[i]) })).filter((p) => p.saved && p.printed);
+  expect(pairs.length).toBeGreaterThanOrEqual(56);
+  expect(pairs.filter((p) => p.saved !== p.printed)).toEqual([]);
+  expect(new Set(pairs.map((p) => p.saved)).size).toBeGreaterThanOrEqual(2);
+}
+
+test.describe('Create a Grid PDF (A4)', () => {
+  test.use({ storageState: ADMIN });
+
+  test('reduced to fit: 50×70 cm on portrait A4, the photo with its grid then the same grid blank, and a 50 mm bar', async ({ page }) => {
+    await page.goto('/app/grid');
+    await upload(page);
+    const sheet = await openPdfSheet(page);
+    await expect(sheet).toContainText('Print at 100% (Actual size), then check that the bar on the page measures 50 mm.');
+    await expect(sheet.getByRole('button', { name: 'Open to print' })).toBeVisible();
+    const axe = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(WCAG).analyze();
+    expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+
+    const { name, pdf } = await downloadPdf(page, sheet);
+    expect(name).toBe('grid-4x4-50x70cm-a4.pdf');
+    const { grid } = expectPages(pdf, 'portrait', REDUCED_FRAME);
+    // 4×4: lines at the quarters, white at the grid's 50 % over the photo, 0.3 mm (1 px of 600, to scale).
+    const across = grid.filter((l) => l.x1 === l.x2);
+    const down = grid.filter((l) => l.y1 === l.y2);
+    expect(sorted(across.map((l) => l.x1)).map((x) => Math.round(x * 100) / 100)).toEqual([60.25, 105, 149.75]);
+    expect(sorted(down.map((l) => l.y1)).map((y) => Math.round(y * 100) / 100)).toEqual([75.35, 138, 200.65]);
+    for (const l of pdf.pages[0].lines.filter((l) => grid.includes(l))) {
+      expect(l.color).toBe('#ffffff');
+      expect(l.opacity).toBe(0.5);
+      near(l.width, 179 / 600, 0.001);
+    }
+  });
+
+  test('true size when it fits: 25×15 cm with 3 cm squares on landscape A4, every square exactly 30 mm', async ({ page }) => {
+    await openSaved(page, { canvasWidth: 25, canvasHeight: 15, cellMode: 'square', cellSize: 3 });
+    await expect(page.getByText('25×15 cm · 3 cm squares (9×5)')).toBeVisible();
+    const { name, pdf } = await downloadPdf(page, await openPdfSheet(page));
+    expect(name).toBe('grid-3cm-squares-25x15cm-a4.pdf');
+    // 250 × 150 mm in the 271.6 × 163.6 mm above the words: centred, unscaled.
+    const { grid } = expectPages(pdf, 'landscape', { x: 23.5, y: 19.5, w: 250, h: 150 });
+    const across = sorted(grid.filter((l) => l.x1 === l.x2).map((l) => l.x1));
+    const down = sorted(grid.filter((l) => l.y1 === l.y2).map((l) => l.y1));
+    // Squares from the top-left corner: 8 whole columns and a 10 mm one; 5 whole rows.
+    expect(across).toHaveLength(8);
+    across.forEach((x, k) => near(x, 23.5 + 30 * (k + 1), 0.001));
+    expect(down).toHaveLength(4);
+    down.forEach((y, k) => near(y, 19.5 + 30 * (k + 1), 0.001));
+  });
+
+  test('the photo on page 1 is placed as in the saved grid image: turned, zoomed and moved; then filling the canvas, turned the other way', async ({ page }) => {
+    await page.goto('/app/grid');
+    await upload(page);
+    await page.getByRole('button', { name: 'Rotate right 90°' }).click();
+    await openCustomize(page);
+    const percent = page.getByRole('spinbutton', { name: 'Image scale in percent' });
+    await percent.fill('150');
+    await percent.press('Enter');
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Move the image right by 0.1 cm' }).click();
+    await page.getByRole('button', { name: 'Move the image up by 0.1 cm' }).click();
+    await expect.poll(async () => [await setting(page, 'rotation'), await setting(page, 'imageScale'), await setting(page, 'imageOffsetX'), await setting(page, 'imageOffsetY')]).toEqual([90, 1.5, 0.3, -0.1]);
+    const turned = await saveAndDownload(page, 'Save grid image');
+    const first = await downloadPdf(page, await openPdfSheet(page));
+    await expectPlacedAsSaved(page, turned.bytes, expectPages(first.pdf, 'portrait', REDUCED_FRAME).photo, first.pdf);
+
+    await page.getByRole('button', { name: 'Rotate left 90°' }).click();
+    await page.getByRole('button', { name: 'Rotate left 90°' }).click();
+    await page.getByRole('button', { name: 'Fill', exact: true }).click();
+    await expect.poll(() => setting(page, 'rotation')).toBe(270);
+    const filled = await saveAndDownload(page, 'Save grid image');
+    const second = await downloadPdf(page, await openPdfSheet(page));
+    await expectPlacedAsSaved(page, filled.bytes, expectPages(second.pdf, 'portrait', REDUCED_FRAME).photo, second.pdf);
+  });
+
+  test('the server is asked first: with no answer, or an error, nothing is made; when it answers, the PDF is', async ({ page }) => {
+    await page.goto('/app/grid');
+    await upload(page);
+    const button = page.getByRole('button', { name: 'Save PDF (A4)', exact: true });
+    const refused = page.getByRole('alertdialog');
+    const sheet = page.getByRole('dialog', { name: 'Save PDF (A4)' });
+    const answers: ((route: Route) => Promise<void>)[] = [(route) => route.abort(), (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })];
+    for (const answer of answers) {
+      await page.route('**/api/usage', answer);
+      await button.click();
+      await expect(refused).toContainText('Your plan could not be checked');
+      await expect(sheet).toHaveCount(0);
+      await refused.getByRole('button', { name: 'Close', exact: true }).click();
+      await page.unroute('**/api/usage');
+    }
+    await expect(button).toBeEnabled();
+    await openPdfSheet(page);
+  });
+});
+
+test.describe('Create a Grid PDF in Hebrew', () => {
+  test.use({ storageState: ADMIN, locale: 'he-IL' });
+
+  test('the words on the pages read right to left: from the right margin, the bar on the right', async ({ page }) => {
+    await page.goto('/app/grid');
+    await upload(page, 'להעלות תמונת ייחוס');
+    const sheet = await openPdfSheet(page, 'שמירת PDF\u200f (A4)', PDF_PREVIEW.he);
+    await expect(sheet).toContainText('להדפיס ב־100% (גודל אמיתי), ואז לבדוק שהפס שבדף באורך 50 מ״מ.');
+    const { name, pdf } = await downloadPdf(page, sheet, 'שמירת PDF');
+    expect(name).toBe('grid-4x4-50x70cm-a4.pdf');
+    expectPages(pdf, 'portrait', REDUCED_FRAME, true);
+  });
+
+  test.describe('on a phone', () => {
+    test.use(phone);
+
+    test('mobile: in Hebrew on a phone, the PDF keeps its Hebrew name and its pages read right to left', async ({ page }) => {
+      await page.goto('/app/grid');
+      await upload(page, 'להעלות תמונת ייחוס');
+      await expect(page.getByRole('button', { name: 'שמירת PDF\u200f (A4)', exact: true })).toHaveText('PDF');
+      const sheet = await openPdfSheet(page, 'שמירת PDF\u200f (A4)', PDF_PREVIEW.he);
+      const shares = await sheet.getByRole('button', { name: 'שיתוף או הדפסה' }).isVisible();
+      const { pdf } = await downloadPdf(page, sheet, shares ? 'שמירת הקובץ' : 'שמירת PDF');
+      expectPages(pdf, 'portrait', REDUCED_FRAME, true);
+    });
+  });
+});
+
+test.describe('Create a Grid PDF on a phone', () => {
+  test.use({ ...phone, storageState: ADMIN });
+
+  test('mobile: the PDF sits with the saves under the grid; its sheet fits the screen and saves the A4 PDF', async ({ page }) => {
+    await page.goto('/app/grid');
+    await upload(page);
+    const nav = (await page.getByRole('navigation', { name: 'Tools' }).boundingBox())!;
+    const button = page.getByRole('button', { name: 'Save PDF (A4)', exact: true });
+    await expect(button).toBeVisible();
+    await expect(button).toHaveText('PDF');
+    const box = (await button.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(nav.y + 0.5);
+    expect(box.height).toBeGreaterThanOrEqual(40);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+
+    const sheet = await openPdfSheet(page);
+    // Where files can be shared, the share sheet (Print, Save to Files) comes first and the file can be saved too.
+    const share = sheet.getByRole('button', { name: 'Share or print' });
+    const shares = await share.isVisible();
+    if (shares) await expect(sheet).toContainText('In the next screen, choose Print, or Save to Files.');
+    const saveButton = shares ? 'Save file' : 'Save PDF';
+    await expect(sheet.getByRole('button', { name: saveButton, exact: true })).toBeInViewport();
+    const sheetBox = (await sheet.boundingBox())!;
+    expect(sheetBox.x).toBeGreaterThanOrEqual(0);
+    expect(sheetBox.x + sheetBox.width).toBeLessThanOrEqual(page.viewportSize()!.width + 0.5);
+    const { pdf } = await downloadPdf(page, sheet, saveButton);
+    expectPages(pdf, 'portrait', REDUCED_FRAME);
+  });
+});
+
+test.describe('Create a Grid PDF, not in the plan', () => {
+  test('Free and Pro before a plan offers grid PDFs: no PDF button, not on the plans page, and the server refuses one', async ({ browser }) => {
+    for (const name of ['user', 'pro']) {
+      const context = await browser.newContext({ baseURL: test.info().project.use.baseURL, storageState: `e2e/.auth/${name}.json` });
+      const page = await context.newPage();
+      await page.goto('/app/grid');
+      await upload(page);
+      await expect(page.getByRole('button', { name: 'Save grid image' }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /PDF/ })).toHaveCount(0);
+      const response = await page.request.post('/api/usage', { data: { tool: 'tool.grid', features: ['export.pdf'] } });
+      expect(response.status()).toBe(403);
+      expect((await response.json()).features).toEqual(['export.pdf']);
+      await page.goto('/app/plans');
+      await expect(page.getByRole('row', { name: /Create a Grid/ })).toBeVisible();
+      await expect(page.getByRole('row', { name: /Print-ready PDFs/ })).toHaveCount(0);
+      await context.close();
+    }
   });
 });

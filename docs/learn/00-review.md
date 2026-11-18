@@ -281,7 +281,7 @@ Also in the section:
 | # | Decision | Recommendation | Before |
 |---|---|---|---|
 | A4 | Where Learn lives | Home and desktop navigation; on phones through Home | M5 |
-| A5 | The PDF library | jsPDF ≥ 4.2.1, loaded on demand | M2 |
+| A5 | The PDF library | Decided in M2: jsPDF 4.2.1, loaded on demand (ADR-0015) | M2 |
 | A7 | Image sources | Own or commissioned, plus CC0 museum collections; model releases | M4 |
 | A9 | What locked items show | The title and a thumbnail | M5 |
 | A10 | Class mode | Its name, and the 12-hour automatic end | M5 |
@@ -291,5 +291,5 @@ Also in the section:
 | A14 | Who reviews the content and the Hebrew | You name the reviewers | M7 |
 | A15 | Real-staging tests at every milestone | Approve as standing practice | M1 |
 | A16 | Measuring drawing accuracy | Not in v1 | M5 |
-| A17 | Paper and Hebrew text in PDFs | A4 only; decide the Hebrew method in M2 | M2 |
+| A17 | Paper and Hebrew text in PDFs | Decided in M2: A4 only; words as images (ADR-0015) | M2 |
 | A18 | Claims about results | None before an evaluation exists | M9 |

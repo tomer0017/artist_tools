@@ -29,7 +29,7 @@ implemented or tested yet: no Learn code exists.
 ## Milestones
 
 ### M1 — Create a Grid: rotation, A4, square cells, blank grid
-- **Status:** approved; on staging since 2026-11-18 (`6f2159a`). M2 waits for the owner's approval.
+- **Status:** approved; on staging since 2026-11-18 (`6f2159a`).
 - **Scope:**
   - move the grid geometry into `src/lib/grid` unchanged (parity tests);
   - rotate 90° left/right and 180°;
@@ -47,6 +47,9 @@ implemented or tested yet: no Learn code exists.
 - **Value:** immediately useful to painters and teachers, with no new data.
 
 ### M2 — Print foundation and the Grid PDF
+- **Status:** approved 2026-11-18 and implemented (ADR-0015). Staging and
+  the owner's print check are reported with the release (deploy/RELEASES.md).
+  M3 waits for the owner's approval.
 - **Scope:**
   - the chosen PDF library, loaded on demand;
   - `src/lib/print` (A4 geometry, margins, scale bar);
@@ -219,7 +222,7 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
 | A2 | The curriculum: 12 core exercises and 8 next steps; 18 merged and 8 deferred (02) | Approve the scope. Produce the core first; the next steps after the core has been used. Ideally reviewed by an art educator | M4 (seed), M7 |
 | A3 | The 50 challenges (03) | Review | M7, M4 (seed) |
 | A4 | Where Learn lives: Home and desktop navigation; phones through Home | Approve; revisit after measuring | M5 |
-| A5 | The PDF library (one new dependency, loaded on demand) | jsPDF ≥ 4.2.1 (maintained, smallest, right-to-left text; 01 §7) | M2 |
+| A5 | The PDF library (one new dependency, loaded on demand) | **Decided in M2:** jsPDF 4.2.1, pinned, loaded only after the server authorizes a PDF; security review in ADR-0015 and docs/security/dependency-audit.md | M2 |
 | A6 | Content in the database as versioned publications, never committed to the repository (it is public) | Database; seed imported from a file kept outside the repository | M4 |
 | A7 | Reference sourcing: own or commissioned photos, CC0 collections, model releases; any budget | Own or commissioned plus CC0 museum collections; no stock-photo sites without legal review | M4 (seed), M7 |
 | A8 | The entitlement model, all in Admin → Plans: module and export features, plus one rule per collection and plan (All, None, Selected); First N frozen at publication; the dark launch | Approve; the launch policy is a separate decision at M9 | M4 |
@@ -231,6 +234,6 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
 | A14 | Who reviews the content and the Hebrew | The owner names reviewers | M7 |
 | A15 | Real-staging verification with temporary accounts at every milestone | Approve as standing practice | M1 |
 | A16 | Should Learn ever measure drawing accuracy (angles, proportions)? | No in v1: feedback can backfire, and the aim is less screen time (01 §2) | M5 |
-| A17 | Paper and text in PDFs: A4 only or also Letter; Hebrew text as an embedded font or as images | A4 only at first; decide the Hebrew method in M2 | M2 |
+| A17 | Paper and text in PDFs: A4 only or also Letter; Hebrew text as an embedded font or as images | **Decided in M2:** A4 only; words drawn by the browser as images, in the page's language (ADR-0015 §2) | M2 |
 | A18 | How Learn is evaluated before any claim about results (for example volunteers' before-and-after drawings) | Make no outcome claims until such an evaluation exists | M9 |
 | A19 | Where reference images live (06 §3) | Files on the server, outside the releases and `public/`, named by hash; metadata in MongoDB; served only by the authorized route; copied incrementally with the nightly backup. Not GridFS, not the repository | M4 |

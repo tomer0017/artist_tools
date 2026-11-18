@@ -212,3 +212,37 @@ describe('what pages show comes from the same published plans', () => {
     expect(hasAllTools(ALL_TOOLS)).toBe(true);
   });
 });
+
+describe('the grid PDF (M2): in no plan until an admin publishes it', () => {
+  it('is refused to Free and Pro on the default and the staging catalogs, allowed to admins, and counted', async () => {
+    for (const catalog of [defaultCatalog(), STAGING_V2]) {
+      await publish(catalog);
+      const [free, pro, admin] = [await account(), await account({ plan: 'pro' }), await account({ role: 'admin' })];
+      for (const who of [free, pro]) {
+        expect(await authorizeToolUse(db, who, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.pdf'] });
+        expect((await getEntitlements(db, who)).features).not.toContain('export.pdf');
+      }
+      expect(await authorizeToolUse(db, admin, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'recorded' });
+      expect((await getUsage(db, admin, usagePeriod()))['export.pdf']).toBe(1);
+      expect((await getPlanOffer(db)).pro).not.toContain('export.pdf');
+    }
+  });
+
+  it('follows a publication: for Pro only, with a quota; then out again, refused at once', async () => {
+    const proWithPdf: Catalog = {
+      ...STAGING_V2,
+      plans: { ...STAGING_V2.plans, pro: { features: [...STAGING_V2.plans.pro.features, 'export.pdf'], quotas: { 'export.pdf': { limit: 2, period: 'day' } } } },
+    };
+    await publish(proWithPdf);
+    const [free, pro] = [await account(), await account({ plan: 'pro' })];
+    expect(await authorizeToolUse(db, free, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.pdf'] });
+    expect(await authorizeToolUse(db, pro, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'recorded' });
+    expect(await authorizeToolUse(db, pro, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'recorded' });
+    expect(await authorizeToolUse(db, pro, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'denied', reason: 'limit_reached', missing: ['export.pdf'] });
+    // From a tool the plan lacks, never.
+    await publish({ ...proWithPdf, plans: { ...proWithPdf.plans, pro: { features: without(proWithPdf.plans.pro.features, 'tool.grid'), quotas: {} } } });
+    expect(await authorizeToolUse(db, pro, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'denied', reason: 'not_included', missing: ['tool.grid'] });
+    await publish(STAGING_V2);
+    expect(await authorizeToolUse(db, pro, { tool: 'tool.grid', features: ['export.pdf'] })).toEqual({ status: 'denied', reason: 'not_included', missing: ['export.pdf'] });
+  });
+});

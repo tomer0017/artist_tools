@@ -23,6 +23,7 @@ const MIME_BY_EXT: Record<string, string> = {
   gif: 'image/gif',
   webp: 'image/webp',
   json: 'application/json',
+  pdf: 'application/pdf',
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -31,6 +32,7 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/gif': 'gif',
   'image/webp': 'webp',
   'application/json': 'json',
+  'application/pdf': 'pdf',
 };
 
 /** Infer a MIME type from a filename's extension. */
@@ -42,6 +44,11 @@ export function mimeForFilename(filename: string): string {
 /** The canonical file extension for a MIME type (no leading dot). */
 export function extForMime(mime: string): string {
   return EXT_BY_MIME[mime] ?? 'bin';
+}
+
+/** True for a PDF (shown on the save sheet as a picture of its pages). */
+export function isPdf(mime: string): boolean {
+  return mime === 'application/pdf';
 }
 
 /** True for GIF media (used to pick "Save GIF" vs "Save Image" wording). */

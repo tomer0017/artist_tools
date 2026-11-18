@@ -12,6 +12,9 @@
 //    choose "Save Image", plus a full-screen long-press fallback.
 //  • Desktop      → a standard "Save Image" / "Save GIF" download, with Share
 //    offered when the browser supports sharing files.
+// A PDF (authorized as `export.pdf`) is shown as a picture of its pages: it is
+// saved, shared (on phones, the share sheet also prints), or opened in a new
+// tab to print, with a reminder to print at 100 %.
 
 import {
   ReactNode,
@@ -23,7 +26,7 @@ import {
   useState,
 } from 'react';
 import Link from 'next/link';
-import { Download, ExternalLink, Image as ImageIcon, Lock, Share2, X } from 'lucide-react';
+import { Download, ExternalLink, Image as ImageIcon, Lock, Printer, Share2, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'use-intl';
 import { useAccount } from '@/components/shell/account';
 import { pathForView } from '@/components/shell/tools';
@@ -35,6 +38,7 @@ import {
   downloadBlob,
   isGif,
   isIOS,
+  isPdf,
   isTouchDevice,
   makeShareFile,
   mimeForFilename,
@@ -55,9 +59,11 @@ export interface SaveMediaInput {
   features?: ExportFeatureId[];
   /**
    * The server already authorized (and counted) this very export, just before
-   * the work of making it (a GIF): it is not asked twice.
+   * the work of making it (a GIF, a PDF): it is not asked twice.
    */
   authorized?: boolean;
+  /** For a file the sheet cannot show itself (a PDF): a picture of it. */
+  preview?: Blob;
 }
 
 /** A protected operation of a tool: the tool, and what it exports (none, e.g. a project file). */
@@ -92,6 +98,8 @@ export function useSaveMedia(): SaveMediaContextValue {
 interface ActiveMedia extends SaveMediaInput {
   mime: string;
   url: string;
+  /** The picture shown for it (the media itself, or its preview). */
+  previewUrl: string;
 }
 
 export function SaveMediaProvider({ children }: { children: ReactNode }) {
@@ -118,11 +126,11 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
     async (media: SaveMediaInput): Promise<boolean> => {
       const mime = media.mime ?? mimeForFilename(media.filename);
       if (!media.authorized) {
-        const use: ToolUse = { tool: media.tool, features: [isGif(mime) ? 'export.gif' : 'export.image', ...(media.features ?? [])] };
+        const use: ToolUse = { tool: media.tool, features: [isGif(mime) ? 'export.gif' : isPdf(mime) ? 'export.pdf' : 'export.image', ...(media.features ?? [])] };
         if (!(await ask(use, () => void save(media)))) return false;
       }
       const url = URL.createObjectURL(media.blob);
-      setActive({ ...media, mime, url });
+      setActive({ ...media, mime, url, previewUrl: media.preview ? URL.createObjectURL(media.preview) : url });
       return true;
     },
     [ask],
@@ -131,6 +139,7 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => {
     setActive((cur) => {
       if (cur) URL.revokeObjectURL(cur.url);
+      if (cur && cur.previewUrl !== cur.url) URL.revokeObjectURL(cur.previewUrl);
       return null;
     });
   }, []);
@@ -148,7 +157,7 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
   return (
     <SaveMediaContext.Provider value={value}>
       {children}
-      {active && <SaveMediaSheet media={active} onClose={close} />}
+      {active && (isPdf(active.mime) ? <PdfSheet media={active} onClose={close} /> : <SaveMediaSheet media={active} onClose={close} />)}
       {refusal && <RefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />}
     </SaveMediaContext.Provider>
   );
@@ -167,6 +176,8 @@ function useFeatureName() {
         return t('account.features.exportGifLarge');
       case 'export.gif_difference':
         return t('account.features.exportGifDifference');
+      case 'export.pdf':
+        return t('account.features.exportPdf');
       case 'tool.measure':
         return t('tools.measure.title');
       case 'tool.study':
@@ -248,6 +259,84 @@ function RefusalSheet({ refusal, onClose }: { refusal: Refusal; onClose: () => v
             {t('close')}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A PDF: a picture of its pages, then save it (download), share it (on phones
+ * and tablets the share sheet also prints and saves to Files), or open it in a
+ * new tab to print from the browser's viewer. Printing at 100 % keeps it to
+ * scale; the bar on each page shows whether it was.
+ */
+function PdfSheet({ media, onClose }: { media: ActiveMedia; onClose: () => void }) {
+  const t = useTranslations('toolsCommon.save');
+  const [error, setError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const file = useMemo(() => makeShareFile(media.blob, media.filename, media.mime), [media.blob, media.filename, media.mime]);
+  const canShare = useMemo(() => canShareFile(file), [file]);
+  const preferShare = canShare && (isIOS() || isTouchDevice());
+
+  const runShare = useCallback(async () => {
+    setError(null);
+    setSharing(true);
+    const result = await shareFile(file);
+    setSharing(false);
+    if (result === 'shared') onClose();
+    else if (result === 'error' || result === 'unsupported') setError(t('pdfShareFailed'));
+  }, [file, onClose, t]);
+  const runDownload = useCallback(() => {
+    downloadBlob(media.blob, media.filename);
+    onClose();
+  }, [media.blob, media.filename, onClose]);
+  // The browser's own PDF viewer, in a new tab: it prints at actual size when asked.
+  const openToPrint = useCallback(() => {
+    window.open(media.url, '_blank', 'noopener');
+  }, [media.url]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
+      <button className="absolute inset-0 bg-black/60" aria-label={t('dismiss')} onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-labelledby="save-pdf-title" className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-border bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-2xl sm:rounded-2xl sm:border sm:pb-4">
+        <div className="mb-3 flex items-center justify-between">
+          <p id="save-pdf-title" className="text-sm font-semibold text-foreground">{media.title ?? t('pdfTitle')}</p>
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground active:scale-95" aria-label={t('close')}>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="mb-3 flex max-h-[38vh] items-center justify-center overflow-hidden rounded-lg bg-black/30 p-2">
+          <img src={media.previewUrl} alt={t('pdfPreviewAlt')} className="max-h-[36vh] w-auto max-w-full object-contain" />
+        </div>
+        <p className="mb-3 text-center text-xs text-muted-foreground">{t('printHint')}</p>
+        {preferShare ? (
+          <>
+            <button onClick={runShare} disabled={sharing} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground active:scale-95 disabled:opacity-60">
+              <Share2 className="h-4 w-4" aria-hidden="true" /> {t('sharePdf')}
+            </button>
+            <p className="mt-1.5 text-center text-[11px] text-muted-foreground">{t('pdfNextScreen')}</p>
+          </>
+        ) : (
+          <button onClick={runDownload} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground active:scale-95">
+            <Download className="h-4 w-4" aria-hidden="true" /> {t('savePdf')}
+          </button>
+        )}
+        <div className="mt-2 flex gap-2">
+          <button onClick={openToPrint} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95">
+            <Printer className="h-4 w-4" aria-hidden="true" /> {t('openPdf')}
+          </button>
+          {canShare && !preferShare && (
+            <button onClick={runShare} disabled={sharing} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95 disabled:opacity-60">
+              <Share2 className="h-4 w-4" aria-hidden="true" /> {t('share')}
+            </button>
+          )}
+          {preferShare && (
+            <button onClick={runDownload} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-foreground active:scale-95">
+              <Download className="h-4 w-4" aria-hidden="true" /> {t('saveFile')}
+            </button>
+          )}
+        </div>
+        {error && <p className="mt-2 text-center text-[11px] text-destructive">{error}</p>}
       </div>
     </div>
   );

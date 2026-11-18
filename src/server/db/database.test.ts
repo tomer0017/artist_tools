@@ -43,9 +43,10 @@ describe('migration', () => {
       expect(plan.limits).toEqual({});
       expect(plan.active).toBe(true);
     }
-    // Free keeps every tool and every existing save; only the two Pro GIF options differ.
-    expect(FEATURES.filter((f) => !PLAN_FEATURES.free.includes(f))).toEqual(['export.gif_large', 'export.gif_difference']);
-    expect(PLAN_FEATURES.pro).toEqual([...FEATURES]);
+    // Free keeps every tool and every existing save; only the two Pro GIF options differ. The grid
+    // PDF (M2) is in neither plan until an admin publishes it: only admins have it before that.
+    expect(FEATURES.filter((f) => !PLAN_FEATURES.free.includes(f))).toEqual(['export.gif_large', 'export.gif_difference', 'export.pdf']);
+    expect(FEATURES.filter((f) => !PLAN_FEATURES.pro.includes(f))).toEqual(['export.pdf']);
   });
 
   it('is idempotent and keeps stored plans in step with the code', async () => {

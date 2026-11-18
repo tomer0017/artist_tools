@@ -59,6 +59,42 @@ deployed.
 | esbuild 0.21.5 | moderate: CORS in esbuild's development server | Inside vite 5 | No. The esbuild serve mode is never used. | With vite. |
 | glob 10.4.5, minimatch 9.0.5 | high: CLI command injection, ReDoS | Tailwind CSS build, through sucrase | No. They match patterns from our own Tailwind config at build time; the glob CLI is never called. | With Tailwind 4 (a planned design-system upgrade), or when sucrase updates. |
 
+## Added: jsPDF 4.2.1 (2026-11-18, M2, ADR-0015)
+
+Create a Grid's A4 PDF is made in the browser with jsPDF, pinned exactly.
+
+- **Version and maintenance:**
+  - 4.2.1 is the latest release (published 2026-03-17).
+  - The repository is maintained (last change 2026-11-14).
+- **Advisories (OSV, checked 2026-11-18):**
+  - All 15 for jsPDF are fixed at or before 4.2.1.
+  - The two newest are fixed in 4.2.1 itself: CVE-2026-31938 (critical, HTML
+    injection through the new-window outputs) and CVE-2026-31898 (FreeText
+    annotation colours).
+  - fflate is 0.8.3. GHSA-px8p-9vwx-vf98 affects 0.8.0 to 0.8.2.
+- **What is used:** drawing, JPEG and PNG images from the app's own canvases,
+  and `output('arraybuffer')`.
+- **What is never called:** `html()`, forms, annotations, `addJS`, the
+  new-window outputs, `loadFile`, XMP, BMP or GIF decoding, SVG.
+- **When it loads:**
+  - Only after the server has authorized a PDF: one script of 133 KB
+    gzipped.
+  - Checked in a real browser: html2canvas, DOMPurify and canvg are built as
+    separate scripts and never load, on page load or when a PDF is made.
+- **14-day rule:** the install raised two transitive packages to versions
+  published within the last 14 days. Both are pinned in `overrides` to the
+  newest versions at least 14 days old:
+  - `@babel/runtime` 7.29.13 (published 2026-11-04; was 7.28.2; jsPDF needs
+    ^7.28.6). Its only advisory, GHSA-968p-4wvh-cqc8, was fixed in 7.26.10.
+  - `dompurify` 3.4.17 (published 2026-10-12). No advisory is fixed only in
+    3.4.18. One open advisory (GHSA-x4vx-rjvf-j5p4, `IN_PLACE` mode) has no
+    fixed version, and it is never loaded here.
+- **Every other added package** (fast-png, fflate, iobuffer, pako, and the
+  optional canvg, core-js, html2canvas with their dependencies) was
+  published at least 14 days earlier.
+- **`npm audit --omit=dev`:** unchanged, the same 8 findings as above. None
+  comes from jsPDF or its dependencies.
+
 ## Also done
 
 - `experimental.serverActions.bodySizeLimit: '128kb'` in `next.config.ts`,

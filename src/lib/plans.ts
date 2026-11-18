@@ -9,6 +9,8 @@ import type { ToolId } from './account';
 //
 // By default Free keeps all five tools and every existing save; Pro adds the
 // two heavier GIF options. Admins get every feature, whatever their plan.
+// Features added later (the grid PDF) are in no default plan: they reach Free
+// or Pro only when an admin publishes them (dark launch, ADR-0006).
 
 export const FEATURES = [
   'tool.measure',
@@ -20,6 +22,8 @@ export const FEATURES = [
   'export.gif',
   'export.gif_large',
   'export.gif_difference',
+  // Since M2 (2026-11): Create a Grid's A4 PDF (the reference with its grid, and the blank grid).
+  'export.pdf',
 ] as const;
 export type FeatureId = (typeof FEATURES)[number];
 
@@ -31,13 +35,20 @@ export const PLAN_NAMES: Record<PlanId, string> = { free: 'Free', pro: 'Pro' };
 /** Capabilities that only Pro (and admins) include. */
 export const PRO_FEATURES: readonly FeatureId[] = ['export.gif_large', 'export.gif_difference'];
 
+/** Capabilities in no plan until an admin publishes a catalog that includes them (admins have them already). */
+export const UNPUBLISHED_FEATURES: readonly FeatureId[] = ['export.pdf'];
+
 export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
-  free: FEATURES.filter((feature) => !PRO_FEATURES.includes(feature)),
-  pro: [...FEATURES],
+  free: FEATURES.filter((feature) => !PRO_FEATURES.includes(feature) && !UNPUBLISHED_FEATURES.includes(feature)),
+  pro: FEATURES.filter((feature) => !UNPUBLISHED_FEATURES.includes(feature)),
 };
 
-/** The plan comparison as people read it (profile page, documentation). */
-export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'difference'; label: string; detail: string; features: FeatureId[] }[] = [
+/**
+ * The plan comparison as people read it (profile page, documentation). A row
+ * marked `whenOffered` appears only once some plan (or the account) has it,
+ * so nobody is shown a capability no plan includes.
+ */
+export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'difference' | 'pdf'; label: string; detail: string; features: FeatureId[]; whenOffered?: boolean }[] = [
   {
     id: 'tools',
     label: 'All five tools',
@@ -48,6 +59,7 @@ export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'diff
   { id: 'gifs', label: 'Comparison GIFs', detail: 'Opacity pulse and blink, small and medium sizes', features: ['export.gif'] },
   { id: 'large', label: 'Large GIFs', detail: 'Up to 800 px, for sharing and printing', features: ['export.gif_large'] },
   { id: 'difference', label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs', features: ['export.gif_difference'] },
+  { id: 'pdf', label: 'Print-ready PDFs', detail: 'A4: the reference with its grid and a matching blank grid, to scale', features: ['export.pdf'], whenOffered: true },
 ];
 
 /** Short names for usage counts and admin screens. */
@@ -61,6 +73,7 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   'export.gif': 'GIFs',
   'export.gif_large': 'Large GIFs',
   'export.gif_difference': 'Compare + Difference GIFs',
+  'export.pdf': 'Grid PDFs (A4)',
 };
 
 /** The feature each tool needs (the studio's tool ids → catalog features). */
@@ -77,7 +90,7 @@ export const TOOL_FEATURE_IDS = ['tool.measure', 'tool.study', 'tool.color', 'to
 export type ToolFeatureId = (typeof TOOL_FEATURE_IDS)[number];
 
 /** Everything that saves or exports something; each use is authorized (and counted) by the server. */
-export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_large', 'export.gif_difference'] as const satisfies readonly FeatureId[];
+export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_large', 'export.gif_difference', 'export.pdf'] as const satisfies readonly FeatureId[];
 export type ExportFeatureId = (typeof EXPORT_FEATURE_IDS)[number];
 
 export const isToolFeature = (feature: FeatureId): feature is ToolFeatureId => (TOOL_FEATURE_IDS as readonly FeatureId[]).includes(feature);
@@ -101,7 +114,7 @@ export type FeatureRow =
 export function featureRows(sets: readonly (readonly FeatureId[])[]): FeatureRow[] {
   const tools = TOOL_ORDER.map((tool) => TOOL_FEATURES[tool]);
   const together = sets.every((set) => tools.every((f) => set.includes(f)) || tools.every((f) => !set.includes(f)));
-  return FEATURE_MATRIX.flatMap((row): FeatureRow[] =>
+  return FEATURE_MATRIX.filter((row) => !row.whenOffered || sets.some((set) => row.features.some((f) => set.includes(f)))).flatMap((row): FeatureRow[] =>
     row.id === 'tools' && !together
       ? TOOL_ORDER.map((tool) => ({ kind: 'tool', id: tool, features: [TOOL_FEATURES[tool]] }))
       : [{ kind: 'group', id: row.id, features: row.features }],

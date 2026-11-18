@@ -1,16 +1,19 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { useTranslations } from 'use-intl';
+import { useLocale, useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ImageUploader from '@/components/common/ImageUploader';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Download, Minus, Plus, RefreshCw, RotateCcw, RotateCw } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Download, FileText, Loader2, Lock, Minus, Plus, RefreshCw, RotateCcw, RotateCw } from 'lucide-react';
 import ToolHeader from '@/components/shell/ToolHeader';
 import ToolEmptyState from '@/components/shell/ToolEmptyState';
 import type { GridSettings } from '@/types/project';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { useAccount, useHasFeature } from '@/components/shell/account';
 import { canvasToBlob } from '@/lib/saveMedia';
 import { A4_CM, cellCounts, exportSize, fillImageScale, previewSize, turn } from '@/lib/grid/geometry';
 import { drawExport, drawPreview, exportFilename, fillBackground, type LoadedImage } from '@/lib/grid/draw';
+import { buildGridPdf, gridPrintDetail, gridPrintLayout } from '@/lib/print/gridPdf';
+import { canvasTextRenderer, loadImage, rasterizeReference, renderPdfPreview } from '@/lib/print/gridPdfBrowser';
 import type { gridEn } from '@/i18n/messages/tools/grid';
 
 /** How far the image can be zoomed (by pinch, wheel, slider, buttons or typing), relative to fitting it. */
@@ -28,8 +31,16 @@ const round = (value: number, places: number) => Math.round(value * 10 ** places
 // formatting), so the English text stays exactly as before.
 export default function GridTab() {
   const t = useTranslations('gridTool');
+  const tLocked = useTranslations('studio.locked');
   const { image, gridImage, setGridImage, initGridImageFromReference, gridSettings, setGridSettings } = useProject();
-  const { save } = useSaveMedia();
+  const { save, authorize } = useSaveMedia();
+  const locale = useLocale();
+  // The A4 PDF: offered to accounts that have it, and shown locked where another plan has it
+  // (in no plan until the owner publishes it: only admins see it before that).
+  const canPdf = useHasFeature('export.pdf');
+  const offer = useAccount()?.account.offer;
+  const pdfOffered = canPdf || offer?.free.includes('export.pdf') === true || offer?.pro.includes('export.pdf') === true;
+  const [pdfBusy, setPdfBusy] = useState(false);
   // Mobile panel: the common presets first, every setting one tap away.
   const [panel, setPanel] = useState<'preset' | 'customize'>('preset');
   const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number } | null>(null);
@@ -241,6 +252,67 @@ export default function GridTab() {
   const handleExport = useCallback(() => exportGrid(false), [exportGrid]);
   const handleExportBlank = useCallback(() => exportGrid(true), [exportGrid]);
 
+  // The A4 PDF: the server is asked first (Create a Grid, and grid PDFs): no answer
+  // or a refusal makes nothing, and does not even load the PDF library.
+  const handleExportPdf = useCallback(async () => {
+    if (!activeImage || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      if (!(await authorize({ tool: 'grid', features: ['export.pdf'] }))) return;
+      const image = await loadImage(activeImage);
+      const layout = gridPrintLayout(gs);
+      const reference = rasterizeReference(gs, image, layout);
+      const jpeg = new Uint8Array(await (await canvasToBlob(reference, 'image/jpeg', 0.92)).arrayBuffer());
+      const [lib] = await Promise.all([import('jspdf'), document.fonts?.ready]);
+      const detail = gridPrintDetail(gs, layout);
+      const size = { width: `${gs.canvasWidth}`, height: `${gs.canvasHeight}`, unit: gs.unit };
+      const grid =
+        gs.cellMode === 'square'
+          ? t('pdf.squares', { size: `${gs.cellSize}`, unit: gs.unit, paper: detail.cellOnPaperMm })
+          : t('pdf.divisions', { columns: `${gs.columns}`, rows: `${gs.rows}` });
+      const rtl = locale === 'he';
+      const pdf = await buildGridPdf(lib, {
+        gs,
+        layout,
+        reference: jpeg,
+        words: {
+          title: t('pdf.title', size),
+          reference: t('pdf.reference'),
+          blank: t('pdf.blank'),
+          detail: [grid, detail.trueSize ? t('pdf.trueSize') : t('pdf.reduced', { ...size, percent: detail.percent })],
+          print: t('pdf.print'),
+          bar: t('pdf.bar'),
+        },
+        rtl,
+        renderText: canvasTextRenderer({ rtl, fontFamily: getComputedStyle(document.body).fontFamily }),
+      });
+      const preview = await canvasToBlob(renderPdfPreview(gs, layout, reference), 'image/png');
+      await save({
+        blob: new Blob([pdf], { type: 'application/pdf' }),
+        filename: exportFilename(gs).replace(/\.png$/, '-a4.pdf'),
+        mime: 'application/pdf',
+        title: t('pdf.saveTitle'),
+        tool: 'grid',
+        authorized: true,
+        preview,
+      });
+    } catch (error) {
+      console.error('[GridTab] Failed to make the grid PDF:', error);
+    } finally {
+      setPdfBusy(false);
+    }
+  }, [activeImage, authorize, gs, locale, pdfBusy, save, t]);
+
+  // Locked is said in words too (as in the navigation), not only by the icon.
+  const pdfName = canPdf ? t('savePdf') : `${t('savePdf')} (${tLocked('badge')})`;
+  const pdfButtonContent = pdfBusy ? (
+    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+  ) : canPdf ? (
+    <FileText className="h-4 w-4" aria-hidden="true" />
+  ) : (
+    <Lock className="h-4 w-4" aria-hidden="true" />
+  );
+
   const GRID_COLORS = GRID_LINE_COLORS.map((c) => c.value);
 
   const fitButtons = activeImage && (
@@ -355,10 +427,22 @@ export default function GridTab() {
                 </button>
                 <button
                   onClick={handleExportBlank}
+                  aria-label={t('saveBlank')}
                   className="flex h-12 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary/40 px-3 text-sm font-semibold text-foreground active:bg-secondary"
                 >
-                  {t('saveBlank')}
+                  {t('saveBlankShort')}
                 </button>
+                {pdfOffered && (
+                  <button
+                    onClick={handleExportPdf}
+                    disabled={pdfBusy}
+                    aria-label={pdfName}
+                    aria-busy={pdfBusy}
+                    className="flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-border bg-secondary/40 px-3 text-sm font-semibold text-foreground active:bg-secondary disabled:opacity-60"
+                  >
+                    {pdfButtonContent} {t('savePdfShort')}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -426,6 +510,18 @@ export default function GridTab() {
             >
               {t('saveBlank')}
             </button>
+            {pdfOffered && (
+              <button
+                onClick={handleExportPdf}
+                disabled={pdfBusy}
+                aria-label={pdfName}
+                aria-busy={pdfBusy}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 active:scale-95 transition-transform disabled:opacity-60"
+              >
+                {pdfButtonContent}
+                {t('savePdf')}
+              </button>
+            )}
             <button
               onClick={handleExport}
               data-onboarding="grid-export"

@@ -310,11 +310,11 @@ any, the page name, and "Print at 100% / actual size".
   fork is larger.
 - **Loading:** on demand, so it adds nothing to the studio's first load.
 - **Viewer hint:** the PDF sets `PrintScaling /None`.
-- **Hebrew text inside PDFs** (titles, page names):
-  - either an embedded Hebrew-capable font subset,
-  - or labels rendered by the app as images;
-  - decided with the owner in M2 (A17).
-- **Decision needed** (A5).
+- **Hebrew text inside PDFs** (titles, page names): decided in M2 (A17).
+  The browser draws the words as images in the page's language; no font
+  is embedded (ADR-0015 §2).
+- **Decided in M2** (A5): jsPDF 4.2.1, pinned, loaded only after the server
+  authorizes a PDF (ADR-0015 §1).
 
 **Memory and speed on iPad:**
 

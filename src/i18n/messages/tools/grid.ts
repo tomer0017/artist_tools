@@ -26,6 +26,24 @@ export const gridEn = {
   /** The same grid without the photo, dark lines on white, for paper. */
   saveBlank: 'Save blank grid',
   saveBlankTitle: 'Save blank grid',
+  /** Phones: the visible words of the smaller save buttons (their names stay the full ones above). */
+  saveBlankShort: 'Blank grid',
+  savePdf: 'Save PDF (A4)',
+  savePdfShort: 'PDF',
+  /** The A4 PDF: the reference with its grid, and the same grid blank. Words printed on its pages. */
+  pdf: {
+    saveTitle: 'Save PDF (A4)',
+    making: 'Making the PDF…',
+    title: 'Grid for a {width}×{height} {unit} canvas',
+    reference: 'Reference with grid',
+    blank: 'Blank grid',
+    divisions: '{columns}×{rows} grid',
+    squares: '{size} {unit} squares ({paper} mm on this page)',
+    trueSize: 'true size',
+    reduced: '{percent}% of {width}×{height} {unit}',
+    print: 'Print at 100% (Actual size). The bar below must measure 50 mm.',
+    bar: '50 mm',
+  },
   /** Phones: the two panels under the grid. */
   panel: {
     preset: 'Preset',
@@ -117,6 +135,23 @@ export const gridHe: typeof gridEn = {
   saveImage: 'שמירת תמונת הרשת',
   saveBlank: 'שמירת רשת ריקה',
   saveBlankTitle: 'שמירת רשת ריקה',
+  saveBlankShort: 'רשת ריקה',
+  savePdf: 'שמירת PDF‏ (A4)',
+  savePdfShort: 'PDF',
+  pdf: {
+    saveTitle: 'שמירת PDF‏ (A4)',
+    making: 'קובץ ה־PDF בהכנה…',
+    title: 'רשת לבד {width}‎×{height} {unit}',
+    reference: 'תמונת הייחוס עם הרשת',
+    blank: 'רשת ריקה',
+    divisions: 'רשת {columns}‎×{rows}',
+    // No brackets in the PDF's Hebrew: some engines draw them unmirrored right to left.
+    squares: 'משבצות של {size} {unit}, כל אחת {paper} מ״מ בדף הזה',
+    trueSize: 'בגודל אמיתי',
+    reduced: '{percent}% מ־{width}‎×{height} {unit}',
+    print: 'להדפיס ב־100%, בגודל אמיתי. הפס שלמטה צריך להיות באורך 50 מ״מ.',
+    bar: '50 מ״מ',
+  },
   panel: {
     preset: 'רשת מוכנה',
     customize: 'התאמה אישית',

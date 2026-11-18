@@ -154,6 +154,7 @@ export const he: Messages = {
       gifs: { label: 'GIF להשוואה', detail: 'הבהוב ושקיפות מתחלפת, בגדלים קטן ובינוני' },
       large: { label: 'GIF גדול', detail: 'עד 800 פיקסלים, לשיתוף ולהדפסה' },
       difference: { label: 'GIF השוואה + הבדלים', detail: 'הנפשות שמדגישות את מה ששונה' },
+      pdf: { label: 'קובצי PDF להדפסה', detail: 'A4: תמונת הייחוס עם הרשת ורשת ריקה תואמת, בקנה מידה' },
     },
     faq: {
       freeQ: 'האם Studio Companion חינמי?',
@@ -262,6 +263,7 @@ export const he: Messages = {
       exportGif: 'GIF',
       exportGifLarge: 'GIF גדול',
       exportGifDifference: 'GIF השוואה + הבדלים',
+      exportPdf: 'קובצי PDF של רשת (A4)',
     },
     intros: {
       title: 'הסברי פתיחה לכלים',

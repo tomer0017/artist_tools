@@ -32,6 +32,15 @@ export const commonEn = {
     share: 'Share',
     saveFile: 'Save file',
     shareFailed: 'Could not open the share sheet. Try “Open” and long-press to save.',
+    /** A PDF (Create a Grid's A4 pages). */
+    pdfTitle: 'Save PDF',
+    pdfPreviewAlt: 'The PDF’s pages: the reference with its grid, and the blank grid',
+    printHint: 'Print at 100% (Actual size), then check that the bar on the page measures 50 mm.',
+    savePdf: 'Save PDF',
+    sharePdf: 'Share or print',
+    pdfNextScreen: 'In the next screen, choose Print, or Save to Files.',
+    openPdf: 'Open to print',
+    pdfShareFailed: 'Could not open the share sheet. Save the PDF, or open it to print.',
   },
   // A save or export the server did not allow (src/components/common/SaveMedia.tsx).
   access: {
@@ -148,6 +157,14 @@ export const commonHe: typeof commonEn = {
     share: 'שיתוף',
     saveFile: 'שמירת הקובץ',
     shareFailed: 'לא הצלחנו לפתוח את חלון השיתוף. אפשר לבחור "פתיחה" וללחוץ לחיצה ארוכה כדי לשמור.',
+    pdfTitle: 'שמירת PDF',
+    pdfPreviewAlt: 'הדפים של קובץ ה־PDF: תמונת הייחוס עם הרשת, והרשת הריקה',
+    printHint: 'להדפיס ב־100% (גודל אמיתי), ואז לבדוק שהפס שבדף באורך 50 מ״מ.',
+    savePdf: 'שמירת PDF',
+    sharePdf: 'שיתוף או הדפסה',
+    pdfNextScreen: 'במסך הבא לבחור הדפסה, או שמירה בקבצים.',
+    openPdf: 'פתיחה להדפסה',
+    pdfShareFailed: 'לא הצלחנו לפתוח את חלון השיתוף. אפשר לשמור את קובץ ה־PDF, או לפתוח אותו להדפסה.',
   },
   access: {
     lockedTitle: 'לא כלול במסלול הנוכחי',

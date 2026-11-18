@@ -264,3 +264,80 @@ describe('SaveMedia authorization', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe('SaveMedia: a PDF (Create a Grid, A4)', () => {
+  function PdfHarness({ authorized }: { authorized?: boolean }) {
+    const { save } = useSaveMedia();
+    return (
+      <button
+        onClick={() =>
+          void save({
+            blob: new Blob(['%PDF-1.3'], { type: 'application/pdf' }),
+            filename: 'grid-4x4-50x70cm-a4.pdf',
+            mime: 'application/pdf',
+            title: 'Save PDF (A4)',
+            tool: 'grid',
+            authorized,
+            preview: new Blob(['png'], { type: 'image/png' }),
+          })
+        }
+      >
+        make pdf
+      </button>
+    );
+  }
+
+  it('is authorized as a grid PDF, and shown as a picture of its pages, to save or open to print at 100%', async () => {
+    const calls = serverSays(200);
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+    render(
+      <SaveMediaProvider>
+        <PdfHarness />
+      </SaveMediaProvider>,
+    );
+    fireEvent.click(screen.getByText('make pdf'));
+    const sheet = await screen.findByRole('dialog', { name: 'Save PDF (A4)' });
+    expect(calls[0].body).toEqual({ tool: 'tool.grid', features: ['export.pdf'] });
+    // blob:mock-1 is the PDF itself, blob:mock-2 the picture of its pages.
+    expect(screen.getByAltText('The PDF’s pages: the reference with its grid, and the blank grid')).toHaveAttribute('src', 'blob:mock-2');
+    expect(sheet).toHaveTextContent('Print at 100% (Actual size), then check that the bar on the page measures 50 mm.');
+    fireEvent.click(screen.getByRole('button', { name: 'Open to print' }));
+    expect(open).toHaveBeenCalledWith('blob:mock-1', '_blank', 'noopener');
+    expect(screen.getByRole('button', { name: 'Save PDF' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-2');
+  });
+
+  it('refused: no PDF, and the refusal names grid PDFs', async () => {
+    refused = ['export.pdf'];
+    serverSays(403);
+    render(
+      <SaveMediaProvider>
+        <PdfHarness />
+      </SaveMediaProvider>,
+    );
+    fireEvent.click(screen.getByText('make pdf'));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('Grid PDFs (A4)');
+    expect(screen.queryByRole('dialog', { name: 'Save PDF (A4)' })).toBeNull();
+  });
+
+  it('on a phone with Web Share: "Share or print" shares the PDF file (the share sheet prints)', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    setNavigator({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', canShare: () => true, share });
+    render(
+      <SaveMediaProvider>
+        <PdfHarness authorized />
+      </SaveMediaProvider>,
+    );
+    fireEvent.click(screen.getByText('make pdf'));
+    const button = await screen.findByRole('button', { name: 'Share or print' });
+    expect(screen.getByText('In the next screen, choose Print, or Save to Files.')).toBeInTheDocument();
+    fireEvent.click(button);
+    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    expect(share.mock.calls[0][0].files[0]).toMatchObject({ name: 'grid-4x4-50x70cm-a4.pdf', type: 'application/pdf' });
+    // Shared: the sheet closes.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Share or print' })).toBeNull());
+  });
+});
