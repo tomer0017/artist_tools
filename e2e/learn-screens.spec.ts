@@ -437,9 +437,11 @@ test('“I did it — next lesson”: the person’s own word, recorded once a d
   const note = page.locator('[data-sonner-toast]').filter({ hasText: 'Marked as done: Test baseline' });
   await expect(note).toBeVisible();
   expect((await summary())['D-BASE-01']?.count).toBe(1);
-  // The next page is in place (its heading and title) before it is checked.
+  // The next page is in place (its heading and title), and the note has faded in, before they are checked.
   await expect(page.getByRole('heading', { name: 'Test lesson one', level: 1 })).toBeVisible();
   await expect(page).toHaveTitle(/\S/);
+  await expect(note).toHaveAttribute('data-mounted', 'true');
+  await settled(note);
   await axe(page, 'lesson with the note');
   await note.getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Removed from your history.' })).toBeVisible();

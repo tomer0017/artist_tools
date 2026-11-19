@@ -71,6 +71,8 @@ export default function LessonCard({ item, back }: { item: OpenExercise; back: {
       toast(t('marked', { title: loc(item.title) }), {
         position: 'top-center',
         duration: 6000,
+        // Undo as a real button, easy to see and to tap (the library's own style is a 24 px label).
+        classNames: { actionButton: '!h-9 !rounded-lg !bg-primary !px-3 !text-sm !font-semibold !text-primary-foreground' },
         action: {
           label: ti('undo'),
           onClick: () => void undoCompletion(client, completion.id).then((removed) => toast(removed ? ti('undone') : t('undoFailed'), { position: 'top-center' })),
