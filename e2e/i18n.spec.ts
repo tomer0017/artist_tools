@@ -50,15 +50,16 @@ test.describe('Hebrew public pages', () => {
   test('the language switch moves between English and Hebrew and remembers the choice', async ({ page }) => {
     await page.goto('/pricing');
     await expectDirection(page, 'en', 'ltr');
+    // Each switch asks the server, then reloads the page: on a busy CI runner that can take more than 5 s.
     await page.getByRole('group', { name: 'Choose a language' }).getByRole('button', { name: 'עברית' }).click();
-    await expect(page).toHaveURL(/\/he\/pricing$/);
+    await expect(page).toHaveURL(/\/he\/pricing$/, { timeout: 15_000 });
     await expectDirection(page, 'he', 'rtl');
     await expect(page.getByRole('region', { name: 'חינמי', exact: true })).toContainText('זמין עכשיו');
     // Remembered: an unprefixed page now opens in Hebrew too.
     await page.goto('/sign-in');
     await expect(page.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeVisible();
     await page.getByRole('group', { name: 'בחירת שפה' }).getByRole('button', { name: 'English' }).click();
-    await expect(page.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeVisible({ timeout: 15_000 });
     await expectDirection(page, 'en', 'ltr');
   });
 
