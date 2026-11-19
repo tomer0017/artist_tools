@@ -163,25 +163,54 @@ implemented or tested yet: no Learn code exists.
   - axe;
   - owner checks on iPad and iPhone.
 
-### M6 — Full admin content editor
+### M6 — Lessons that teach, and the content editor
+- **Status:** redesigned after M5 in [08-m6-design-review.md](08-m6-design-review.md)
+  and approved by the owner on 2026-11-19 (decisions B1–B13, with the
+  refinements in 08 §12). Two steps, each approved on its own.
+
+#### M6a — the lesson format and the learner screens
+- **Status:** approved 2026-11-19; being implemented.
 - **Scope:**
-  - English and Hebrew side by side;
+  - the lesson template and the schema additions (08 §3), read by M5 as
+    well;
+  - the lesson page, with the teaching visible on the page;
+  - course units, "Up next", and D-START-01 as an optional baseline;
+  - challenges linked to the lessons they build on, and a Skill filter;
+  - tool links with presets, and "Back to the lesson";
+  - the three test lessons rewritten in the template, with accurate
+    diagrams drawn in code and annotated CC0 references. No invented
+    demonstrations of real drawings.
+- **Tests:**
+  - e2e in English and Hebrew, desktop and iPhone, with axe;
+  - entitlements for every new picture field;
+  - M6 content read with M5's schema;
+  - real staging, with Free and Pro unchanged.
+- **Then stop:** the owner sees the lessons before M6b.
+
+#### M6b — the content editor
+- **Status:** waits for the owner's review of M6a.
+- **Scope:**
+  - English and Hebrew side by side, with a live phone preview;
   - ordering;
-  - assets with licence metadata;
-  - draft, diff, publish and restore;
+  - images with the rights record (08 §6.2);
+  - draft, diff, publish and restore, behind the publish checklist (08 §6.3);
+  - review marks;
   - "View as Free / Pro".
-- **Tests:** editor e2e, validation, audit entries.
+- **Tests:** editor e2e, validation, the rights checklist, audit entries.
 
 ### M7 — Content production, in batches
 - **Scope:**
-  - the 20 drawing exercises and 50 challenges: text in both languages,
-    licensed references, static worksheets;
+  - the 20 lessons (19 numbered and the optional baseline) in the lesson
+    template, and the 50 challenges linked to them: text in both languages,
+    licensed references, diagrams, photographed demonstrations of real
+    drawings, and static worksheets;
   - reviewed by an art educator and a native Hebrew speaker;
-  - published in batches:
-    1. core 1–6;
-    2. core 7–12;
-    3. the 8 next steps, after the core has been used;
-    4. then the challenge groups.
+  - published in batches, in the units of 08 §2.3:
+    1. units 1–2;
+    2. unit 3;
+    3. unit 4;
+    4. units 5–6, after the beginner units have been used;
+    5. the challenge groups, as their lessons arrive.
 - **Tests:** content validation; printed samples of every static
   worksheet.
 
@@ -262,6 +291,9 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
   (a goal, not a gate).
 
 ## Approval checkpoints (decisions for the owner)
+
+The M6 decisions B1–B13 are in [08 §11](08-m6-design-review.md), approved on
+2026-11-19 with the refinements in 08 §12.
 
 | # | Decision | Recommendation | Needed before |
 |---|---|---|---|

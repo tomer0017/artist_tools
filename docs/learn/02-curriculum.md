@@ -33,6 +33,17 @@ The result:
 Nothing is timed, mandatory or a prerequisite. Learn recommends an order;
 people (and teachers) choose.
 
+> **Revised by [08](08-m6-design-review.md), approved on 2026-11-19:**
+> - The order and units are in 08 §2.3; the table below is the earlier
+>   order.
+> - D-START-01 is an optional baseline drawing, not numbered. The course
+>   starts with D-LINE-04: pencil control and line exercises.
+> - D-VAL-01 and D-LIGHT-01 explicitly teach gradual value transitions and
+>   shading simple 3-D forms under one light source.
+> - Every exercise is written as a lesson in the template of 08 §3.
+>
+> The texts below remain drafts.
+
 ## How to read an exercise
 
 Each exercise has:
@@ -97,7 +108,7 @@ challenge that uses the same skill ([03-challenges.md](03-challenges.md)).
 
 ## Core
 
-**1 · D-START-01 · A first drawing from life · רישום ראשון מהתבוננות**
+**1 · D-START-01 · A first drawing from life · רישום ראשון מהתבוננות** (an optional baseline since 08)
 - Objective: draw a real object from observation before anything else, and keep it as a baseline.
 - Materials: HB pencil, A4 paper, a mug or cup.
 - Student: "Put a mug in front of you. Look at it more than at the paper, and draw what you see."
@@ -205,7 +216,7 @@ challenge that uses the same skill ([03-challenges.md](03-challenges.md)).
 - Success: when overlaid, the main shapes align closely after one round of correction.
 
 **9 · D-VAL-01 · Seeing values · לראות ערכים**
-- Objective: make an even value scale, then simplify a picture into three values.
+- Objective: make an even value scale and smooth, gradual transitions, then simplify a picture into three values.
 - Materials: HB, 2B and 4B pencils, paper.
 - Student: "Fill five boxes from white to your darkest dark in even steps. Then simplify a photo to three values in Study & Simplify, and draw those three shapes."
 - Guide:
@@ -220,7 +231,7 @@ challenge that uses the same skill ([03-challenges.md](03-challenges.md)).
 - Success: neighbouring steps are distinguishable, and the drawing reads with three tones only.
 
 **10 · D-LIGHT-01 · Light and shadow on simple objects · אור וצל על חפצים פשוטים**
-- Objective: light side, shadow side, core shadow, reflected light and cast shadow, on a ball, a box and a cup under one light.
+- Objective: shade simple 3-D forms (a ball, a box, a cylinder such as a cup, and a cone) under one light source: light side, shadow side, core shadow, reflected light and cast shadow, with gradual value transitions on the round forms and flat planes on the box.
 - Materials: a ball, a box, a cup, one lamp, pencils.
 - Student: "Light the objects from one side. Find where light turns to shadow and the shape of each cast shadow, then shade."
 - Guide:
