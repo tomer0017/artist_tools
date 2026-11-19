@@ -16,6 +16,10 @@ AI scoring of anyone's artwork.
   every label harder to tap. Recommendation: on phones, Learn is reached
   from Home in v1, and its use is measured before changing the bar.
   **Decision needed** (see 07).
+- **Worksheets on their own (the owner's decision, 2026-11-19, A20 in 07):**
+  Prepare Worksheets should eventually be reachable from Home as a feature
+  in its own right, as well as from Create a Grid and Study & Simplify. Not
+  built in M4; designed with the Learn screens.
 
 ## Screens
 

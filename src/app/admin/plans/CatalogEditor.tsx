@@ -2,21 +2,25 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { FEATURES, FEATURE_LABELS, PLAN_IDS, PLAN_NAMES, isToolFeature, type FeatureId, type PlanId } from '@/lib/plans';
+import { FEATURES, FEATURE_LABELS, PLAN_IDS, PLAN_NAMES, hasQuota, type FeatureId, type PlanId } from '@/lib/plans';
+import type { ContentOutline, LearnSection } from '@/lib/learn/model';
 import type { ActionResult } from '../actions';
 import { saveConfigDraft } from '../config-actions';
+import { LearnAccessEditor } from './LearnAccessEditor';
 
 // The plan catalog as a form: for each feature, which plans include it, an
 // optional quota per plan (per day or per calendar month, UTC), and whether
-// it is switched off for everyone but admins. Read-only until a draft exists.
+// it is switched off for everyone but admins; then the Learn access section
+// (ADR-0017). Read-only until a draft exists.
 
 type Quota = { limit: number; period: 'day' | 'month' };
 export interface CatalogForm {
   plans: Record<PlanId, { features: FeatureId[]; quotas: Partial<Record<FeatureId, Quota>> }>;
   disabled: FeatureId[];
+  learn: LearnSection;
 }
 
-export function CatalogEditor({ catalog, editable }: { catalog: CatalogForm; editable: boolean }) {
+export function CatalogEditor({ catalog, editable, outline, contentVersion }: { catalog: CatalogForm; editable: boolean; outline: ContentOutline; contentVersion: number | null }) {
   const [form, setForm] = useState<CatalogForm>(catalog);
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -69,8 +73,8 @@ export function CatalogEditor({ catalog, editable }: { catalog: CatalogForm; edi
                         <input type="checkbox" checked={included} disabled={!editable} onChange={(e) => toggle(planId, feature, e.target.checked)} className="h-4 w-4" />
                         {PLAN_NAMES[planId]}
                       </label>
-                      {/* Tools are on or off; quotas count saves and exports (src/server/config/catalog.ts). */}
-                      {included && !isToolFeature(feature) && (
+                      {/* Tools and Learn modules are on or off; quotas count saves and exports (src/server/config/catalog.ts). */}
+                      {included && hasQuota(feature) && (
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                           <input
                             type="number"
@@ -106,6 +110,15 @@ export function CatalogEditor({ catalog, editable }: { catalog: CatalogForm; edi
           );
         })}
       </ul>
+      <LearnAccessEditor
+        section={form.learn}
+        outline={outline}
+        contentVersion={contentVersion}
+        features={{ free: form.plans.free.features, pro: form.plans.pro.features }}
+        disabled={form.disabled}
+        editable={editable}
+        onChange={(learn) => setForm((f) => ({ ...f, learn }))}
+      />
       {editable && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
@@ -122,7 +135,7 @@ export function CatalogEditor({ catalog, editable }: { catalog: CatalogForm; edi
             Save draft
           </button>
           <p className="text-xs text-muted-foreground">
-            Admins always keep every feature. A tool is on or off per plan; quotas apply to saves and GIFs and count per UTC day or calendar month.
+            Admins always keep every feature. A tool or a Learn module is on or off per plan; quotas apply to saves and exports and count per UTC day or calendar month.
           </p>
         </div>
       )}

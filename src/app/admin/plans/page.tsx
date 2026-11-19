@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { signInMethods } from '@/server/account-management';
-import { catalogFromPlans, catalogReadNotes, defaultCatalog, describeCatalogChanges, readCatalog, catalogSpec, type Catalog } from '@/server/config/catalog';
-import { getDraft, getPublished, listVersions } from '@/server/config/versions';
+import { emptyContent, outlineOf, type LearnContent } from '@/lib/learn/model';
+import { catalogFromPlans, catalogReadNotes, defaultCatalog, describeCatalogChanges, learnSectionOf, readCatalog, catalogSpec, type Catalog } from '@/server/config/catalog';
+import { UnreadableConfigError, getDraft, getPublished, listVersions } from '@/server/config/versions';
+import { learnContentSpec, publishedLearnContent } from '@/server/learn/content';
 import { getDb } from '@/server/db/client';
 import { getPlanStates } from '@/server/entitlements';
 import { requireAdmin } from '@/server/session';
@@ -12,9 +14,10 @@ import { CatalogEditor, type CatalogForm } from './CatalogEditor';
 import { CatalogReadNotice } from './CatalogReadNotice';
 
 // Plans and features (docs/adr/0006): what each plan includes, quotas, and
-// features switched off, as versioned drafts an admin publishes. A version
-// written by a newer release is shown with what this release keeps without
-// applying; one it cannot apply in full is read-only here (ADR-0014).
+// features switched off, and which Learn items each plan opens (ADR-0017), as
+// versioned drafts an admin publishes. A version written by a newer release
+// is shown with what this release keeps without applying; one it cannot apply
+// in full is read-only here (ADR-0014).
 
 export const metadata: Metadata = { title: 'Plans · Studio Companion admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -28,12 +31,28 @@ const toForm = (c: Catalog): CatalogForm => ({
     pro: { features: c.plans.pro.features ?? [], quotas: (c.plans.pro.quotas ?? {}) as Quotas },
   },
   disabled: c.disabled ?? [],
+  learn: learnSectionOf(c),
 });
 
 export default async function AdminPlansPage() {
   const admin = await requireAdmin('/admin/plans');
   const db = getDb();
-  const [published, draft, versions, methods] = await Promise.all([getPublished(db, catalogSpec), getDraft(db, catalogSpec), listVersions(db, 'catalog'), signInMethods(db, admin.id)]);
+  const [published, draft, versions, methods, contentVersion] = await Promise.all([
+    getPublished(db, catalogSpec),
+    getDraft(db, catalogSpec),
+    listVersions(db, 'catalog'),
+    signInMethods(db, admin.id),
+    getPublished(db, learnContentSpec).then((v) => v?.version ?? null),
+  ]);
+  // The published Learn content, for Selected lists and the items each plan gains and loses.
+  let content: LearnContent = emptyContent();
+  let contentNote: string | null = null;
+  try {
+    content = await publishedLearnContent(db);
+  } catch (error) {
+    if (!(error instanceof UnreadableConfigError)) throw error;
+    contentNote = `The published Learn content (version ${error.version}) cannot be read by this version of the app: Learn lists cannot be checked here.`;
+  }
   const liveRead = readCatalog(published ? published.document : defaultCatalog());
   const draftRead = draft ? readCatalog(draft.document) : null;
   // What applies now: the published catalog as this release reads it, or the plans in force when it cannot.
@@ -62,12 +81,19 @@ export default async function AdminPlansPage() {
           kind="catalog"
           draftVersion={draft?.version ?? null}
           publishedVersion={published?.version ?? null}
-          changes={draft ? [...replaces, ...describeCatalogChanges(live, working)] : []}
+          changes={draft ? [...replaces, ...describeCatalogChanges(live, working, content)] : []}
           blocked={blocked}
           viewer={{ email: admin.user.email, hasPassword: methods.password !== null, returnTo: '/admin/plans' }}
         />
       </div>
-      <CatalogEditor key={draft ? `draft-${draft.version}` : `live-${published?.version ?? 0}`} catalog={toForm(working)} editable={draft !== null && blocked === null} />
+      {contentNote && <p role="alert" className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-foreground">{contentNote}</p>}
+      <CatalogEditor
+        key={draft ? `draft-${draft.version}` : `live-${published?.version ?? 0}`}
+        catalog={toForm(working)}
+        editable={draft !== null && blocked === null}
+        outline={outlineOf(content)}
+        contentVersion={contentVersion}
+      />
       <VersionHistory
         kind="catalog"
         versions={versions.map((v) => ({ version: v.version, status: v.status as 'published' | 'archived', publishedAt: v.publishedAt?.toISOString() ?? null, publishedBy: publishedByLabel(v.publishedBy, admin.id.toHexString()), note: v.note }))}

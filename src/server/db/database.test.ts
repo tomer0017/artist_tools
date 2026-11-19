@@ -44,10 +44,13 @@ describe('migration', () => {
       expect(plan.active).toBe(true);
     }
     // Free keeps every tool and every existing save; only the two Pro GIF options differ. The grid
-    // PDF (M2) and worksheets (M3) are in neither plan until an admin publishes them: only admins
-    // have them before that.
-    expect(FEATURES.filter((f) => !PLAN_FEATURES.free.includes(f))).toEqual(['export.gif_large', 'export.gif_difference', 'export.pdf', 'export.worksheets']);
-    expect(FEATURES.filter((f) => !PLAN_FEATURES.pro.includes(f))).toEqual(['export.pdf', 'export.worksheets']);
+    // PDF (M2), worksheets (M3) and the Learn modules (M4) are in neither plan until an admin
+    // publishes them: only admins have them before that.
+    const unpublished = ['export.pdf', 'export.worksheets', 'learn.curriculum', 'learn.color', 'learn.challenges'];
+    expect(FEATURES.filter((f) => !PLAN_FEATURES.free.includes(f))).toEqual(['export.gif_large', 'export.gif_difference', ...unpublished]);
+    expect(FEATURES.filter((f) => !PLAN_FEATURES.pro.includes(f))).toEqual(unpublished);
+    // And no plan carries Learn access: nothing opens until it is published (ADR-0017).
+    for (const plan of plans) expect(plan).not.toHaveProperty('learn');
   });
 
   it('is idempotent and keeps stored plans in step with the code', async () => {

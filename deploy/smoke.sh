@@ -92,6 +92,13 @@ for page in /app /app/measure /admin /admin/billing; do
   esac
 done
 
+# Learn (ADR-0017): items and their images only for a signed-in account allowed them, never cached publicly.
+for path in "/api/learn/items?collection=curriculum" "/api/learn/items/D-START-01" "/api/learn/assets/$(printf '0%.0s' $(seq 1 64))"; do
+  code="$(fetch "$path")"
+  cache="$(grep -i '^cache-control:' "$TMP/headers" | tr -d '\r' | cut -d' ' -f2-)"
+  if [ "$code" = 401 ] && [[ "$cache" == *private* ]]; then ok "${path%%\?*}: signed out, 401, private"; else bad "$path: $code (${cache:-no cache-control})"; fi
+done
+
 code="$(fetch /)"
 csp_count="$(grep -ci '^content-security-policy:' "$TMP/headers")"
 csp="$(grep -i '^content-security-policy:' "$TMP/headers" | tr -d '\r')"

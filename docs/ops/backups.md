@@ -12,6 +12,8 @@ remaining steps.
 | Dump before every release migration | **Running** (`deploy/release.sh`) |
 | Checking that a dump is readable, plus a manifest with sizes, SHA-256 and live document counts (no data) | **Built and verified on staging**: `deploy/backup-offsite.sh --check-only` |
 | Restore drill (a real restore into a throwaway database, compared with the manifest, unique indexes checked, then dropped) | **Built and run on staging on 2026-11-11** (`deploy/restore-drill.sh`): restored in 4 s, counts matched, nothing left behind |
+| Learn's asset files (ADR-0017): a nightly incremental copy at 02:50 into `/var/backups/learn-assets/<env>` (root only), every file re-checked against its SHA-256 | **Built for M4** (`deploy/backup-learn-assets.sh`, installed by `deploy/install-learn-assets.sh`); verified on staging, see deploy/RELEASES.md |
+| Restoring Learn: `--assets <copy>` restores the files into a throwaway directory beside the throwaway database, and checks every recorded asset's bytes and every asset the published content uses | **Built for M4**; run on staging, see deploy/RELEASES.md |
 | Encrypted off-site copy | **Built, waiting for the owner's accounts.** Encryption with `age` (the server holds only the public key), upload with `rclone`, and a hash check of the upload |
 | Alert when a backup fails or does not run | **Waiting for the owner's account** (healthchecks.io; the script pings it when configured) |
 

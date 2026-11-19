@@ -37,8 +37,9 @@ export function DraftBar({
   changes,
   blocked = null,
   viewer,
+  startHint = null,
 }: {
-  kind: 'catalog' | 'pricing';
+  kind: 'catalog' | 'pricing' | 'learn_content';
   draftVersion: number | null;
   publishedVersion: number | null;
   /** What publishing the draft would change, in words. */
@@ -46,6 +47,8 @@ export function DraftBar({
   /** Why this release must not start or publish a draft here (it cannot apply the version in full); discarding stays possible. */
   blocked?: string | null;
   viewer: Viewer;
+  /** Instead of "Start a draft": where drafts of this kind come from (Learn content is imported until its editor exists). */
+  startHint?: string | null;
 }) {
   const [result, setResult] = useState<ActionResult | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -64,9 +67,13 @@ export function DraftBar({
           Live: <strong>version {publishedVersion ?? '—'}</strong>. To change anything, start a draft: nothing applies until you publish it.
         </p>
         {blocked && <p className="mt-2 text-sm font-medium text-foreground">{blocked}</p>}
-        <button type="button" disabled={pending || blocked !== null} onClick={() => run(() => startDraft({ kind }))} className="mt-3 h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
-          Start a draft
-        </button>
+        {startHint ? (
+          <p className="mt-2 text-sm text-muted-foreground">{startHint}</p>
+        ) : (
+          <button type="button" disabled={pending || blocked !== null} onClick={() => run(() => startDraft({ kind }))} className="mt-3 h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+            Start a draft
+          </button>
+        )}
         <Result result={result} />
       </div>
     );
@@ -75,7 +82,7 @@ export function DraftBar({
   return (
     <div className="rounded-xl border border-primary/40 bg-primary/5 p-4">
       <p className="text-sm text-foreground">
-        Editing <strong>draft version {draftVersion}</strong> (live: version {publishedVersion ?? '—'}). Save your edits below, then publish.
+        {startHint ? 'Reviewing' : 'Editing'} <strong>draft version {draftVersion}</strong> (live: version {publishedVersion ?? '—'}). {startHint ? 'Check it below, then publish.' : 'Save your edits below, then publish.'}
       </p>
       <div className="mt-3">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Publishing would</p>
@@ -133,7 +140,7 @@ export interface VersionRow {
   note: string | null;
 }
 
-export function VersionHistory({ kind, versions }: { kind: 'catalog' | 'pricing'; versions: VersionRow[] }) {
+export function VersionHistory({ kind, versions }: { kind: 'catalog' | 'pricing' | 'learn_content'; versions: VersionRow[] }) {
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();

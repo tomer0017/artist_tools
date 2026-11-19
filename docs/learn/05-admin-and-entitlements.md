@@ -1,5 +1,12 @@
 # 05 — Admin control and Free/Pro entitlements for Learn (proposal, for approval)
 
+> **As built in M4 (2026-11-19, ADR-0017):**
+> - The three module rows and the Learn access section are in Admin → Plans.
+> - A catalog without the section opens nothing. Free and Pro stay at None
+>   until the owner publishes otherwise.
+> - Admin → Learn shows and publishes the content (no editor until M6).
+> - "View as" comes with the editor (M6).
+
 **Revised 2026-11-18 after the owner's first review:**
 
 - §2 states what today's Plans editor can and cannot control.

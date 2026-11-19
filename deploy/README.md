@@ -246,6 +246,10 @@ unreadable catalog with the defaults: `plans` stays exactly as it is.
     and `export.worksheets` (M3, ADR-0016). Both shipped unpublished. From
     the first published catalog that includes either, the floor is
     `224bb65`.
+  - M4 (ADR-0017) adds `learn.curriculum`, `learn.color`,
+    `learn.challenges` and the catalog section `learn`; the same floor
+    applies. A release before M4 has no Learn routes: rolling back closes
+    Learn, and its content and files stay untouched.
 - **After any rollback, check the catalog** with the release now live (read
   only):
 
@@ -284,6 +288,40 @@ unreadable catalog with the defaults: `plans` stays exactly as it is.
   - `set-plan <userId> free|pro`: assign a plan for testing (no billing).
 
   All of them are recorded in the audit log (`/admin/activity`).
+
+### Learn content and its assets (ADR-0017)
+
+- **Once per environment, as root, before the first release with Learn:**
+
+  ```sh
+  sudo deploy/install-learn-assets.sh <env>
+  ```
+
+  It creates `/var/lib/studio-companion/<env>/learn-assets` (the site's
+  user, 0750; outside every release and `public/`) and the backup copy
+  `/var/backups/learn-assets/<env>` (root, 0700). It adds `LEARN_ASSETS_DIR`
+  to the env file (the previous one is kept in `/root/backups/`), and
+  installs `studio-learn-assets-backup` with its cron job (02:50, after the
+  database dump). It is idempotent. The next release or restart applies
+  the setting.
+- **Content, as the site user** (see "Operating"):
+  - `learn-import <folder>`: stores the folder's assets (checked by their
+    bytes; licence required) and saves its content as a draft, never over
+    a draft. The folder is kept outside the repository.
+  - `learn-status`: read only. The live and draft content, every asset's
+    file checked against its hash, the licences, and what each plan opens.
+    Exit code 1 on any problem.
+  - `learn-publish`: prints what the draft changes, then publishes it;
+    audited.
+  - `learn-discard`: discards the draft.
+  - Admin → Learn shows the same, and publishes, discards and restores
+    versions. Who sees what is set in Admin → Plans.
+- **Backups:**
+  - the content and asset metadata are in MongoDB, so in every dump;
+  - the files are in the nightly incremental copy;
+  - the restore drill restores both:
+    `studio-restore-drill <dump> --manifest <manifest> --assets /var/backups/learn-assets/<env>`
+    (docs/ops/backups.md).
 
 ## Server notes
 

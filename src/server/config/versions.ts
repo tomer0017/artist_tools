@@ -5,7 +5,7 @@ import { recordAudit } from '@/server/audit';
 import { collections, isDuplicateKeyError, type ConfigKind, type ConfigVersionDoc } from '@/server/db/collections';
 
 // ─── Versioned admin configuration (docs/adr/0006) ────────────────────────────
-// Each kind of configuration (the plan catalog, pricing) is a series of
+// Each kind of configuration (the plan catalog, pricing, Learn content) is a series of
 // versions: admins edit a draft, review what it changes, and publish it.
 // Exactly one version per kind is published (a unique index guarantees it)
 // and at most one draft exists. Nothing is edited in place: going back means
@@ -23,6 +23,14 @@ export interface ConfigSpec<T> {
    * this release (it could not apply it in full); empty when it may be.
    */
   check?: (document: T) => string[];
+  /**
+   * Checks that need the database (what another kind or collection holds),
+   * before a draft is saved and again before anything is published; empty
+   * when it may be written.
+   */
+  checkWithDb?: (db: Db, document: T, stage: 'save' | 'publish') => Promise<string[]>;
+  /** What restoring an earlier version starts the draft from (default: that version as it was). */
+  restoreDocument?: (db: Db, document: T, version: number) => Promise<{ document: T; note: string }>;
   /** Runs after a version is published, e.g. to bring dependent data in step. */
   onPublish?: (db: Db, document: T) => Promise<void>;
 }
@@ -58,12 +66,14 @@ export async function publishedDocument<T>(db: Db, spec: ConfigSpec<T>): Promise
 
 const issueList = (issues: { path: (string | number)[]; message: string }[]) => issues.map((i) => `${i.path.join('.') || 'document'}: ${i.message}`);
 
-/** Parse a document to store, then the spec's own check: the issues that stop it from being written. */
-function validate<T>(spec: ConfigSpec<T>, document: unknown): { data: T } | { issues: string[] } {
+/** Parse a document to store, then the spec's own checks: the issues that stop it from being written. */
+async function validate<T>(db: Db, spec: ConfigSpec<T>, document: unknown, stage: 'save' | 'publish'): Promise<{ data: T } | { issues: string[] }> {
   const parsed = spec.schema.safeParse(document);
   if (!parsed.success) return { issues: issueList(parsed.error.issues) };
   const blocked = spec.check?.(parsed.data) ?? [];
-  return blocked.length > 0 ? { issues: blocked } : { data: parsed.data };
+  if (blocked.length > 0) return { issues: blocked };
+  const live = (await spec.checkWithDb?.(db, parsed.data, stage)) ?? [];
+  return live.length > 0 ? { issues: live } : { data: parsed.data };
 }
 
 export async function getDraft<T>(db: Db, spec: ConfigSpec<T>): Promise<ConfigVersionDoc<T> | null> {
@@ -112,7 +122,7 @@ export type SaveResult = { status: 'saved'; version: number } | { status: 'inval
 
 /** Create or replace the draft with `document` (validated). */
 export async function saveDraft<T>(db: Db, spec: ConfigSpec<T>, document: unknown, actor: string, note: string | null = null, now = new Date()): Promise<SaveResult> {
-  const parsed = validate(spec, document);
+  const parsed = await validate(db, spec, document, 'save');
   if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
   const { configVersions } = collections(db);
   const existing = await getDraft(db, spec);
@@ -141,7 +151,7 @@ export async function publishDraft<T>(db: Db, spec: ConfigSpec<T>, actor: string
   const { configVersions } = collections(db);
   const draft = await getDraft(db, spec);
   if (!draft) return { status: 'no_draft' };
-  const parsed = validate(spec, draft.document);
+  const parsed = await validate(db, spec, draft.document, 'publish');
   if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
   const previous = await getPublished(db, spec);
   if (previous) await configVersions.updateOne({ _id: previous._id, status: 'published' }, { $set: { status: 'archived', updatedAt: now } });
@@ -193,7 +203,7 @@ export async function publishIfUnchanged<T>(
   note: string,
   now = new Date(),
 ): Promise<GuardedPublishResult> {
-  const parsed = validate(spec, document);
+  const parsed = await validate(db, spec, document, 'publish');
   if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
   const { configVersions } = collections(db);
   const live = await getPublished(db, spec);
@@ -240,5 +250,11 @@ export async function publishIfUnchanged<T>(
 export async function restoreAsDraft<T>(db: Db, spec: ConfigSpec<T>, version: number, actor: string): Promise<SaveResult | { status: 'not_found' }> {
   const source = await collections(db).configVersions.findOne({ kind: spec.kind, version, status: { $ne: 'draft' } });
   if (!source) return { status: 'not_found' };
+  if (spec.restoreDocument) {
+    const parsed = spec.schema.safeParse(source.document);
+    if (!parsed.success) return { status: 'invalid', issues: issueList(parsed.error.issues) };
+    const restored = await spec.restoreDocument(db, parsed.data, version);
+    return saveDraft(db, spec, restored.document, actor, restored.note);
+  }
   return saveDraft(db, spec, source.document, actor, `Restored from version ${version}`);
 }

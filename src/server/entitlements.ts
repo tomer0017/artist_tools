@@ -11,7 +11,10 @@ import {
   type SubscriptionStatus,
   type UserRole,
 } from '@/server/db/collections';
+import { ALL_LEARN_ACCESS, NO_LEARN_ACCESS, type LearnAccess } from '@/lib/learn/model';
+import { learnAccessOf } from '@/server/config/learn-access';
 import { activeGrant } from '@/server/grants';
+import { learnItemState } from '@/server/learn/live';
 import { log } from '@/server/log';
 import { countUsage, getUsage, giveBackUsage, takeUsage, usageDay, usagePeriod } from '@/server/usage';
 
@@ -59,10 +62,12 @@ export interface Entitlements {
   dailyUsage: Partial<Record<FeatureId, number>>;
   /** What each plan includes as published (to explain a lock: "part of Pro", or off for everyone). */
   offer: PlanOffer;
+  /** Which Learn items the plan in force opens, and what locked ones show (ADR-0017): decided by src/lib/learn/access.ts. */
+  learn: LearnAccess;
 }
 
 type SubscriptionState = Pick<SubscriptionDoc, 'planId' | 'status' | 'currentPeriodEnd'>;
-export type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits' | 'dailyLimits'>;
+export type PlanState = Pick<PlanDoc, 'active' | 'features' | 'limits' | 'dailyLimits'> & { learn?: LearnAccess };
 
 /** What each plan includes, from the plan documents (a plan that is switched off includes nothing). */
 export function offerOf(plans: Partial<Record<PlanId, PlanState>>): PlanOffer {
@@ -134,6 +139,7 @@ export function computeEntitlements(input: {
     dailyLimits: {},
     dailyUsage: input.dailyUsage ?? {},
     offer: offerOf(input.plans),
+    learn: NO_LEARN_ACCESS(),
   };
   if (!input.user || input.user.status !== 'active') return none;
 
@@ -144,7 +150,7 @@ export function computeEntitlements(input: {
 
   // Administrators can use everything, on any plan, paid or not.
   if (role === 'admin') {
-    return { ...none, accountActive: true, access: 'admin', planId, subscriptionActive, grant, features: [...FEATURES] };
+    return { ...none, accountActive: true, access: 'admin', planId, subscriptionActive, grant, features: [...FEATURES], learn: ALL_LEARN_ACCESS() };
   }
   if (!plan?.active) return { ...none, accountActive: true, planId, subscriptionActive, grant };
 
@@ -158,6 +164,7 @@ export function computeEntitlements(input: {
     features: [...plan.features],
     limits: { ...plan.limits },
     dailyLimits: { ...(plan.dailyLimits ?? {}) },
+    learn: plan.learn ? structuredClone(plan.learn) : NO_LEARN_ACCESS(),
   };
 }
 
@@ -212,11 +219,11 @@ function capsOf(value: unknown, planId: string, field: string): Partial<Record<F
  * counts against access, never for it — a plan without a readable shape
  * includes nothing.
  */
-export function planStateOf(doc: { _id: unknown; active?: unknown; features?: unknown; limits?: unknown; dailyLimits?: unknown }): PlanState {
+export function planStateOf(doc: { _id: unknown; active?: unknown; features?: unknown; limits?: unknown; dailyLimits?: unknown; learn?: unknown }): PlanState {
   const planId = String(doc._id);
   if (!Array.isArray(doc.features) || !isCapMap(doc.limits) || !isCapMap(doc.dailyLimits)) {
     reportOnce(`${planId}.shape`, { plan: planId });
-    return { active: false, features: [], limits: {}, dailyLimits: {} };
+    return { active: false, features: [], limits: {}, dailyLimits: {}, learn: NO_LEARN_ACCESS() };
   }
   const listed = doc.features as unknown[];
   return {
@@ -224,6 +231,8 @@ export function planStateOf(doc: { _id: unknown; active?: unknown; features?: un
     features: FEATURES.filter((f) => listed.includes(f)),
     limits: capsOf(doc.limits, planId, 'limits'),
     dailyLimits: capsOf(doc.dailyLimits, planId, 'dailyLimits'),
+    // Learn access as published; missing (a plan written before M4) or malformed opens nothing.
+    learn: learnAccessOf(doc.learn, planId, reportOnce),
   };
 }
 
@@ -232,7 +241,7 @@ export function planStateOf(doc: { _id: unknown; active?: unknown; features?: un
 // action could clear one copy while pages and API routes kept answering from
 // another for up to a minute after a publication.
 async function loadPlans(db: Db): Promise<Partial<Record<PlanId, PlanState>>> {
-  const docs = await collections(db).plans.find({}, { projection: { active: 1, features: 1, limits: 1, dailyLimits: 1 } }).toArray();
+  const docs = await collections(db).plans.find({}, { projection: { active: 1, features: 1, limits: 1, dailyLimits: 1, learn: 1 } }).toArray();
   return Object.fromEntries(docs.filter((p) => isPlanId(p._id)).map((p) => [p._id, planStateOf(p)])) as Partial<Record<PlanId, PlanState>>;
 }
 
@@ -280,7 +289,15 @@ export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()
   });
 }
 
-export type FeatureUseResult = { status: 'recorded' } | { status: 'denied'; reason: 'not_included' | 'limit_reached'; missing: FeatureId[] };
+export type FeatureUseResult =
+  | { status: 'recorded' }
+  | {
+      status: 'denied';
+      reason: 'not_included' | 'limit_reached';
+      missing: FeatureId[];
+      /** An export from a Learn item the account may not open (ADR-0017). */
+      learnItem?: { id: string; reason: 'module_off' | 'not_in_plan' | 'unavailable' };
+    };
 
 /**
  * Authorize one use of `features` right now and count it (a large GIF needs
@@ -298,16 +315,24 @@ export async function authorizeFeatureUse(db: Db, userId: ObjectId, features: Fe
  * must be included — checked, never counted, so an export never uses up
  * anything of the tool — and then each export feature is authorized and
  * counted as in authorizeFeatureUse. With no export features it only checks
- * the tool (e.g. saving a project file). Decided from the database only.
+ * the tool (e.g. saving a project file). An export made from a Learn item's
+ * reference (`learnItem`) also needs that item open to the account, checked
+ * before anything is counted. Decided from the database only.
  */
 export async function authorizeToolUse(
   db: Db,
   userId: ObjectId,
-  use: { tool: ToolFeatureId | null; features: ExportFeatureId[] },
+  use: { tool: ToolFeatureId | null; features: ExportFeatureId[]; learnItem?: string | null },
   now = new Date(),
 ): Promise<FeatureUseResult> {
   const entitlements = await getEntitlements(db, userId, now);
   if (use.tool && !includes(entitlements, use.tool)) return { status: 'denied', reason: 'not_included', missing: [use.tool] };
+  if (use.learnItem) {
+    const state = await learnItemState(db, entitlements, use.learnItem);
+    if (state.status !== 'open') {
+      return { status: 'denied', reason: 'not_included', missing: [], learnItem: { id: use.learnItem, reason: state.status === 'locked' ? state.reason : 'unavailable' } };
+    }
+  }
   if (use.features.length === 0) return entitlements.accountActive ? { status: 'recorded' } : { status: 'denied', reason: 'not_included', missing: [] };
   return takeFeatures(db, userId, entitlements, use.features, now);
 }

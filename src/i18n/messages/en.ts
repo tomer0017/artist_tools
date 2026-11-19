@@ -268,6 +268,9 @@ export const en = {
       exportGifDifference: 'Compare + Difference GIFs',
       exportPdf: 'Grid PDFs (A4)',
       exportWorksheets: 'Worksheets',
+      learnCurriculum: 'Drawing course',
+      learnColor: 'Color course',
+      learnChallenges: 'Drawing challenges',
     },
     intros: {
       title: 'Tool introductions',

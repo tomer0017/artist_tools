@@ -268,6 +268,9 @@ export const he: Messages = {
       exportGifDifference: 'GIF השוואה + הבדלים',
       exportPdf: 'קובצי PDF של רשת (A4)',
       exportWorksheets: 'דפי תרגול',
+      learnCurriculum: 'קורס רישום',
+      learnColor: 'קורס צבע',
+      learnChallenges: 'אתגרי רישום',
     },
     intros: {
       title: 'הסברי פתיחה לכלים',

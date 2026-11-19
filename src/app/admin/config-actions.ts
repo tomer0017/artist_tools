@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { catalogSpec, saveCatalogEdit } from '@/server/config/catalog';
 import { pricingSpec } from '@/server/config/pricing';
+import { learnContentSpec } from '@/server/learn/content';
 import { discardDraft, getPublished, publishDraft, restoreAsDraft, saveDraft, type ConfigSpec } from '@/server/config/versions';
 import { createCoupon, setCouponStatus } from '@/server/coupons';
 import { getDb } from '@/server/db/client';
@@ -15,19 +16,23 @@ import type { ActionResult } from './actions';
 // Admin actions on configuration (plan catalog, prices) and coupons. Same
 // rules as ./actions.ts: the admin is re-checked from the database, input is
 // validated on the server, everything is audited by the operation it calls.
-// Publishing a version needs a sign-in from the last 10 minutes.
+// Publishing a version needs a sign-in from the last 10 minutes. Learn
+// content (ADR-0017) has no editor yet: its drafts come from the import
+// command, and here they are published, discarded or restored.
 
 const DENIED: ActionResult = { ok: false, message: 'You are not allowed to do that.' };
 const REAUTH: ActionResult = { ok: false, reauth: true, message: 'For your security, confirm it is you (sign in again), then publish.' };
 
-const specs = { catalog: catalogSpec, pricing: pricingSpec } as const;
-const Kind = z.enum(['catalog', 'pricing']);
-const pathOf = (kind: keyof typeof specs) => (kind === 'catalog' ? '/admin/plans' : '/admin/pricing');
+const specs = { catalog: catalogSpec, pricing: pricingSpec, learn_content: learnContentSpec } as const;
+const Kind = z.enum(['catalog', 'pricing', 'learn_content']);
+/** Kinds whose drafts are edited here (Learn content is imported until its editor exists). */
+const Editable = z.enum(['catalog', 'pricing']);
+const pathOf = (kind: keyof typeof specs) => (kind === 'catalog' ? '/admin/plans' : kind === 'pricing' ? '/admin/pricing' : '/admin/learn');
 
 export async function startDraft(input: { kind: string }): Promise<ActionResult> {
   const admin = await currentAdmin();
   if (!admin) return DENIED;
-  const kind = Kind.safeParse(input.kind);
+  const kind = Editable.safeParse(input.kind);
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
   const spec = specs[kind.data] as ConfigSpec<unknown>;
   const published = await getPublished(getDb(), spec);
@@ -41,7 +46,7 @@ export async function startDraft(input: { kind: string }): Promise<ActionResult>
 export async function saveConfigDraft(input: { kind: string; document: unknown; note?: string }): Promise<ActionResult> {
   const admin = await currentAdmin();
   if (!admin) return DENIED;
-  const kind = Kind.safeParse(input.kind);
+  const kind = Editable.safeParse(input.kind);
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
   const note = typeof input.note === 'string' ? input.note.trim().slice(0, 200) || null : null;
   const actor = `admin:${admin.id.toHexString()}`;

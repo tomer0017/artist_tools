@@ -16,13 +16,19 @@
 //      with username accounts on each plan (e2e/entitlements.spec.ts, which
 //      publishes other versions through the admin dashboard: nothing else
 //      runs against it). Passwords go to e2e/.auth/entitlement-accounts.json.
+// The main and plan-enforcement databases also get Learn's synthetic test
+// content (src/test/learn-fixture.ts: made-up items and generated images),
+// imported and published the way the operator command does, with its assets
+// in a temporary directory (ADR-0017). No plan includes a Learn module.
 // No login bypass exists in the app: tests are signed in the way a real
 // session is, and the server verifies them the same way.
 //
 // Runs with the react-server condition so `server-only` modules can be imported.
 import { spawn } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { createAuth } from '@/server/auth';
@@ -31,6 +37,9 @@ import { publishDraft, saveDraft } from '@/server/config/versions';
 import { migrate } from '@/server/db/migrate';
 import { createMailer } from '@/server/mail/mailer';
 import { createUsernameAccount, holdInitialPassword } from '@/server/password-accounts';
+import { learnContentSpec } from '@/server/learn/content';
+import { importSeed } from '@/server/learn/import';
+import { writeLearnFixture } from '@/test/learn-fixture';
 
 const PORT = 8080;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -52,6 +61,17 @@ const STAGING_CATALOG: Catalog = {
 // settings (src/server/security/secret-box.ts); each server gets its own URL.
 process.env.BETTER_AUTH_SECRET = SECRET;
 process.env.BETTER_AUTH_URL = BASE_URL;
+/** Learn's asset directory for this run (outside the repository, like the server's). */
+const LEARN_ASSETS_DIR = mkdtempSync(path.join(tmpdir(), 'studio-e2e-learn-assets-'));
+const LEARN_SEED = writeLearnFixture(mkdtempSync(path.join(tmpdir(), 'studio-e2e-learn-seed-')));
+process.env.LEARN_ASSETS_DIR = LEARN_ASSETS_DIR;
+
+/** Import and publish the synthetic Learn content, as `npm run db -- learn-import` and `learn-publish` do. */
+async function seedLearn(db: Db) {
+  const imported = await importSeed(db, LEARN_ASSETS_DIR, LEARN_SEED, 'cli');
+  if (imported.status !== 'saved') throw new Error(`Could not import the Learn fixture: ${JSON.stringify(imported)}`);
+  if ((await publishDraft(db, learnContentSpec, 'cli')).status !== 'published') throw new Error('Could not publish the Learn fixture');
+}
 
 /** The signed cookie value Better Auth expects: `token.HMAC-SHA256(token)`, URL-encoded. */
 const signedCookie = (token: string) => encodeURIComponent(`${token}.${createHmac('sha256', SECRET).update(token).digest('base64')}`);
@@ -120,6 +140,7 @@ const client = new MongoClient(replSet.getUri());
 await client.connect();
 const db = client.db(DB_NAME);
 await migrate(db);
+await seedLearn(db);
 mkdirSync('e2e/.auth', { recursive: true });
 await seedSignedInUser(db, 'user', 'user'); // Free: what specs are signed in as by default
 await seedSignedInUser(db, 'pro', 'user', 'pro');
@@ -206,6 +227,7 @@ for (const name of ['ivrit-chromium', 'ivrit-iphone-webkit', 'ivrit-switch']) {
 {
   const entitlements = client.db(ENTITLEMENTS_DB);
   await migrate(entitlements);
+  await seedLearn(entitlements);
   if ((await saveDraft(entitlements, catalogSpec, STAGING_CATALOG, 'cli', 'As on staging (version 2, 2026-11-18)')).status !== 'saved') throw new Error('Could not save the staging catalog');
   if ((await publishDraft(entitlements, catalogSpec, 'cli')).status !== 'published') throw new Error('Could not publish the staging catalog');
   await seedSignedInUser(entitlements, 'ent-admin', 'admin', 'free', false, ALL_TOOLS, -60);
@@ -258,6 +280,7 @@ function startServer(port: number, overrides: Record<string, string | undefined>
       HOSTNAME: '127.0.0.1',
       MONGODB_URI: replSet.getUri(),
       MONGODB_DB: DB_NAME,
+      LEARN_ASSETS_DIR,
       BETTER_AUTH_URL: `http://localhost:${port}`,
       BETTER_AUTH_SECRET: SECRET,
       GOOGLE_CLIENT_ID: 'e2e-client-id.apps.googleusercontent.com',

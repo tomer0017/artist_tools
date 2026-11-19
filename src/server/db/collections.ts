@@ -2,6 +2,7 @@ import 'server-only';
 import { ObjectId, type Db } from 'mongodb';
 import { FEATURES, PLAN_IDS, type FeatureId, type PlanId } from '@/lib/plans';
 import type { Currency, Locale } from '@/lib/locale';
+import type { LearnAccess } from '@/lib/learn/model';
 
 // ─── Data model ────────────────────────────────────────────────────────────────
 // `users`, `sessions`, `accounts`, `verifications` and `rateLimits` are owned
@@ -120,10 +121,12 @@ export interface PlanDoc {
   limits: Partial<Record<FeatureId, number>>;
   /** Usage caps per day (UTC), from the published catalog. */
   dailyLimits?: Partial<Record<FeatureId, number>>;
+  /** Which Learn items the plan opens and what locked ones show (ADR-0017); missing on plans written before M4: nothing opens. */
+  learn?: LearnAccess;
   updatedAt: Date;
 }
 
-export type ConfigKind = 'catalog' | 'pricing';
+export type ConfigKind = 'catalog' | 'pricing' | 'learn_content';
 
 /** One version of admin-managed configuration (src/server/config/versions.ts). */
 export interface ConfigVersionDoc<T = unknown> {
@@ -138,6 +141,56 @@ export interface ConfigVersionDoc<T = unknown> {
   updatedAt: Date;
   publishedBy: string | null;
   publishedAt: Date | null;
+}
+
+export type LearnAssetType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
+export type LicenceKind = 'own' | 'commissioned' | 'cc0' | 'public-domain' | 'licensed';
+
+/**
+ * Where an asset comes from and on what terms, required before any item that
+ * uses it can be published (ADR-0017, docs/learn/06-architecture.md §11).
+ * Thumbnails carry none: they follow the asset they preview.
+ */
+export interface AssetLicence {
+  kind: LicenceKind;
+  /** The work's own page at its source (e.g. the museum's object page). */
+  source: string;
+  author: string;
+  /** The work's title at its source. */
+  title: string;
+  /** The licence or rights statement's own page (CC0: the deed). */
+  licenceUrl: string | null;
+  /** The rights as the source states them, and where that was checked. */
+  rights: string;
+  /** A credit line the source asks for (or offers), if any. */
+  attribution: string | null;
+  /** When the rights were checked (YYYY-MM-DD). */
+  checkedAt: string;
+  /** Identifiable people need a release whatever the licence. */
+  modelRelease: 'yes' | 'not-needed';
+  notes: string | null;
+}
+
+/**
+ * A Learn reference image, its thumbnail, or a static worksheet (ADR-0017).
+ * The file lives in the asset directory as `<_id>.<ext>`, never in `public/`
+ * or the repository; `_id` is the SHA-256 of its bytes, so files never change
+ * and every content version keeps finding its own.
+ */
+export interface LearnAssetDoc {
+  _id: string;
+  role: 'reference' | 'thumbnail' | 'worksheet';
+  contentType: LearnAssetType;
+  bytes: number;
+  width: number | null;
+  height: number | null;
+  /** Thumbnails: the asset they preview. */
+  of: string | null;
+  /** References: their thumbnail. */
+  thumbnailAssetId: string | null;
+  licence: AssetLicence | null;
+  uploadedBy: string;
+  uploadedAt: Date;
 }
 
 /** A discount code (src/server/coupons.ts). Redemptions are counted from `coupon_redemptions`. */
@@ -363,6 +416,7 @@ export type AuditEventType =
   | 'admin.config_saved'
   | 'admin.config_discarded'
   | 'admin.config_published'
+  | 'admin.learn_asset_added'
   | 'admin.coupon_created'
   | 'admin.coupon_status_changed'
   | 'billing.checkout_started'
@@ -506,6 +560,7 @@ export function collections(db: Db) {
     errorReports: db.collection<ErrorReportDoc>('error_reports'),
     couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
     passwordHandoffs: db.collection<PasswordHandoffDoc>('password_handoffs'),
+    learnAssets: db.collection<LearnAssetDoc>('learn_assets'),
   };
 }
 

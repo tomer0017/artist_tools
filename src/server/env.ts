@@ -162,3 +162,17 @@ export function authConfig() {
     },
   };
 }
+
+/**
+ * Where Learn's reference images and static worksheets are kept
+ * (LEARN_ASSETS_DIR, an absolute path; ADR-0017): outside every release and
+ * outside `public/`, so nothing serves them but the authorized route. Unset,
+ * Learn has no assets: nothing can be stored, and the asset route answers
+ * that it is unavailable.
+ */
+export function learnAssetsDir(): string | null {
+  const value = process.env.LEARN_ASSETS_DIR?.trim();
+  if (!value) return null;
+  if (!value.startsWith('/')) throw new Error('[config] learn assets: LEARN_ASSETS_DIR must be an absolute path');
+  return value.replace(/\/+$/, '') || '/';
+}

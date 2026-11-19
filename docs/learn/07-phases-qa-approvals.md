@@ -68,9 +68,10 @@ implemented or tested yet: no Learn code exists.
 ### M3 — Prepare Worksheets from any image (before any curriculum exists)
 - **Status:** approved 2026-11-18 and implemented (ADR-0016); on staging
   since 2026-11-18 (`8576f66`, deploy/RELEASES.md), with `export.worksheets`
-  in no plan (admins only). Open: the owner's checks on a real iPhone and
-  iPad (the share sheet with several images, memory and time). M4 waits for
-  the owner's approval.
+  in no plan (admins only). **Approved by the owner on 2026-11-19**, after
+  making the four sheets on staging with their admin account. Still open:
+  the owner's checks on a real iPhone and iPad (the share sheet with several
+  images, memory and time).
 - **Changed by the owner (2026-11-18):** the sheets are saved as **PNG
   images**, not one multipage PDF. Each is the size of Create a Grid's
   saved image with the photo in the same place, so they line up. Canvas,
@@ -94,6 +95,25 @@ implemented or tested yet: no Learn code exists.
   before any Learn content.
 
 ### M4 — Learn foundations (server), dark launch
+- **Status:** approved by the owner on 2026-11-19 and implemented
+  (ADR-0017), with their decisions:
+  - the 3 exercises and 3 challenges are test content;
+  - only verified CC0/public-domain images, with the rights recorded;
+  - the test content may be published on staging, but no Free/Pro plan
+    setting changes;
+  - Learn access None for Free and Pro;
+  - backup and restore verified.
+
+  Release and verification: deploy/RELEASES.md. M5 waits for the owner's
+  approval.
+- **As built:**
+  - The browser upload form is part of the content editor (M6). Until then
+    assets are stored by `npm run db -- learn-import`, through the same
+    checks.
+  - A catalog without a Learn section opens nothing, so the published
+    catalog was not migrated (plans stay as they were).
+  - Thumbnails of locked items follow the previews setting.
+  - A module no plan offers is not listed at all.
 - **Scope:**
   - the content kind;
   - the Learn access section of the catalog, edited in Admin → Plans;
@@ -248,4 +268,5 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
 | A16 | Should Learn ever measure drawing accuracy (angles, proportions)? | No in v1: feedback can backfire, and the aim is less screen time (01 §2) | M5 |
 | A17 | Paper and text in PDFs: A4 only or also Letter; Hebrew text as an embedded font or as images | **Decided in M2:** A4 only; words drawn by the browser as images, in the page's language (ADR-0015 §2) | M2 |
 | A18 | How Learn is evaluated before any claim about results (for example volunteers' before-and-after drawings) | Make no outcome claims until such an evaluation exists | M9 |
-| A19 | Where reference images live (06 §3) | Files on the server, outside the releases and `public/`, named by hash; metadata in MongoDB; served only by the authorized route; copied incrementally with the nightly backup. Not GridFS, not the repository | M4 |
+| A19 | Where reference images live (06 §3) | **Decided and built in M4:** files on the server outside the releases and `public/`, named by hash; metadata in MongoDB; served only by the authorized route; copied incrementally with the nightly backup (ADR-0017) | M4 |
+| A20 | Worksheets on their own: reachable from Home as a feature in its own right, while staying in Create a Grid and Study & Simplify | **The owner's decision (2026-11-19), for later:** recorded, not built in M4. To be designed with the Learn screens (04) | M5 or later |

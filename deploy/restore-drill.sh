@@ -5,10 +5,16 @@
 # live database), checks the unique indexes came back, then drops the
 # throwaway database. Never touches the live database.
 #
+# With --assets, Learn's asset files are restored too (ADR-0017): copied from
+# their backup into a throwaway directory, every asset the restored database
+# records must be there with exactly its bytes (its SHA-256 is its name), and
+# every asset the restored published content uses must be recorded.
+#
 #   deploy/restore-drill.sh <dump.archive.gz | dump.archive.gz.age> [options]
 #     --db NAME          app database inside the dump (default studio_companion_staging)
 #     --identity FILE    age private key, for an encrypted (.age) dump
 #     --manifest FILE    the dump's manifest (.json, or .json.age with --identity)
+#     --assets DIR       the asset backup (e.g. /var/backups/learn-assets/staging)
 #   MONGO_URI          where the throwaway database is created; on the server
 #                      the local admin connection is used when it is unset
 set -euo pipefail
@@ -19,11 +25,13 @@ shift
 DB=studio_companion_staging
 IDENTITY=""
 MANIFEST=""
+ASSETS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --db) DB="$2"; shift 2 ;;
     --identity) IDENTITY="$2"; shift 2 ;;
     --manifest) MANIFEST="$2"; shift 2 ;;
+    --assets) ASSETS="$2"; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -103,5 +111,40 @@ indexes="$(mongosh_run "
   const unique = (c) => s.getCollection(c).getIndexes().filter((i) => i.unique).map((i) => i.name).join(',') || '(none)';
   print(['users', 'accounts', 'sessions'].map((c) => c + ': ' + unique(c)).join('  '));")"
 log "unique indexes restored: $indexes"
+
+learn_ok=1
+if [ -n "$ASSETS" ]; then
+  [ -d "$ASSETS" ] || { echo "no asset backup at $ASSETS" >&2; exit 2; }
+  restored_assets="$work/learn-assets"
+  install -d -m 700 "$restored_assets"
+  find "$ASSETS" -maxdepth 1 -type f -regextype posix-extended -regex '.*/[0-9a-f]{64}\.(jpg|png|webp|pdf)' -exec cp --preserve=timestamps {} "$restored_assets"/ \;
+  learn="$(mongosh_run "
+    const s = conn.getDB('$SCRATCH');
+    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
+    const assets = s.learn_assets.find({}).toArray().map((a) => ({ id: a._id, file: a._id + '.' + ext[a.contentType], bytes: a.bytes, thumb: a.thumbnailAssetId || null }));
+    const live = s.config_versions.findOne({ kind: 'learn_content', status: 'published' });
+    const items = live ? (live.document.exercises || []).concat(live.document.challenges || []) : [];
+    const used = [];
+    items.forEach((i) => { (i.references || []).forEach((r) => used.push(r.assetId)); if (i.worksheet && i.worksheet.kind === 'static') used.push(i.worksheet.assetId); });
+    print(JSON.stringify({ version: live ? live.version : null, items: items.length, published: items.filter((i) => i.published).length, assets: assets, used: Array.from(new Set(used)) }));")"
+  recorded=0; intact=0; broken=()
+  while IFS=$'\t' read -r id file bytes; do
+    recorded=$((recorded + 1))
+    path="$restored_assets/$file"
+    if [ ! -f "$path" ]; then broken+=("$file missing"); continue; fi
+    if [ "$(stat -c %s "$path")" != "$bytes" ] || [ "$(sha256sum "$path" | cut -d' ' -f1)" != "$id" ]; then broken+=("$file changed"); continue; fi
+    intact=$((intact + 1))
+  done < <(jq -r '.assets[] | [.id, .file, (.bytes | tostring)] | @tsv' <<<"$learn")
+  unrecorded="$(jq -r '(.assets | map(.id)) as $ids | [.used[], (.assets[] | .thumb // empty)] | map(select(. as $u | $ids | index($u) | not)) | unique | join(", ")' <<<"$learn")"
+  [ -n "$unrecorded" ] && broken+=("used but not recorded: $unrecorded")
+  log "learn content restored: $(jq -r '"version \(.version // "—"), \(.items) items (\(.published) published), \(.used | length) assets used"' <<<"$learn")"
+  log "learn assets restored from $ASSETS: $intact of $recorded recorded assets with exactly their bytes"
+  if [ "${#broken[@]}" -eq 0 ]; then
+    echo "LEARN: OK"
+  else
+    learn_ok=0
+    echo "LEARN: MISMATCH: ${broken[*]}"
+  fi
+fi
 log "compared with: $source_label; took $(( $(date +%s) - started ))s"
-grep -q '^RESULT: OK$' <<<"$report"
+grep -q '^RESULT: OK$' <<<"$report" && [ "$learn_ok" -eq 1 ]

@@ -93,6 +93,9 @@ export const INDEXES: IndexPlan[] = [
   { collection: 'users', key: { username: 1 }, options: { name: 'users_username_unique', unique: true, partialFilterExpression: { username: { $type: 'string' } } } },
   // Initial passwords waiting to be revealed once remove themselves when they expire.
   { collection: 'password_handoffs', key: { expiresAt: 1 }, options: { name: 'password_handoff_ttl', expireAfterSeconds: 0 } },
+  // Learn's asset metadata (ADR-0017), newest first for the admin page; thumbnails by the asset they preview.
+  { collection: 'learn_assets', key: { uploadedAt: -1 }, options: { name: 'learn_assets_by_time' } },
+  { collection: 'learn_assets', key: { of: 1 }, options: { name: 'learn_assets_by_original', partialFilterExpression: { of: { $type: 'string' } } } },
 ];
 
 export interface MigrationReport {

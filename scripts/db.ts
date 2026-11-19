@@ -36,6 +36,12 @@
 //                                             of this server; `create` writes their passwords to standard
 //                                             output, which must be a pipe or a file, never a terminal;
 //                                             `remove` deletes every such account
+//   npm run db -- learn-import <folder>       Learn (ADR-0017): store the folder's assets (licence required, checked by
+//                                             their bytes) and save its content as a draft; never over a draft
+//   npm run db -- learn-status                read only: the published and draft Learn content, every asset's file,
+//                                             and what each plan opens; exit code 1 on any problem
+//   npm run db -- learn-publish               publish the Learn content draft (audited); prints what it changes
+//   npm run db -- learn-discard               discard the Learn content draft
 //
 // Admin access is granted only here or by another admin, always by user id —
 // never from configuration or an email address. Username accounts can never
@@ -49,11 +55,16 @@ import { findUserByEmail, getUserDetail, listUsers, setUserPlan, setUserRole, se
 import { authFromEnvironment } from '@/server/auth';
 import { catalogReadNotes, catalogSpec, defaultCatalog, mergeKnown, planDocMatches, planDocsFor, readCatalog, type Catalog } from '@/server/config/catalog';
 import { getDraft, getPublished, publishIfUnchanged } from '@/server/config/versions';
+import { learnAccess } from '@/lib/learn/access';
+import { LEARN_COLLECTIONS, itemsOf } from '@/lib/learn/model';
+import { publishedLearnContent } from '@/server/learn/content';
+import { learnDiscard, learnImportCommand, learnPublish, learnStatus } from './learn-commands';
 import { closeMongo, getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { authConfig } from '@/server/env';
-import { getPlanOffer } from '@/server/entitlements';
+import { getEntitlements, getPlanOffer } from '@/server/entitlements';
+import { learnViewerOf } from '@/server/learn/live';
 import { createMailer } from '@/server/mail/mailer';
 import { mailTemplates } from '@/server/mail/templates';
 import { runMaintenance } from '@/server/maintenance';
@@ -70,7 +81,7 @@ import {
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove | learn-import <folder> | learn-status | learn-publish | learn-discard';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -263,6 +274,18 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       if (arg === 'create') return createTempTesters(db);
       if (arg === 'remove') return removeTempTesters(db);
       throw new Error(USAGE);
+    case 'learn-import':
+      process.exitCode = await learnImportCommand(db, arg);
+      return;
+    case 'learn-status':
+      process.exitCode = await learnStatus(db);
+      return;
+    case 'learn-publish':
+      process.exitCode = await learnPublish(db);
+      return;
+    case 'learn-discard':
+      process.exitCode = await learnDiscard(db);
+      return;
     default:
       throw new Error(USAGE);
   }
@@ -396,7 +419,8 @@ function fingerprint(value: unknown): string {
 /** What `plans` holds per plan, without timestamps (an absent daily limit and an empty one are the same). */
 async function plansState(db: ReturnType<typeof getDb>) {
   const docs = await collections(db).plans.find({}, { sort: { _id: 1 } }).toArray();
-  return docs.map((p) => ({ id: p._id, active: p.active, features: p.features, limits: p.limits ?? {}, dailyLimits: p.dailyLimits ?? {} }));
+  // Learn access only where a plan has it, so plans written before M4 keep their fingerprint.
+  return docs.map((p) => ({ id: p._id, active: p.active, features: p.features, limits: p.limits ?? {}, dailyLimits: p.dailyLimits ?? {}, ...(p.learn ? { learn: p.learn } : {}) }));
 }
 
 /** Waits up to `seconds`, or until a line arrives on standard input (a browser check that is done says so). */
@@ -475,7 +499,7 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     results.push([label, ok]);
     console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${label}`);
   };
-  const usage = async (cookie: string, body: { tool?: FeatureId; features?: FeatureId[] }) => {
+  const usage = async (cookie: string, body: { tool?: FeatureId; features?: FeatureId[]; learnItem?: string }) => {
     const response = await fetchRetrying(`${base}/api/usage`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie }, body: JSON.stringify(body) });
     const answer = (await response.json().catch(() => ({}))) as { features?: string[] };
     return { status: response.status, refused: answer.features ?? [] };
@@ -514,6 +538,59 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     if (lacking) check(`${label}: an export from ${lacking} (not in the plan) is refused`, same(await usage(cookie, { tool: lacking, features: ['export.image'] }), { status: 403, refused: [lacking] }));
   };
 
+  /**
+   * Every Learn list, item and image for one account, against what the
+   * published catalog and content give its plan (the resolver the server
+   * uses, fed from the database); plus, while no plan includes a Learn
+   * module, the dark launch itself: nothing opens and no image is served.
+   */
+  const checkLearn = async (label: string, cookie: string, userId: import('mongodb').ObjectId) => {
+    const content = await publishedLearnContent(db);
+    const entitlements = await getEntitlements(db, userId);
+    const view = learnAccess(learnViewerOf(entitlements), content);
+    const get = (path: string) => fetchRetrying(`${base}${path}`, { headers: { cookie } });
+    let wrong: string[] = [];
+    for (const collection of LEARN_COLLECTIONS) {
+      const response = await get(`/api/learn/items?collection=${collection}`);
+      const body = response.ok ? ((await response.json()) as { items: Record<string, unknown>[] }) : null;
+      const expected = view.list(collection).map(({ item, state }) => `${item.id}:${state.status}`);
+      const got = body?.items.map((row) => `${String(row.id)}:${row.open ? 'open' : 'locked'}`) ?? null;
+      const leaks = body?.items.filter((row) => !row.open && ['instruction', 'prompt', 'guide', 'references', 'objective'].some((key) => key in row)) ?? [];
+      if (response.status !== 200 || !same(got, expected) || leaks.length > 0) wrong.push(`${collection}: ${response.status} ${JSON.stringify(got)}`);
+    }
+    check(`${label}: Learn lists show exactly what the plan allows, locked rows without content${wrong.length ? ` — wrong: ${wrong.join('; ')}` : ''}`, wrong.length === 0);
+    wrong = [];
+    let opened = 0;
+    for (const item of itemsOf(content)) {
+      const state = view.state(item.id);
+      const expected = state.status === 'open' ? 200 : state.status === 'locked' ? 403 : 404;
+      const response = await get(`/api/learn/items/${item.id}`);
+      if (response.status === 200) opened += 1;
+      if (response.status !== expected) wrong.push(`${item.id}: ${response.status}, expected ${expected}`);
+      const answer = await usage(cookie, { tool: 'tool.grid', features: ['export.image'], learnItem: item.id });
+      if (state.status !== 'open' && answer.status !== 403) wrong.push(`${item.id} export: ${answer.status}`);
+    }
+    check(`${label}: each Learn item (${itemsOf(content).length}) opens or is refused exactly as published, and so do exports from it${wrong.length ? ` — wrong: ${wrong.join('; ')}` : ''}`, wrong.length === 0);
+    wrong = [];
+    let served = 0;
+    const assets = await collections(db).learnAssets.find({}).toArray();
+    for (const asset of assets) {
+      const target = asset.role === 'thumbnail' ? asset.of : asset._id;
+      const users = itemsOf(content).filter((item) => item.references.some((r) => r.assetId === target) || (item.kind === 'exercise' && item.worksheet.kind === 'static' && item.worksheet.assetId === target));
+      const visible = users.filter((item) => view.state(item.id).status !== 'hidden');
+      const allowed = asset.role === 'thumbnail' ? visible.some((item) => view.thumbnail(item.id)) : visible.some((item) => view.canOpen(item.id));
+      const expected = visible.length === 0 ? 404 : allowed ? 200 : 403;
+      const response = await get(`/api/learn/assets/${asset._id}`);
+      await response.arrayBuffer().catch(() => undefined);
+      if (response.status === 200) served += 1;
+      if (response.status !== expected) wrong.push(`${asset._id.slice(0, 12)}… (${asset.role}): ${response.status}, expected ${expected}`);
+    }
+    check(`${label}: each Learn image (${assets.length}) is served or refused exactly as published${wrong.length ? ` — wrong: ${wrong.join('; ')}` : ''}`, wrong.length === 0);
+    if (!entitlements.offer.free.concat(entitlements.offer.pro).some((f) => f.startsWith('learn.'))) {
+      check(`${label}: dark launch — no plan includes a Learn module, so no Learn item opens (${opened}) and no Learn image is served (${served})`, opened === 0 && served === 0);
+    }
+  };
+
   console.log(`Plan enforcement test against ${base}, published catalog version ${live?.version ?? '(defaults)'}, temporary accounts:`);
   if (publishCheck) {
     const d = snapshot.document;
@@ -539,6 +616,15 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     const offer = await getPlanOffer(db);
     await checkPlan('Free', free.cookie, 'free', offer);
     await checkPlan('Pro', pro.cookie, 'pro', offer);
+    // Learn (ADR-0017): lists, items, images and exports from an item answer exactly as published.
+    await checkLearn('Free', free.cookie, created[0].userId);
+    await checkLearn('Pro', pro.cookie, created[1].userId);
+    const signedOut = await Promise.all([
+      fetchRetrying(`${base}/api/learn/items?collection=curriculum`),
+      fetchRetrying(`${base}/api/learn/items/D-START-01`),
+      fetchRetrying(`${base}/api/learn/assets/${'0'.repeat(64)}`),
+    ]);
+    check('signed out: Learn lists, items and images answer 401', signedOut.every((r) => r.status === 401));
     const proOnlyTool = TOOL_FEATURE_IDS.find((t) => offer.pro.includes(t) && !offer.free.includes(t));
     if (proOnlyTool) {
       await setUserPlan(db, { userId: created[0].userId, plan: 'pro', actor: 'cli' });

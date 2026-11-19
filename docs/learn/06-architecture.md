@@ -1,5 +1,15 @@
 # 06 — Technical architecture (proposal, for approval)
 
+> **As built in M4 (2026-11-19, ADR-0017):**
+> - The content kind `learn_content`, assets in `LEARN_ASSETS_DIR` named by
+>   SHA-256, and the resolver in `src/lib/learn/access.ts`, shared by the
+>   server and the admin editor.
+> - The routes `/api/learn/items` and `/api/learn/assets/<id>`, and
+>   `learnItem` in `/api/usage`.
+> - Assets are checked by their bytes, with embedded metadata refused. Until
+>   the M6 editor, uploads go through `npm run db -- learn-import`.
+> - Completions (§9) come in M5.
+
 Inspected on 2026-11-18 at `be6890c` (branch `migration/nextjs-saas-foundation`).
 Every "today" statement below was checked in the code; file paths are given
 so each can be re-checked.

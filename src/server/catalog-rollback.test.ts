@@ -4,6 +4,7 @@ import { ObjectId, type Db } from 'mongodb';
 import { z } from 'zod';
 import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
 import { FEATURES, PLAN_FEATURES, PLAN_IDS, isToolFeature, type FeatureId } from '@/lib/plans';
+import { NO_LEARN_ACCESS } from '@/lib/learn/model';
 import { catalogReadNotes, catalogSpec, defaultCatalog, mergeKnown, planDocsFor, readCatalog, saveCatalogEdit, type Catalog } from './config/catalog';
 import { pricingSpec } from './config/pricing';
 import { UnreadableConfigError, getPublished, listVersions, publishDraft, publishIfUnchanged, publishedDocument, restoreAsDraft, saveDraft } from './config/versions';
@@ -45,20 +46,20 @@ const OWNER: Catalog = {
 const NEWER = () => ({
   plans: {
     free: {
-      features: ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.lesson_pack'],
+      features: ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.sculpture', 'export.lesson_pack'],
       quotas: { 'export.lesson_pack': { limit: 5, period: 'month' } },
       learn: { curriculum: { rule: 'selected', ids: ['D-START-01', 'D-SHAPE-01'] } },
     },
-    pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.lesson_pack'], quotas: {}, learn: { curriculum: { rule: 'all' } } },
+    pro: { features: [...PLAN_FEATURES.pro, 'learn.sculpture', 'export.lesson_pack'], quotas: {}, learn: { curriculum: { rule: 'all' } } },
   },
-  disabled: ['learn.color'],
+  disabled: ['learn.history'],
   learnPreviews: 'title_and_thumbnail',
 });
 
 /** The `plans` documents that newer release writes (with its feature ids). */
 const NEWER_PLANS = {
-  free: { features: [...OWNER.plans.free.features, 'learn.curriculum', 'export.lesson_pack'], limits: { 'export.lesson_pack': 5 } },
-  pro: { features: [...PLAN_FEATURES.pro, 'learn.curriculum', 'export.lesson_pack'] },
+  free: { features: [...OWNER.plans.free.features, 'learn.sculpture', 'export.lesson_pack'], limits: { 'export.lesson_pack': 5 } },
+  pro: { features: [...PLAN_FEATURES.pro, 'learn.sculpture', 'export.lesson_pack'] },
 };
 
 /** Publish as an admin does here: a draft, then publish it. */
@@ -116,7 +117,7 @@ describe('rolling back after a newer release published new feature ids and secti
     // Going back to this release runs its migration.
     const report = await migrate(db);
     expect(report.catalog).toEqual({ version: newer, status: 'ok', notes: expect.any(Array) });
-    expect(report.catalog.notes.join(' ')).toContain('learn.curriculum');
+    expect(report.catalog.notes.join(' ')).toContain('learn.sculpture');
     expect(report.configSeeded).toBe(0);
 
     // `plans` holds exactly what it held before the newer release; accounts get the owner's plans.
@@ -134,7 +135,7 @@ describe('rolling back after a newer release published new feature ids and secti
     const db = await freshDb();
     await publish(db, OWNER);
     await publishAsAnotherRelease(db, NEWER(), NEWER_PLANS);
-    expect((await plansDocs(db)).find((p) => p._id === 'free')!.features).toContain('learn.curriculum');
+    expect((await plansDocs(db)).find((p) => p._id === 'free')!.features).toContain('learn.sculpture');
     await expectOwnerPlans(db);
     const free = await account(db, 'free');
     expect((await getEntitlements(db, free)).limits).toEqual({});
@@ -145,9 +146,9 @@ describe('rolling back after a newer release published new feature ids and secti
     expect(read.status).toBe('ok');
     if (read.status === 'unreadable') return;
     expect(read.catalog).toEqual(OWNER);
-    expect(read.unknown).toEqual({ features: ['export.lesson_pack', 'learn.color', 'learn.curriculum'], sections: ['learnPreviews', 'plans.free.learn', 'plans.pro.learn'] });
+    expect(read.unknown).toEqual({ features: ['export.lesson_pack', 'learn.history', 'learn.sculpture'], sections: ['learnPreviews', 'plans.free.learn', 'plans.pro.learn'] });
     expect(catalogReadNotes(read)).toEqual([
-      'Feature ids this version of the app does not know: export.lesson_pack, learn.color, learn.curriculum.',
+      'Feature ids this version of the app does not know: export.lesson_pack, learn.history, learn.sculpture.',
       'Settings this version of the app does not know: learnPreviews, plans.free.learn, plans.pro.learn.',
     ]);
   });
@@ -170,7 +171,7 @@ describe('what a newer release added survives editing, publishing and restoring 
 
     const expected = NEWER();
     // Kept in place; the new one added at the end.
-    expected.plans.free.features = ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.curriculum', 'export.lesson_pack', 'tool.compare'];
+    expected.plans.free.features = ['tool.study', 'tool.color', 'tool.grid', 'export.image', 'learn.sculpture', 'export.lesson_pack', 'tool.compare'];
     expect((await getPublished(db, catalogSpec))!.document).toEqual(expected);
     const free = await account(db, 'free');
     expect((await getEntitlements(db, free)).features).toEqual(['tool.study', 'tool.color', 'tool.grid', 'tool.compare', 'export.image']);
@@ -201,7 +202,7 @@ describe('what a newer release added survives editing, publishing and restoring 
     temporary.disabled = ['tool.grid'];
     const published = await publishIfUnchanged(db, catalogSpec, mergeKnown(read.stored, temporary), { version: live.version }, 'cli', 'temporary');
     expect(published).toMatchObject({ status: 'published' });
-    expect((await getPublished(db, catalogSpec))!.document).toEqual({ ...NEWER(), disabled: ['learn.color', 'tool.grid'] });
+    expect((await getPublished(db, catalogSpec))!.document).toEqual({ ...NEWER(), disabled: ['learn.history', 'tool.grid'] });
     expect((await getPlanOffer(db)).free).not.toContain('tool.grid');
     if (published.status !== 'published') return;
     expect(await publishIfUnchanged(db, catalogSpec, read.stored, { version: published.version }, 'cli', 'restore')).toMatchObject({ status: 'published' });
@@ -213,9 +214,11 @@ describe('what a newer release added survives editing, publishing and restoring 
     const db = await freshDb();
     await publish(db, OWNER);
     const withUnknownId = structuredClone(OWNER) as unknown as { plans: { free: { features: string[] } } };
-    withUnknownId.plans.free.features.push('learn.curriculum');
+    withUnknownId.plans.free.features.push('learn.sculpture');
     expect(await saveCatalogEdit(db, withUnknownId, 'admin:owner')).toMatchObject({ status: 'invalid' });
-    expect(await saveCatalogEdit(db, { ...structuredClone(OWNER), learn: { anything: true } }, 'admin:owner')).toMatchObject({ status: 'saved' });
+    expect(await saveCatalogEdit(db, { ...structuredClone(OWNER), extras: { anything: true } }, 'admin:owner')).toMatchObject({ status: 'saved' });
+    // The Learn section is this release's own (ADR-0017): anything it does not define is refused, not dropped.
+    expect(await saveCatalogEdit(db, { ...structuredClone(OWNER), learn: { anything: true } }, 'admin:owner')).toMatchObject({ status: 'invalid' });
     expect((await collections(db).configVersions.findOne({ kind: 'catalog', status: 'draft' }))!.document).toEqual(OWNER);
   });
 });
@@ -319,12 +322,12 @@ describe('a setting this release knows but cannot apply withholds that feature (
 describe('`plans` documents never grant more than they say', () => {
   it('ignores ids this release does not know; a cap it cannot read allows nothing; a plan it cannot read includes nothing', () => {
     expect(
-      planStateOf({ _id: 'free', active: true, features: ['tool.study', 'learn.curriculum', 'tool.study'], limits: { 'export.image': 'lots', 'learn.x': 5 }, dailyLimits: { 'export.gif': -1, 'export.gif_large': 2.5 } }),
-    ).toEqual({ active: true, features: ['tool.study'], limits: { 'export.image': 0 }, dailyLimits: { 'export.gif': 0, 'export.gif_large': 0 } });
-    expect(planStateOf({ _id: 'pro', active: true, features: 'all' })).toEqual({ active: false, features: [], limits: {}, dailyLimits: {} });
+      planStateOf({ _id: 'free', active: true, features: ['tool.study', 'learn.sculpture', 'tool.study'], limits: { 'export.image': 'lots', 'learn.x': 5 }, dailyLimits: { 'export.gif': -1, 'export.gif_large': 2.5 } }),
+    ).toEqual({ active: true, features: ['tool.study'], limits: { 'export.image': 0 }, dailyLimits: { 'export.gif': 0, 'export.gif_large': 0 }, learn: NO_LEARN_ACCESS() });
+    expect(planStateOf({ _id: 'pro', active: true, features: 'all' })).toEqual({ active: false, features: [], limits: {}, dailyLimits: {}, learn: NO_LEARN_ACCESS() });
     expect(planStateOf({ _id: 'pro', active: true, features: ['tool.measure'], limits: [1, 2] }).active).toBe(false);
     expect(planStateOf({ _id: 'pro', active: 'yes', features: ['tool.measure'] }).active).toBe(false);
-    expect(planStateOf({ _id: 'pro', active: true, features: ['tool.measure'] })).toEqual({ active: true, features: ['tool.measure'], limits: {}, dailyLimits: {} });
+    expect(planStateOf({ _id: 'pro', active: true, features: ['tool.measure'] })).toEqual({ active: true, features: ['tool.measure'], limits: {}, dailyLimits: {}, learn: NO_LEARN_ACCESS() });
   });
 
   it('end to end: a corrupted Pro plan falls back to Free, a corrupted cap allows no use', async () => {
@@ -457,8 +460,11 @@ describe('compatibility with the releases before this one (be6890c and earlier)'
       const docs = await plansDocs(db);
       for (const planId of PLAN_IDS) {
         const doc = docs.find((p) => p._id === planId)!;
-        const wanted = planDocsFor(input)[planId];
+        const { learn, ...wanted } = planDocsFor(input)[planId];
         expect({ name: doc.name, active: doc.active, features: doc.features, limits: doc.limits, dailyLimits: doc.dailyLimits }).toEqual(wanted);
+        // No Learn access in these catalogs: the documents carry none, exactly as those releases wrote them.
+        expect(learn).toEqual(NO_LEARN_ACCESS());
+        expect(doc).not.toHaveProperty('learn');
         // be6890c's syncPlans: features in the canonical order minus switched-off ones; monthly caps in `limits`, daily in `dailyLimits`.
         expect(doc.features).toEqual(BE6890C_FEATURES.filter((f) => input.plans[planId].features.includes(f) && !input.disabled.includes(f)));
       }

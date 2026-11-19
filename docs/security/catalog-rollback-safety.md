@@ -106,6 +106,12 @@ No data change and no visible change for anyone.
   `export.worksheets` (M3, ADR-0016). Both ship unpublished, in no plan. The
   floor applies from the first published catalog that uses either: from then
   on, never roll back below `224bb65`.
+- **M4 (ADR-0017)** adds three more (`learn.curriculum`, `learn.color`,
+  `learn.challenges`) and the first new catalog section, `learn`. A
+  catalog without it opens nothing, so it is not migrated in. Releases from
+  `224bb65` to M3 keep the section and the IDs without applying them, and
+  have no Learn routes: rolling back to one closes Learn. The same floor
+  applies from the first published catalog that uses any of them.
 
 ## Decision
 

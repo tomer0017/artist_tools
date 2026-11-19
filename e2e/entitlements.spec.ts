@@ -47,9 +47,12 @@ const STAGING: Record<string, { Free: boolean; Pro: boolean }> = {
   GIFs: { Free: false, Pro: true },
   'Large GIFs': { Free: false, Pro: true },
   'Compare + Difference GIFs': { Free: false, Pro: true },
-  // Since M2 and M3; in no plan until the owner publishes them.
+  // Since M2, M3 and M4; in no plan until the owner publishes them.
   'Grid PDFs (A4)': { Free: false, Pro: false },
   Worksheets: { Free: false, Pro: false },
+  'Drawing curriculum': { Free: false, Pro: false },
+  'Color module': { Free: false, Pro: false },
+  Challenges: { Free: false, Pro: false },
 };
 
 let visitors = 0;
@@ -93,7 +96,7 @@ async function upload(page: Page, buttonName: string | RegExp) {
 }
 
 /** What the server answers for an export or another protected operation of a tool (as the studio asks it). */
-async function authorize(page: Page, body: { tool?: string; features?: string[] }) {
+async function authorize(page: Page, body: { tool?: string; features?: string[]; learnItem?: string }) {
   const response = await page.request.post('/api/usage', { data: body });
   const answer = (await response.json()) as { features?: string[] };
   return { status: response.status(), refused: answer.features ?? [] };
@@ -559,4 +562,99 @@ test('mobile: on a phone the locked screen fits, the bottom bar marks locked too
   await pro.page.goto(TOOLS.measure.path);
   await expectOpen(pro.page, TOOLS.measure);
   await pro.context.close();
+});
+
+/**
+ * Learn (ADR-0017), through Admin → Plans as the owner would: give Free the
+ * Challenges module with a Selected list made by First 1, or take both back
+ * (module off, rule None), and publish. A draft this leaves behind when a
+ * step fails is discarded, so the catalog is never left with a draft open.
+ */
+async function publishLearn(page: Page, open: boolean) {
+  await page.goto('/admin/plans');
+  await expect(page.getByRole('heading', { name: 'Plans and features' })).toBeVisible();
+  await page.getByRole('button', { name: 'Start a draft' }).click();
+  await expect(page.getByRole('button', { name: 'Save draft' })).toBeVisible();
+  try {
+    const row = page.getByRole('listitem').filter({ has: page.getByText('Challenges', { exact: true }) });
+    await row.getByLabel('Free', { exact: true }).setChecked(open);
+    const section = page.getByRole('region', { name: 'Learn access' });
+    const group = section.getByRole('group', { name: 'Free · Challenges', exact: true });
+    if (open) {
+      await section.getByLabel('Free · Challenges: rule').selectOption('selected');
+      await group.getByRole('button', { name: 'Use the first 1' }).click();
+      await expect(group).toContainText('Opens CH-901 — First 1, content version 1');
+      await expect(section.getByRole('group', { name: 'Effective access' })).toContainText('Free will open: CH-901');
+    } else {
+      await section.getByLabel('Free · Challenges: rule').selectOption('none');
+      await expect(section.getByRole('group', { name: 'Effective access' })).toContainText('Free will open: nothing');
+    }
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'saved. Nothing changes until you publish it.' })).toBeVisible();
+    const changes = page.getByRole('list', { name: 'Changes in this draft' });
+    if (open) {
+      await expect(changes).toContainText('Free: adds Challenges');
+      await expect(changes).toContainText('Free · Challenges: None → First 1 (CH-901)');
+      await expect(changes).toContainText('Free: gains CH-901');
+    } else {
+      await expect(changes).toContainText('Free: removes Challenges');
+      await expect(changes).toContainText('Free · Challenges: First 1 (CH-901) → None');
+    }
+    await page.getByRole('button', { name: /^Publish version \d+$/ }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Publish' }).click();
+    await expect(page.getByRole('status').filter({ hasText: /^Version \d+ is live\.$/ })).toBeVisible();
+  } catch (error) {
+    const discard = page.getByRole('button', { name: 'Discard draft' });
+    if (await discard.isVisible()) await discard.click();
+    throw error;
+  }
+}
+
+test('Learn: a module and a First N list published in Admin → Plans open exactly that item for Free, at once, and taking them back locks it at once', async ({ browser }) => {
+  // Three sign-ins and two publications through the dashboard.
+  test.setTimeout(120_000);
+  const admin = await adminPage(browser);
+  const free = await signedIn(browser, 'ENT_Free');
+  const pro = await signedIn(browser, 'ENT_Pro');
+  const item = async (page: Page, id: string) => {
+    const response = await page.request.get(`/api/learn/items/${id}`);
+    return { status: response.status(), body: await response.json() };
+  };
+  const { item: wing } = (await item(admin.page, 'CH-901')).body;
+  const image = wing.references[0].assetId as string;
+  // Dark launch: nothing for Free or Pro.
+  expect(await item(free.page, 'CH-901')).toEqual({ status: 403, body: { error: 'locked', reason: 'module_off', feature: 'learn.challenges' } });
+  expect((await free.page.request.get(`/api/learn/assets/${image}`)).status()).toBe(403);
+
+  catalogChanged = true;
+  let learnPublished = false;
+  try {
+    await publishLearn(admin.page, true);
+    learnPublished = true;
+    // The same sessions, at once: Free opens CH-901 and its picture, nothing else.
+    const opened = await item(free.page, 'CH-901');
+    expect(opened.status).toBe(200);
+    expect(opened.body.item.prompt.en).toBe('Secret prompt CH-901');
+    expect(await item(free.page, 'CH-902')).toEqual({ status: 403, body: { error: 'locked', reason: 'not_in_plan', feature: 'learn.challenges' } });
+    expect((await item(free.page, 'CH-903')).status).toBe(404);
+    expect((await item(free.page, 'D-TEST-01')).body).toMatchObject({ reason: 'module_off' });
+    const list = await (await free.page.request.get('/api/learn/items?collection=challenges')).json();
+    expect(list.items.map((r: { id: string; open: boolean; lock: string | null }) => `${r.id}:${r.open}:${r.lock}`)).toEqual(['CH-901:true:null', 'CH-902:false:not_in_plan']);
+    expect(JSON.stringify(list)).not.toContain('Secret');
+    // Locked items show titles only (previews: the title).
+    expect(list.items[1].thumbnailAssetId).toBeNull();
+    expect((await free.page.request.get(`/api/learn/assets/${image}`)).status()).toBe(200);
+    expect((await authorize(free.page, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-901' })).status).toBe(200);
+    expect(await authorize(free.page, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-902' })).toEqual({ status: 403, refused: [] });
+    // Pro has no Challenges module: its items are listed locked (Free's plan offers the module), none opens.
+    expect(await item(pro.page, 'CH-901')).toMatchObject({ status: 403, body: { reason: 'module_off' } });
+    const proList = await (await pro.page.request.get('/api/learn/items?collection=challenges')).json();
+    expect(proList.items.map((r: { id: string; lock: string | null }) => `${r.id}:${r.lock}`)).toEqual(['CH-901:module_off', 'CH-902:module_off']);
+  } finally {
+    if (learnPublished) await publishLearn(admin.page, false);
+  }
+  // Taken back: refused at once, also the picture's address that worked a moment ago.
+  expect(await item(free.page, 'CH-901')).toMatchObject({ status: 403, body: { reason: 'module_off' } });
+  expect((await free.page.request.get(`/api/learn/assets/${image}`)).status()).toBe(403);
+  for (const v of [admin, free, pro]) await v.context.close();
 });

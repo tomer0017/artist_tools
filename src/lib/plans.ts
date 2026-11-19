@@ -9,8 +9,9 @@ import type { ToolId } from './account';
 //
 // By default Free keeps all five tools and every existing save; Pro adds the
 // two heavier GIF options. Admins get every feature, whatever their plan.
-// Features added later (the grid PDF, worksheets) are in no default plan: they
-// reach Free or Pro only when an admin publishes them (dark launch, ADR-0006).
+// Features added later (the grid PDF, worksheets, Learn) are in no default
+// plan: they reach Free or Pro only when an admin publishes them (dark
+// launch, ADR-0006).
 
 export const FEATURES = [
   'tool.measure',
@@ -26,6 +27,11 @@ export const FEATURES = [
   'export.pdf',
   // Since M3 (2026-11): Prepare Worksheets, aligned practice sheets (PNG) from one photo.
   'export.worksheets',
+  // Since M4 (2026-11): the Learn modules (ADR-0017). Each opens its items as
+  // the catalog's Learn access rules say; on or off per plan, never counted.
+  'learn.curriculum',
+  'learn.color',
+  'learn.challenges',
 ] as const;
 export type FeatureId = (typeof FEATURES)[number];
 
@@ -38,7 +44,7 @@ export const PLAN_NAMES: Record<PlanId, string> = { free: 'Free', pro: 'Pro' };
 export const PRO_FEATURES: readonly FeatureId[] = ['export.gif_large', 'export.gif_difference'];
 
 /** Capabilities in no plan until an admin publishes a catalog that includes them (admins have them already). */
-export const UNPUBLISHED_FEATURES: readonly FeatureId[] = ['export.pdf', 'export.worksheets'];
+export const UNPUBLISHED_FEATURES: readonly FeatureId[] = ['export.pdf', 'export.worksheets', 'learn.curriculum', 'learn.color', 'learn.challenges'];
 
 export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
   free: FEATURES.filter((feature) => !PRO_FEATURES.includes(feature) && !UNPUBLISHED_FEATURES.includes(feature)),
@@ -78,6 +84,9 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   'export.gif_difference': 'Compare + Difference GIFs',
   'export.pdf': 'Grid PDFs (A4)',
   'export.worksheets': 'Worksheets',
+  'learn.curriculum': 'Drawing curriculum',
+  'learn.color': 'Color module',
+  'learn.challenges': 'Challenges',
 };
 
 /** The feature each tool needs (the studio's tool ids → catalog features). */
@@ -98,6 +107,15 @@ export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_lar
 export type ExportFeatureId = (typeof EXPORT_FEATURE_IDS)[number];
 
 export const isToolFeature = (feature: FeatureId): feature is ToolFeatureId => (TOOL_FEATURE_IDS as readonly FeatureId[]).includes(feature);
+
+/** The Learn modules (ADR-0017): on or off per plan, like tools; which items they open is the catalog's Learn access. */
+export const LEARN_FEATURE_IDS = ['learn.curriculum', 'learn.color', 'learn.challenges'] as const satisfies readonly FeatureId[];
+export type LearnFeatureId = (typeof LEARN_FEATURE_IDS)[number];
+
+export const isLearnFeature = (feature: FeatureId): feature is LearnFeatureId => (LEARN_FEATURE_IDS as readonly FeatureId[]).includes(feature);
+
+/** Whether a feature can have a quota: only what is saved or exported, which the server counts. Tools and Learn modules are on or off. */
+export const hasQuota = (feature: FeatureId): feature is ExportFeatureId => (EXPORT_FEATURE_IDS as readonly FeatureId[]).includes(feature);
 
 /** What each plan includes as published (the `plans` collection); empty for a plan that is switched off. */
 export type PlanOffer = Record<PlanId, FeatureId[]>;

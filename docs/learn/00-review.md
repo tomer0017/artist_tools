@@ -4,6 +4,10 @@
 Revised on 2026-11-18 after the owner's first review. This page is the short
 version for approval; the details are in documents 01–07.
 
+> **Since then (2026-11-19):** M1–M3 are approved, and M4 (the Learn server
+> foundations, dark-launched, ADR-0017) is built and on staging with test
+> content. Status per milestone: 07.
+
 ## 1. Answers to the first review
 
 | # | Request | Answer |

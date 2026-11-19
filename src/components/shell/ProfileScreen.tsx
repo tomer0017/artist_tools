@@ -57,6 +57,12 @@ function useFeatureLabel() {
         return t('account.features.exportPdf');
       case 'export.worksheets':
         return t('account.features.exportWorksheets');
+      case 'learn.curriculum':
+        return t('account.features.learnCurriculum');
+      case 'learn.color':
+        return t('account.features.learnColor');
+      case 'learn.challenges':
+        return t('account.features.learnChallenges');
     }
   };
 }
