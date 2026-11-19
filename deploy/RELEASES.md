@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-19 02:37:27 | `324e136` | **Learn foundations, Learn milestone M4** (approved by the owner; dark launch, ADR-0017). Versioned Learn content (`learn_content`: draft, publish, history, restore), private reference images named by their SHA-256 in `LEARN_ASSETS_DIR` and checked by their bytes (no embedded metadata), and per-item access in Admin → Plans (All / None / Selected per plan and collection, frozen when published), decided by one resolver on every request; new Admin → Learn; `/api/learn/items`, `/api/learn/assets` and `learnItem` in `/api/usage`. New feature IDs `learn.curriculum`, `learn.color`, `learn.challenges`, **in no plan**; catalog v6 has no Learn section, so **Free and Pro open nothing**. **Server setup before the release:** `deploy/install-learn-assets.sh staging` (asset directory, `LEARN_ASSETS_DIR` in the env file, nightly asset backup at 02:50). **After the release:** the test content (3 exercises, 3 challenges; 4 CC0 references) imported and published as content version 1. Published plan settings unchanged | 46 indexes ensured (2 new, `learn_assets`); no plan changed (0 plans updated; "Catalog version 6: applied"). Then content version 1 and 8 asset records (by `learn-import` / `learn-publish`) | yes (release step, 02:37:21, `mongodb-20261119T023721Z`), and before the import (`mongodb-20261119T024027Z`) |
 | 2026-11-18 21:04:47 | `8576f66` | **Prepare Worksheets, Learn milestone M3** (approved by the owner; includes `ab2f5aa`). From Create a Grid and Study & Simplify: the original, a clean outline, the reference with its grid, an optional blank grid and a values study, saved as **PNG images** that line up (the owner's choice over the planned PDF). Built from the existing tools: Create a Grid's own images, Study's Clean Outline and its Values algorithm (moved to `src/lib/values` unchanged, ADR-0016). New feature ID `export.worksheets` ("Worksheets"), **in no plan: only admins can make worksheets until the owner publishes it**. Create a Grid's "Save PDF (A4)" button is hidden (code and `export.pdf` kept). **Fixed (`ab2f5aa`):** Study & Simplify's study, palette and study sheet saves did nothing under the site's CSP since 2026-11-11. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 21:04:41, `mongodb-20261118T210441Z`) |
 | 2026-11-18 18:47:37 | `d261013` | **Create a Grid's A4 PDF, Learn milestone M2** (approved by the owner). A two-page A4 PDF: the reference with its grid, then the same grid blank, for paper. Both pages have one frame, the same vector lines and a 50 mm bar; true size when the canvas fits, otherwise reduced and stated. jsPDF 4.2.1 is loaded only after the server authorizes a PDF (ADR-0015). New feature ID `export.pdf` ("Grid PDFs (A4)"), **in no plan: only admins can make PDFs until the owner publishes it**. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 18:47:32, `mongodb-20261118T184732Z`) |
 | 2026-11-18 17:24:48 | `6f2159a` | **Create a Grid improvements, Learn milestone M1** (approved by the owner; includes `f2f7b91`). Rotation left or right 90° or by 180°: only the drawing turns, never the stored photo. Exact A4 portrait and landscape. Square cells of a set size. **Save blank grid** (the same lines on white, for paper), through the same authorized save. Exact zoom and moves beside drag, pinch and wheel. The geometry is shared in `src/lib/grid`. Grids saved before M1 open and save byte for byte as before. No Learn screens, content, migrations or feature IDs. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 17:24:43, `mongodb-20261118T172443Z`) |
@@ -47,6 +48,97 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Learn foundations (Learn M4) on staging, `324e136` (2026-11-19, 02:34–03:10Z)
+
+Approved by the owner as M4 only (no Learn screens, no content editor, no
+production). No Free/Pro plan setting was published or changed. The only
+publication is Learn content version 1, the test content, which the owner
+allowed on staging; with no Learn module in any plan, it is visible to
+admins only. Production and GitHub Pages are untouched.
+
+- **Before:**
+  - CI run 39 (`324e136`) green: type check, lint, 522 unit and integration
+    tests, and 247 e2e tests (9 skipped on purpose: the hidden PDF button's
+    interface tests).
+  - Capture: catalog version 6 `f8a1a43e4cedbed7`, `plans`
+    `48f75a1f7925d6c5` (both plans updated 2026-11-18 12:53:43Z, no Learn
+    field), no draft. Staging ran `8576f66`.
+- **Server setup** (02:34:30, `deploy/install-learn-assets.sh staging`):
+  - `/var/lib/studio-companion/staging/learn-assets` (studio-staging, 0750);
+  - `/var/backups/learn-assets/staging` (root, 0700);
+  - `LEARN_ASSETS_DIR` added to the env file (the previous file is kept as
+    `/root/backups/staging.env.20261119T023430Z`);
+  - `/usr/local/sbin/studio-learn-assets-backup` with
+    `/etc/cron.d/studio-learn-assets-backup-staging` (02:50, 0644), and
+    `/usr/local/sbin/studio-restore-drill`.
+- **The release** (02:35:09–02:37:27):
+  - the dump `mongodb-20261119T023721Z`;
+  - 46 indexes ensured, "0 plans updated", then "Catalog version 6: applied";
+  - healthy at 02:37:27.
+- **After the release, before any content:**
+  - the capture identical;
+  - `catalog-status` ok and both plans in step;
+  - `learn-status` empty, with the asset directory found;
+  - smoke 25/25 (22 as before, plus three Learn checks: signed out 401,
+    private caching);
+  - `login-test` 13/13, `entitlement-test` 20/20.
+- **The test content** (the folder is kept outside the repository; copied
+  to the server only for the import, then deleted there):
+  - the dump `mongodb-20261119T024027Z`;
+  - `learn-import`: 4 references and 4 thumbnails stored, draft version 1;
+  - `learn-publish`: content version 1 live at 02:41Z (actor `cli`, content
+    `2ee2b7fb9fa13516`), the same content as the import checked locally;
+  - `learn-status` exit 0: D-START-01, D-SHAPE-01, D-LINE-04; CH-002,
+    CH-012, CH-017. Files: 8 of 8 with exactly their recorded bytes (0640,
+    the site user's). Each licence is CC0 from The Cleveland Museum of Art.
+    Free and Pro open nothing.
+- **After the content:**
+  - the capture identical: the catalog (content, publication time, history)
+    and `plans` with their update times;
+  - `entitlement-test` 20/20. As Free and as Pro, each of the 6 items is
+    refused (403 `module_off`), and so are each of the 8 images and an
+    export from an item. Lists are empty, signed-out requests get 401, and
+    the dark launch holds (nothing opened, nothing served).
+- **Backup and restore of the content and the images:**
+  - the dump `mongodb-20261119T024224Z`;
+  - `studio-learn-assets-backup staging`: 8 copied, 0 problems. A second
+    run copied none and checked all 8 (incremental);
+  - the restore drill (`--assets`), in 7 s:
+    - all 26 collections restored with the live counts, `learn_assets` 8
+      included (RESULT: OK), and the unique indexes back;
+    - content version 1 restored (6 items, 4 assets used), and all 8 files
+      restored with exactly their bytes (LEARN: OK);
+    - no throwaway database left.
+- **M4 in real browsers** (temporary Free, Pro and Hebrew accounts; removed;
+  passwords only in a 0600 file, deleted): 3/3 passed.
+  - **Free, Pro, Free in Hebrew (Desktop Chrome):**
+    - the lists are empty;
+    - the 6 items answer 403 and 3 unknown ones 404;
+    - the 8 images answer 403, and an export from CH-017 is refused;
+    - Admin → Learn and Admin → Plans answer 404;
+    - the studio's pages carry no Learn text.
+  - **Signed out:** 401 everywhere, and Admin → Learn leads to sign-in.
+  - **WebKit with iPhone 13 emulation:** the same refusals.
+  - **Not verified on staging:** an admin's view (Admin → Learn, the Plans
+    editor's Learn section, the items and images). No temporary admin
+    exists, by design (ADR-0012); that is the owner's check.
+- **Regressions on the same build:**
+  - the plan-enforcement checks 6/6 (the publishing test skipped). One
+    Hebrew sign-in first met the per-network sign-in limit after many
+    sign-ins in a minute, and passed when run again a minute later;
+  - the M1 checks 8/8, the M3 checks 6/6.
+- **Locally:** 522 unit and integration tests, 247 e2e tests (9 skipped), in
+  Chromium and WebKit iPhone emulation, including a publication through
+  Admin → Plans that opens exactly one item for Free at once and takes it
+  back.
+- **Rollback:**
+  - `8576f66` is still in releases/. `be6890c` was pruned (the five newest
+    are kept).
+  - A rollback leaves the Learn content, the images and the env line as they
+    are; releases before M4 ignore them and have no Learn routes.
+  - Once the owner publishes any Learn feature or rule (or `export.pdf` /
+    `export.worksheets`), never roll back below `224bb65` (ADR-0014).
 
 ## Prepare Worksheets (Learn M3) on staging, `8576f66` (2026-11-18, 21:02–21:16Z)
 
