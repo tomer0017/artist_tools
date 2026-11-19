@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-19 10:46:48 | `ab42467` | **Learn screens, Learn milestone M5** (approved by the owner; dark launch, ADR-0018). A studio view at `/app/learn/...`: the Learn home (Start/Continue, Random, Quick, class mode), the drawing course, the challenges (filters remembered on the device), exercise and challenge cards (the reference full screen with zoom, More help, tool shortcuts that hand the reference to Measure, Study, Grid and Compare, Prepare worksheets / Use my photo, Mark as completed with Undo, Another one), My history and the locked page; "Learn to draw" on Home and Learn in the desktop top bar for accounts Learn is shown to (admins only today). New history API `/api/learn/completions` (own entries only; in the data download, removed with the account); class mode per tab never touches it. Published plan settings unchanged | 48 indexes ensured (2 new, `learn_completions`); no plan changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 10:46:43, `mongodb-20261119T104643Z`) |
 | 2026-11-19 02:37:27 | `324e136` | **Learn foundations, Learn milestone M4** (approved by the owner; dark launch, ADR-0017). Versioned Learn content (`learn_content`: draft, publish, history, restore), private reference images named by their SHA-256 in `LEARN_ASSETS_DIR` and checked by their bytes (no embedded metadata), and per-item access in Admin → Plans (All / None / Selected per plan and collection, frozen when published), decided by one resolver on every request; new Admin → Learn; `/api/learn/items`, `/api/learn/assets` and `learnItem` in `/api/usage`. New feature IDs `learn.curriculum`, `learn.color`, `learn.challenges`, **in no plan**; catalog v6 has no Learn section, so **Free and Pro open nothing**. **Server setup before the release:** `deploy/install-learn-assets.sh staging` (asset directory, `LEARN_ASSETS_DIR` in the env file, nightly asset backup at 02:50). **After the release:** the test content (3 exercises, 3 challenges; 4 CC0 references) imported and published as content version 1. Published plan settings unchanged | 46 indexes ensured (2 new, `learn_assets`); no plan changed (0 plans updated; "Catalog version 6: applied"). Then content version 1 and 8 asset records (by `learn-import` / `learn-publish`) | yes (release step, 02:37:21, `mongodb-20261119T023721Z`), and before the import (`mongodb-20261119T024027Z`) |
 | 2026-11-18 21:04:47 | `8576f66` | **Prepare Worksheets, Learn milestone M3** (approved by the owner; includes `ab2f5aa`). From Create a Grid and Study & Simplify: the original, a clean outline, the reference with its grid, an optional blank grid and a values study, saved as **PNG images** that line up (the owner's choice over the planned PDF). Built from the existing tools: Create a Grid's own images, Study's Clean Outline and its Values algorithm (moved to `src/lib/values` unchanged, ADR-0016). New feature ID `export.worksheets` ("Worksheets"), **in no plan: only admins can make worksheets until the owner publishes it**. Create a Grid's "Save PDF (A4)" button is hidden (code and `export.pdf` kept). **Fixed (`ab2f5aa`):** Study & Simplify's study, palette and study sheet saves did nothing under the site's CSP since 2026-11-11. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 21:04:41, `mongodb-20261118T210441Z`) |
 | 2026-11-18 18:47:37 | `d261013` | **Create a Grid's A4 PDF, Learn milestone M2** (approved by the owner). A two-page A4 PDF: the reference with its grid, then the same grid blank, for paper. Both pages have one frame, the same vector lines and a 50 mm bar; true size when the canvas fits, otherwise reduced and stated. jsPDF 4.2.1 is loaded only after the server authorizes a PDF (ADR-0015). New feature ID `export.pdf` ("Grid PDFs (A4)"), **in no plan: only admins can make PDFs until the owner publishes it**. Settings and published plans unchanged | 44 indexes ensured; no data changed (0 plans updated; "Catalog version 6: applied") | yes (release step, 18:47:32, `mongodb-20261118T184732Z`) |
@@ -48,6 +49,89 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Learn screens (Learn M5) on staging, `ab42467` (2026-11-19, 09:21–11:00Z)
+
+Approved by the owner "according to the revised Learn plan", subject to Admin
+→ Learn showing the six test items on staging. Before release, the owner
+chose to release now and check both together (Admin → Learn and the new
+screens are theirs to check, with their admin account). No Free/Pro plan
+setting was published or changed, and no content was published: Learn
+content stays version 1. Production and GitHub Pages are untouched.
+
+- **Before:**
+  - CI run 41 (`ab42467`) green: type check, lint, 552 unit and integration
+    tests, and 260 e2e tests (9 skipped on purpose: the hidden PDF button's
+    interface tests).
+  - Read-only checks on staging (`324e136`):
+    - `learn-status`: content version 1 `2ee2b7fb9fa13516`, no draft,
+      files 8 of 8;
+    - the capture: catalog version 6 `f8a1a43e4cedbed7`, `plans`
+      `48f75a1f7925d6c5`, no draft.
+  - Admin → Learn locally, with the private seed (the same content) on the
+    same release: 36/36 checks, desktop and iPhone WebKit. All six items,
+    the four CC0 images with their thumbnails, and "nothing" for Free and
+    Pro.
+- **The release** (10:44:13–10:46:48):
+  - the dump `mongodb-20261119T104643Z`;
+  - 48 indexes ensured (2 new, `learn_completions`), "0 plans updated",
+    "Catalog version 6: applied";
+  - healthy at 10:46:48 (`/api/health`: `ab42467`).
+- **After the release:**
+  - smoke 27/27 (25 as before, plus `/app/learn` leading signed-out
+    visitors to sign-in and the history API answering 401, private);
+  - `login-test` 13/13;
+  - `entitlement-test` 24/24. As Free and as Pro:
+    - the 6 items, the 8 images and exports from items are refused as
+      published;
+    - "Mark as completed" is accepted for no item (0), and the history holds
+      0;
+    - `/app/learn` answers 307 → `/app`;
+    - signed out, the history answers 401;
+    - its temporary accounts are removed.
+  - `learn-status` identical to before;
+  - the capture identical: the catalog (content, publication time, history)
+    and `plans` with their update times; no draft.
+- **M5 in real browsers** (temporary Free, Pro and Hebrew accounts; removed;
+  passwords only in a 0600 file, deleted, as were the sign-in states):
+  3/3 passed.
+  - **Free, Pro, Free in Hebrew (Desktop Chrome):**
+    - no Learn on Home and no Learn in the top bar;
+    - every Learn address (`/app/learn`, the course, the challenges, a card,
+      the history) leads to `/app`, with no Learn content in any page;
+    - "Mark as completed" is refused (403 `module_off`) for each of the 6
+      items, and the history is empty and private;
+    - the M4 refusals still hold: lists, items, images, exports, admin
+      pages.
+  - **Signed out:** the history API answers 401, and a card's address leads
+    to sign-in.
+  - **WebKit with iPhone 13 emulation:** the same, and the bottom bar keeps
+    its six items.
+  - **Not verified on staging:** an admin's view, that is Admin → Learn and
+    the Learn screens with the six test items. No temporary admin exists, by
+    design (ADR-0012); the owner checks both.
+- **Regressions on the same build:**
+  - the M1 checks 8/8, the M3 checks 6/6;
+  - the plan-enforcement checks 6/6 (the publishing test skipped).
+- **Locally:**
+  - 552 unit and integration tests;
+  - 260 e2e tests (9 skipped), in Chromium and WebKit iPhone emulation.
+    They cover every Learn screen in English and Hebrew with axe, tool
+    shortcuts, worksheets from a card, the history, five students in a row
+    in class mode with no history requests, and a plan publication: what
+    Free and Pro see, and an open card locking within a minute.
+  - An independent security review of the changes found nothing critical,
+    high or medium. Its low findings were fixed before the commit:
+    - history titles follow the lists' rule;
+    - at most 10,000 completions per account;
+    - an open item sends its known fields only.
+- **Rollback:**
+  - `324e136` (M4) is in releases/. `224bb65` was pruned (the five newest
+    are kept); it can be rebuilt with `studio-release staging 224bb65`.
+  - Rolling back to `324e136` removes the screens and leaves
+    `learn_completions` in place, unused (empty on staging).
+  - Once the owner publishes any Learn feature or rule (or `export.pdf` /
+    `export.worksheets`), never roll back below `224bb65` (ADR-0014).
 
 ## Learn foundations (Learn M4) on staging, `324e136` (2026-11-19, 02:34–03:10Z)
 
