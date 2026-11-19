@@ -4,6 +4,7 @@ import { Download, Loader2, Share2, X } from 'lucide-react';
 import type { GridSettings } from '@/types/project';
 import type { SketchControls } from '@/lib/sketch/styles';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { fromLearn } from '@/lib/learn/source';
 import { canShareFiles, downloadBlob, isIOS, isTouchDevice, makeShareFile, shareFiles } from '@/lib/saveMedia';
 import {
   CHOICES_KEY,
@@ -34,6 +35,12 @@ interface Props {
   fitted?: boolean;
   /** Clean Outline's controls, as set in Study & Simplify. */
   outline: SketchControls;
+  /** The Learn item whose reference this is (ADR-0018): the sheets are made only while it is open to the account. */
+  learnItem?: string | null;
+  /** The sheet's first line, when the picture is not the person's photo (a Learn reference). */
+  lead?: string;
+  /** Class mode's "Next student" (ADR-0018): after the sheets are made, back to the library for the next one. */
+  onNext?: () => void;
   onClose: () => void;
 }
 
@@ -50,7 +57,7 @@ type Made = { sheet: WorksheetSheet; thumbnail: string };
 /** Between the downloads of Save all (see saveAll). */
 const DOWNLOAD_SPACING_MS = 400;
 
-export default function PrepareWorksheets({ from, image, settings, fitted = false, outline, onClose }: Props) {
+export default function PrepareWorksheets({ from, image, settings, fitted = false, outline, learnItem = null, lead, onNext, onClose }: Props) {
   const t = useTranslations('worksheets');
   const { authorize } = useSaveMedia();
   const [choices, setChoices] = useState<WorksheetChoices>(rememberedChoices);
@@ -106,8 +113,8 @@ export default function PrepareWorksheets({ from, image, settings, fitted = fals
     // The other tool whose work the sheets are is checked alone (nothing is
     // counted); then this tool with Worksheets and Saved images (counted).
     const other = otherToolNeeded(from, chosen);
-    if (other && !(await authorize({ tool: other, features: [] }))) return;
-    if (!(await authorize({ tool: from, features: ['export.worksheets', 'export.image'] }))) return;
+    if (other && !(await authorize({ tool: other, features: [], ...fromLearn(learnItem) }))) return;
+    if (!(await authorize({ tool: from, features: ['export.worksheets', 'export.image'], ...fromLearn(learnItem) }))) return;
     const controller = new AbortController();
     stop.current = controller;
     setProgress({ done: 0, total: chosen.length });
@@ -130,7 +137,7 @@ export default function PrepareWorksheets({ from, image, settings, fitted = fals
       setError(t('failed'));
       setPhase('choose');
     }
-  }, [authorize, chosen, choices.levels, from, image, outline, phase, settings, t]);
+  }, [authorize, chosen, choices.levels, from, image, learnItem, outline, phase, settings, t]);
 
   const files = useMemo(() => made.map(({ sheet }) => makeShareFile(sheet.blob, sheet.filename, 'image/png')), [made]);
   // Phones and tablets: one share sheet for all (Save Images, Save to Files, Print).
@@ -181,7 +188,7 @@ export default function PrepareWorksheets({ from, image, settings, fitted = fals
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {phase === 'choose' && (
             <>
-              <p className="text-sm text-muted-foreground">{t('lead')}</p>
+              <p className="text-sm text-muted-foreground">{lead ?? t('lead')}</p>
               <fieldset className="mt-3">
                 <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('sheetsLabel')}</legend>
                 <ul className="space-y-2">
@@ -303,6 +310,14 @@ export default function PrepareWorksheets({ from, image, settings, fitted = fals
                   {t('again')}
                 </button>
               </div>
+              {onNext && (
+                <div className="space-y-1 pt-1">
+                  <button onClick={onNext} data-next-student className={secondary.replace('flex-1 ', 'w-full ')}>
+                    {t('nextStudent')}
+                  </button>
+                  <p className="text-center text-xs text-muted-foreground">{t('nextStudentHint')}</p>
+                </div>
+              )}
             </>
           )}
         </div>

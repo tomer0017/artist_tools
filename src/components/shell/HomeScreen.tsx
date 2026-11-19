@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ChevronRight, Lock } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { useIsMobile } from '@/hooks/use-mobile';
+import LearnOnHome from '@/components/learn/LearnOnHome';
 import { BrandMark } from './BrandMark';
 import { AccountButton, AccountLine, useToolAllowed } from './account';
 import { HOME_ORDER, TOOLS, TOOL_ART, pathForView } from './tools';
@@ -81,6 +82,8 @@ export default function HomeScreen() {
             </li>
           ))}
         </ul>
+
+        <LearnOnHome />
 
         <p className="mt-6 px-4 text-center text-xs text-muted-foreground md:px-6">
           {t('privacy')}

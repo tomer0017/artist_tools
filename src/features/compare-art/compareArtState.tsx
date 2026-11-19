@@ -83,7 +83,8 @@ interface Store {
   canRedo: boolean;
 
   setArtwork: (dataUrl: string, meta: ImageMeta) => void;
-  setReference: (dataUrl: string, meta: ImageMeta) => void;
+  /** Replace the reference; `learnItem` when it is a Learn item's reference handed over (ADR-0018). */
+  setReference: (dataUrl: string, meta: ImageMeta, learnItem?: string | null) => void;
   applyImageCrop: (
     role: 'artwork' | 'reference',
     payload: { cropped: string; meta: ImageMeta; original: string; crop: ImageCrop },
@@ -210,8 +211,15 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
     compactInto(dataUrl, artworkCompact);
   }, []);
 
-  const setReference = useCallback((dataUrl: string, meta: ImageMeta) => {
-    setSession((s) => ({ ...s, reference: dataUrl, referenceMeta: meta }));
+  const setReference = useCallback((dataUrl: string, meta: ImageMeta, learnItem: string | null = null) => {
+    setSession((s) => ({
+      ...s,
+      reference: dataUrl,
+      referenceMeta: meta,
+      referenceOriginal: null,
+      referenceCrop: null,
+      referenceLearnItem: typeof learnItem === 'string' ? learnItem : null,
+    }));
     setImagesDropped(false);
     compactInto(dataUrl, referenceCompact);
   }, []);
@@ -246,6 +254,8 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
           referenceMeta: meta,
           referenceOriginal: original,
           referenceCrop: crop,
+          // Cropping the same Learn reference keeps its item; any other picture is the person's own.
+          referenceLearnItem: s.referenceLearnItem && (original === s.referenceOriginal || original === s.reference) ? s.referenceLearnItem : null,
         }));
         compactInto(cropped, referenceCompact);
         compactInto(original, referenceOriginalCompact);
@@ -258,7 +268,7 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
     setSession((s) => ({ ...s, artwork: null, artworkMeta: null, artworkOriginal: null, artworkCrop: null }));
   }, []);
   const removeReference = useCallback(() => {
-    setSession((s) => ({ ...s, reference: null, referenceMeta: null, referenceOriginal: null, referenceCrop: null }));
+    setSession((s) => ({ ...s, reference: null, referenceMeta: null, referenceOriginal: null, referenceCrop: null, referenceLearnItem: null }));
   }, []);
 
   // ── Transforms (each a single undo step) ───────────────────────────────────

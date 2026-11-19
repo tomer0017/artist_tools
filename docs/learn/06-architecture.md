@@ -9,6 +9,16 @@
 > - Assets are checked by their bytes, with embedded metadata refused. Until
 >   the M6 editor, uploads go through `npm run db -- learn-import`.
 > - Completions (§9) come in M5.
+>
+> **As built in M5 (2026-11-19, ADR-0018):**
+> - Learn's pages send only the account. Every screen reads the Learn API,
+>   unlike §5's sketch: one path, decided per request.
+> - Completions are as §9 describes (`/api/learn/completions`, own entries
+>   only, once a day in the studio), in the data download and removed with
+>   the account.
+> - Class mode is per tab and never calls the completion API.
+> - Tool shortcuts mark the picture with its item, so saves from it name the
+>   item in `/api/usage`.
 
 Inspected on 2026-11-18 at `be6890c` (branch `migration/nextjs-saas-foundation`).
 Every "today" statement below was checked in the code; file paths are given

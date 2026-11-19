@@ -1,5 +1,15 @@
 # 04 — Screens, flows and the teacher workflow (proposal, for approval)
 
+> **As built in M5 (2026-11-19, ADR-0018):**
+> - S1–S5, S7–S9 are built as below, in English and Hebrew, for desktop,
+>   tablet and phone.
+> - S6 is the M3 sheet (aligned PNG images, ADR-0016), opened from cards with
+>   the reference fitted to Create a Grid's canvas, and from "Use my photo".
+> - Class mode adds "Next student".
+> - "Mark as completed" counts once a day.
+> - Learn is shown only to accounts some published plan offers a module to
+>   (today: admins).
+
 The design goal: choose a drawing task in a few taps, put the tablet down,
 draw on paper. The software stays one tap away when help is needed. No
 timers, no streaks, no scores, no forms, no classroom management, no

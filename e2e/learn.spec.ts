@@ -5,9 +5,10 @@ import { test, expect, type APIRequestContext, type Browser } from '@playwright/
 // the synthetic Learn content published (scripts/e2e-server.ts,
 // src/test/learn-fixture.ts) and no plan includes a Learn module. So Free and
 // Pro open nothing and get no image, admins open everything (unpublished
-// items too), and signed-out visitors get 401. Every check is on what the
-// server answers, not on what a page shows: there are no Learn screens yet
-// (M5). Plan changes through Admin → Plans are in e2e/entitlements.spec.ts.
+// items too), and signed-out visitors get 401. Every check here is on what
+// the server answers; the Learn screens (M5, ADR-0018) are in
+// e2e/learn-screens.spec.ts. Plan changes through Admin → Plans are in
+// e2e/entitlements.spec.ts.
 
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const COLLECTIONS = ['curriculum', 'color', 'challenges'] as const;

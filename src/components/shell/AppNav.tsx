@@ -1,9 +1,9 @@
 import Link from 'next/link';
-import { Lock } from 'lucide-react';
+import { GraduationCap, Lock } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import type { NavViewId } from '@/types/project';
-import { AccountButton, useToolAllowed } from './account';
+import { AccountButton, useLearnSummary, useToolAllowed } from './account';
 import { BrandMark } from './BrandMark';
 import { NAV_ORDER, navItem, pathForView } from './tools';
 
@@ -38,6 +38,8 @@ export function BottomNav() {
 export function TopNav() {
   const { activeTab } = useProject();
   const t = useTranslations('studio');
+  const tl = useTranslations('learn');
+  const learn = useLearnSummary();
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border px-4 toolbar-surface lg:px-6">
       <Link href={pathForView('home')} aria-label={t('homeLink')} className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -50,6 +52,23 @@ export function TopNav() {
               <NavItemLink id={id} active={activeTab === id} variant="top" />
             </li>
           ))}
+          {/* Learn (ADR-0018): on wider screens only, and only for accounts Learn is shown to.
+              On phones it is reached from Home: the bottom bar keeps its six items (A4). */}
+          {learn.visible && (
+            <li className="ms-1 border-s border-border ps-1 lg:ms-2 lg:ps-2">
+              <Link
+                href={pathForView('learn')}
+                aria-current={activeTab === 'learn' ? 'page' : undefined}
+                data-nav-learn
+                className={`flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-3.5 lg:text-sm ${
+                  activeTab === 'learn' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                }`}
+              >
+                <GraduationCap className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{tl('nav')}</span>
+              </Link>
+            </li>
+          )}
         </ul>
       </nav>
       <AccountButton />

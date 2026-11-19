@@ -91,7 +91,7 @@ export type TabId = 'measure' | 'value' | 'color' | 'grid' | 'compare';
 // What the navigation bars link to: the Home tool hub and the tools.
 export type NavViewId = 'home' | TabId;
 // Everything the app can show: those, plus the account and plans pages.
-export type ViewId = NavViewId | 'profile' | 'plans';
+export type ViewId = NavViewId | 'profile' | 'plans' | 'learn';
 
 /** Quarter turns of the image on the grid, clockwise; the image itself is never changed. */
 export type GridRotation = 0 | 90 | 180 | 270;
@@ -165,6 +165,11 @@ export interface ProjectData {
   // with projects saved before Grid became an independent document.
   gridImage?: string | null;
   gridImageInitialized?: boolean;
+  // A picture handed over from a Learn exercise or challenge (ADR-0018): the
+  // item's ID, so whatever is saved from it asks the server whether that item
+  // is still open to the account. Cleared when the picture is replaced.
+  imageLearnItem?: string | null;
+  gridImageLearnItem?: string | null;
   savedAt: number;
 }
 

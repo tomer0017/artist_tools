@@ -229,3 +229,37 @@ describe('in Hebrew', () => {
     expect(screen.getByRole('button', { name: 'שמירת הכול' })).toBeInTheDocument();
   });
 });
+
+describe('from a Learn exercise or challenge (ADR-0018)', () => {
+  it('asks the server for that item at both questions, says the sheets come from the reference, and offers class mode its next student', async () => {
+    const onNext = vi.fn();
+    render(
+      <I18nProvider locale="en" messages={en}>
+        <PrepareWorksheets from="grid" image={PHOTO} settings={DEFAULT_GRID_SETTINGS} fitted outline={DEFAULT_CONTROLS} learnItem="CH-017" lead={en.worksheets.fromReference} onNext={onNext} onClose={vi.fn()} />
+      </I18nProvider>,
+    );
+    expect(screen.getByRole('dialog')).toHaveTextContent('Practice sheets from the reference.');
+    fireEvent.click(screen.getByRole('button', { name: 'Make sheets (4)' }));
+    await screen.findByText('Sheets ready: 4');
+    expect(authorize.mock.calls).toEqual([
+      [{ tool: 'value', features: [], learnItem: 'CH-017' }],
+      [{ tool: 'grid', features: ['export.worksheets', 'export.image'], learnItem: 'CH-017' }],
+    ]);
+    expect(screen.getByText('Back to the challenges with the same sheet choices. This photo is cleared.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next student' }));
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('without class mode there is no "Next student"; a refusal for the item makes nothing', async () => {
+    authorize.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    render(
+      <I18nProvider locale="en" messages={en}>
+        <PrepareWorksheets from="grid" image={PHOTO} settings={DEFAULT_GRID_SETTINGS} fitted outline={DEFAULT_CONTROLS} learnItem="CH-017" onClose={vi.fn()} />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Make sheets (4)' }));
+    await waitFor(() => expect(authorize).toHaveBeenCalledTimes(2));
+    expect(making.calls).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Next student' })).toBeNull();
+  });
+});

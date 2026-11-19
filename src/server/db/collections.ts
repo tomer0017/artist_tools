@@ -193,6 +193,22 @@ export interface LearnAssetDoc {
   uploadedAt: Date;
 }
 
+/**
+ * One "Mark as completed" on a Learn exercise or challenge (ADR-0018): the
+ * person's own history, several per item allowed. Never written in class
+ * mode (the browser never asks). In the account's data download; removed
+ * with the account (ADR-0010).
+ */
+export interface LearnCompletionDoc {
+  _id: ObjectId;
+  userId: ObjectId;
+  /** A stable item ID (D-START-01, CH-017): titles and order may change, the ID never does. */
+  itemId: string;
+  completedAt: Date;
+  /** The published content version the item was completed in. */
+  contentVersion: number | null;
+}
+
 /** A discount code (src/server/coupons.ts). Redemptions are counted from `coupon_redemptions`. */
 export interface CouponDoc {
   _id?: ObjectId;
@@ -561,6 +577,7 @@ export function collections(db: Db) {
     couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
     passwordHandoffs: db.collection<PasswordHandoffDoc>('password_handoffs'),
     learnAssets: db.collection<LearnAssetDoc>('learn_assets'),
+    learnCompletions: db.collection<LearnCompletionDoc>('learn_completions'),
   };
 }
 

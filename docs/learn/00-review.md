@@ -284,16 +284,16 @@ Also in the section:
 
 | # | Decision | Recommendation | Before |
 |---|---|---|---|
-| A4 | Where Learn lives | Home and desktop navigation; on phones through Home | M5 |
+| A4 | Where Learn lives | Built in M5 as recommended: Home and desktop navigation; on phones through Home (ADR-0018) | M5 |
 | A5 | The PDF library | Decided in M2: jsPDF 4.2.1, loaded on demand (ADR-0015) | M2 |
 | A7 | Image sources | Own or commissioned, plus CC0 museum collections; model releases | M4 |
-| A9 | What locked items show | The title and a thumbnail | M5 |
-| A10 | Class mode | Its name, and the 12-hour automatic end | M5 |
+| A9 | What locked items show | Built in M5 as the catalog setting in Admin → Plans (titles, or titles and thumbnails); your choice for launch | M5 |
+| A10 | Class mode | Built in M5 as recommended: "Class mode", per browser tab, off after 12 hours without use | M5 |
 | A11 | Grid scope | Rotation, A4, square cells and a blank grid now; fine rotation later | M1 |
 | A12 | Moving the Values algorithm | Done in M3, unchanged, with golden tests (ADR-0016) | M3 |
-| A13 | Analytics | None at first | M5 |
+| A13 | Analytics | None (M5) | M5 |
 | A14 | Who reviews the content and the Hebrew | You name the reviewers | M7 |
 | A15 | Real-staging tests at every milestone | Approve as standing practice | M1 |
-| A16 | Measuring drawing accuracy | Not in v1 | M5 |
+| A16 | Measuring drawing accuracy | Not in v1 (M5 measures nothing) | M5 |
 | A17 | Paper and Hebrew text in PDFs | Decided in M2: A4 only; words as images (ADR-0015) | M2 |
 | A18 | Claims about results | None before an evaluation exists | M9 |

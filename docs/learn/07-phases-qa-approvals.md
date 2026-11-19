@@ -134,6 +134,21 @@ implemented or tested yet: no Learn code exists.
   - the restore drill with the asset directory.
 
 ### M5 — Learn screens and personal history
+- **Status:** approved by the owner on 2026-11-19 "according to the revised
+  Learn plan" (once Admin → Learn shows the six test items on staging), and
+  implemented (ADR-0018). Release and verification: deploy/RELEASES.md. M6
+  waits for the owner's approval.
+- **As built:**
+  - Learn is a studio view at `/app/learn/...`.
+    - Its data comes from the Learn API only; pages never carry content.
+    - It is shown only to accounts with a module offered (today: admins).
+  - Tool shortcuts hand the reference to Measure & Plan, Study & Simplify,
+    Create a Grid and Compare & Correct. Saves from it name the item, and a
+    photo of the person's own is replaced only after asking.
+  - Prepare Worksheets is the M3 sheet, fitted to Create a Grid's canvas,
+    from cards with a reference and from "Use my photo".
+  - Class mode is per tab: it never touches the history, and adds "Next
+    student".
 - **Scope:**
   - screens S1–S9 (04);
   - the Home entry and the desktop navigation item;
@@ -253,20 +268,20 @@ Checked as Free, Pro, admin and signed out, locally and on real staging:
 | A1 | This plan and its order (M1 to M9), after the separate rollback-safety fix | Approve | M1 |
 | A2 | The curriculum: 12 core exercises and 8 next steps; 18 merged and 8 deferred (02) | Approve the scope. Produce the core first; the next steps after the core has been used. Ideally reviewed by an art educator | M4 (seed), M7 |
 | A3 | The 50 challenges (03) | Review | M7, M4 (seed) |
-| A4 | Where Learn lives: Home and desktop navigation; phones through Home | Approve; revisit after measuring | M5 |
+| A4 | Where Learn lives: Home and desktop navigation; phones through Home | **Built in M5 as recommended** (ADR-0018): Home and the desktop top bar; phones through Home; revisit after measuring | M5 |
 | A5 | The PDF library (one new dependency, loaded on demand) | **Decided in M2:** jsPDF 4.2.1, pinned, loaded only after the server authorizes a PDF; security review in ADR-0015 and docs/security/dependency-audit.md | M2 |
 | A6 | Content in the database as versioned publications, never committed to the repository (it is public) | Database; seed imported from a file kept outside the repository | M4 |
 | A7 | Reference sourcing: own or commissioned photos, CC0 collections, model releases; any budget | Own or commissioned plus CC0 museum collections; no stock-photo sites without legal review | M4 (seed), M7 |
 | A8 | The entitlement model, all in Admin → Plans: module and export features, plus one rule per collection and plan (All, None, Selected); First N frozen at publication; the dark launch | Approve; the launch policy is a separate decision at M9 | M4 |
-| A9 | What locked items show in lists | Title and thumbnail | M5 |
-| A10 | Class mode: its name and the 12-hour automatic end | Approve | M5 |
+| A9 | What locked items show in lists | **Built in M5 as the catalog setting** (Admin → Plans: titles, or titles and thumbnails); titles only until a Learn section says otherwise. The owner's choice for launch | M5 |
+| A10 | Class mode: its name and the 12-hour automatic end | **Built in M5 as recommended** (ADR-0018): "Class mode", per browser tab, off after 12 hours without use | M5 |
 | A11 | Grid scope: rotation, A4, square cells, blank grid now; fine rotation later | Approve | M1 |
 | A12 | Moving the Values algorithm into a module, unchanged, with golden tests | **Done in M3:** `src/lib/values/posterize.ts`; 1,920 golden combinations and 21 saved files byte-identical before and after (ADR-0016 §2) | M3 |
-| A13 | Analytics for Learn: none, or ids-only "opened" events | None at first | M5 |
+| A13 | Analytics for Learn: none, or ids-only "opened" events | **None** (M5, ADR-0018) | M5 |
 | A14 | Who reviews the content and the Hebrew | The owner names reviewers | M7 |
 | A15 | Real-staging verification with temporary accounts at every milestone | Approve as standing practice | M1 |
-| A16 | Should Learn ever measure drawing accuracy (angles, proportions)? | No in v1: feedback can backfire, and the aim is less screen time (01 §2) | M5 |
+| A16 | Should Learn ever measure drawing accuracy (angles, proportions)? | **No in v1** (M5 measures nothing): feedback can backfire, and the aim is less screen time (01 §2) | M5 |
 | A17 | Paper and text in PDFs: A4 only or also Letter; Hebrew text as an embedded font or as images | **Decided in M2:** A4 only; words drawn by the browser as images, in the page's language (ADR-0015 §2) | M2 |
 | A18 | How Learn is evaluated before any claim about results (for example volunteers' before-and-after drawings) | Make no outcome claims until such an evaluation exists | M9 |
 | A19 | Where reference images live (06 §3) | **Decided and built in M4:** files on the server outside the releases and `public/`, named by hash; metadata in MongoDB; served only by the authorized route; copied incrementally with the nightly backup (ADR-0017) | M4 |
-| A20 | Worksheets on their own: reachable from Home as a feature in its own right, while staying in Create a Grid and Study & Simplify | **The owner's decision (2026-11-19), for later:** recorded, not built in M4. To be designed with the Learn screens (04) | M5 or later |
+| A20 | Worksheets on their own: reachable from Home as a feature in its own right, while staying in Create a Grid and Study & Simplify | **The owner's decision (2026-11-19), for later:** recorded, not built in M4 or M5. M5 brings Worksheets to Learn's cards and "Use my photo"; the Home entry waits for the owner's go-ahead | M5 or later |

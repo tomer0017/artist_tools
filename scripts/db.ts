@@ -64,7 +64,7 @@ import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { authConfig } from '@/server/env';
 import { getEntitlements, getPlanOffer } from '@/server/entitlements';
-import { learnViewerOf } from '@/server/learn/live';
+import { learnSummaryOf, learnViewerOf } from '@/server/learn/live';
 import { createMailer } from '@/server/mail/mailer';
 import { mailTemplates } from '@/server/mail/templates';
 import { runMaintenance } from '@/server/maintenance';
@@ -586,6 +586,38 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
       if (response.status !== expected) wrong.push(`${asset._id.slice(0, 12)}… (${asset.role}): ${response.status}, expected ${expected}`);
     }
     check(`${label}: each Learn image (${assets.length}) is served or refused exactly as published${wrong.length ? ` — wrong: ${wrong.join('; ')}` : ''}`, wrong.length === 0);
+    // The person's history (ADR-0018): "Mark as completed" only for an item open now (a sample of
+    // at most 10 items, within the per-account limit); the history holds exactly what was accepted.
+    // The temporary account and its history are removed with it.
+    wrong = [];
+    let recorded = 0;
+    for (const item of itemsOf(content).slice(0, 10)) {
+      const state = view.state(item.id);
+      const expected = state.status === 'open' ? 201 : state.status === 'locked' ? 403 : 404;
+      const response = await fetchRetrying(`${base}/api/learn/completions`, {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ itemId: item.id }),
+      });
+      await response.arrayBuffer().catch(() => undefined);
+      if (response.status === 201) recorded += 1;
+      if (response.status !== expected) wrong.push(`${item.id}: ${response.status}, expected ${expected}`);
+    }
+    const history = await get('/api/learn/completions');
+    const total = history.ok ? ((await history.json()) as { summary?: { total?: number } }).summary?.total : null;
+    check(
+      `${label}: "Mark as completed" is accepted only for an item open now (${recorded} accepted), and the history holds exactly those (${String(total)})${wrong.length ? ` — wrong: ${wrong.join('; ')}` : ''}`,
+      wrong.length === 0 && total === recorded,
+    );
+    // The studio shows Learn only to accounts some published plan offers a module to.
+    const shown = learnSummaryOf(entitlements).visible;
+    const learnPage = await fetchRetrying(`${base}/app/learn`, { headers: { cookie }, redirect: 'manual' });
+    await learnPage.arrayBuffer().catch(() => undefined);
+    const location = learnPage.headers.get('location') ?? '';
+    check(
+      `${label}: the studio ${shown ? 'shows' : 'does not show'} Learn (/app/learn answers ${learnPage.status}${location ? ` → ${location}` : ''})`,
+      shown ? learnPage.status === 200 : learnPage.status >= 300 && learnPage.status < 400 && /\/app$/.test(new URL(location, base).pathname),
+    );
     if (!entitlements.offer.free.concat(entitlements.offer.pro).some((f) => f.startsWith('learn.'))) {
       check(`${label}: dark launch — no plan includes a Learn module, so no Learn item opens (${opened}) and no Learn image is served (${served})`, opened === 0 && served === 0);
     }
@@ -623,8 +655,10 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
       fetchRetrying(`${base}/api/learn/items?collection=curriculum`),
       fetchRetrying(`${base}/api/learn/items/D-START-01`),
       fetchRetrying(`${base}/api/learn/assets/${'0'.repeat(64)}`),
+      fetchRetrying(`${base}/api/learn/completions`),
+      fetchRetrying(`${base}/api/learn/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ itemId: 'D-START-01' }) }),
     ]);
-    check('signed out: Learn lists, items and images answer 401', signedOut.every((r) => r.status === 401));
+    check('signed out: Learn lists, items, images and the history answer 401', signedOut.every((r) => r.status === 401));
     const proOnlyTool = TOOL_FEATURE_IDS.find((t) => offer.pro.includes(t) && !offer.free.includes(t));
     if (proOnlyTool) {
       await setUserPlan(db, { userId: created[0].userId, plan: 'pro', actor: 'cli' });

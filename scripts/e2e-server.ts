@@ -63,7 +63,10 @@ process.env.BETTER_AUTH_SECRET = SECRET;
 process.env.BETTER_AUTH_URL = BASE_URL;
 /** Learn's asset directory for this run (outside the repository, like the server's). */
 const LEARN_ASSETS_DIR = mkdtempSync(path.join(tmpdir(), 'studio-e2e-learn-assets-'));
-const LEARN_SEED = writeLearnFixture(mkdtempSync(path.join(tmpdir(), 'studio-e2e-learn-seed-')));
+// E2E_LEARN_SEED: a seed folder of your own instead (for looking at real test
+// content locally, e.g. the private seed kept outside the repository). The
+// test suite itself always runs on the synthetic fixture.
+const LEARN_SEED = process.env.E2E_LEARN_SEED || writeLearnFixture(mkdtempSync(path.join(tmpdir(), 'studio-e2e-learn-seed-')));
 process.env.LEARN_ASSETS_DIR = LEARN_ASSETS_DIR;
 
 /** Import and publish the synthetic Learn content, as `npm run db -- learn-import` and `learn-publish` do. */
@@ -145,6 +148,10 @@ mkdirSync('e2e/.auth', { recursive: true });
 await seedSignedInUser(db, 'user', 'user'); // Free: what specs are signed in as by default
 await seedSignedInUser(db, 'pro', 'user', 'pro');
 await seedSignedInUser(db, 'admin', 'admin');
+// Learn's screens (e2e/learn-screens.spec.ts, ADR-0018): admins, the only
+// accounts Learn opens for until a plan includes it; one per test that keeps
+// a history or class mode, since tests run in parallel.
+for (const name of ['learner', 'learner-history', 'learner-tools', 'learner-sheets', 'learner-he', 'teacher', 'learner-mobile']) await seedSignedInUser(db, name, 'admin');
 await seedSignedInUser(db, 'signout', 'user');
 // Accounts the admin specs change (plan, role); nothing else relies on them.
 await seedSignedInUser(db, 'target', 'user');

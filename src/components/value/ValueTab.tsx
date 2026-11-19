@@ -9,6 +9,7 @@ import {
   Contrast, PencilLine, RotateCcw, Loader2, Lock,
 } from 'lucide-react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { fromLearn } from '@/lib/learn/source';
 import { dataUrlToBlob } from '@/lib/saveMedia';
 import type { SketchView } from '@/lib/sketch/protocol';
 import { activeControls, resolveSketch } from '@/lib/sketch/settings';
@@ -19,6 +20,7 @@ import {
 import { useSketchDrawing } from './useSketchDrawing';
 import { useAccount, useHasFeature } from '@/components/shell/account';
 import PrepareWorksheets from '@/components/worksheets/PrepareWorksheets';
+import { useLearnHandoff } from '@/hooks/useLearnHandoff';
 import {
   brightnessLabel, dominantName, preBlur, processingSize, studyValues,
   type DominantSwatch, type Focus, type Mode, type ValueGroup,
@@ -31,12 +33,25 @@ import { PortraitArt } from '@/components/shell/ToolArt';
 type PaletteView = 'dominant' | 'value' | 'mix';
 
 export default function ValueTab() {
-  const { image, valueSettings, setValueSettings, activeTab, gridImage, gridSettings } = useProject();
+  const { image, valueSettings, setValueSettings, activeTab, gridImage, gridSettings, imageLearnItem, gridImageLearnItem } = useProject();
   const { save } = useSaveMedia();
   const t = useTranslations('studyTool');
   const tw = useTranslations('worksheets');
   const tLocked = useTranslations('studio.locked');
-  const [localImage, setLocalImage] = useState<string | null>(null);
+  const [localImage, setLocalImageRaw] = useState<string | null>(null);
+  // Which Learn item Study's own photo came from, if it was handed over (ADR-0018).
+  const [localLearnItem, setLocalLearnItem] = useState<string | null>(null);
+  // A photo loaded here (an upload) is the person's own: it carries no Learn item.
+  const setLocalImage = useCallback((dataUrl: string) => {
+    setLocalImageRaw(dataUrl);
+    setLocalLearnItem(null);
+  }, []);
+  // A Learn reference handed over by "Open in Study & Simplify" (src/components/learn/handoff.tsx):
+  // Study's own photo for this visit; the shared photo is left as it is.
+  useLearnHandoff('value', (handoff) => {
+    setLocalImageRaw(handoff.image);
+    setLocalLearnItem(handoff.learnItem);
+  });
   const [processedUrl, setProcessedUrl] = useState<string | null>(null);
   const [groups, setGroups] = useState<ValueGroup[]>([]);
   const [dominant, setDominant] = useState<DominantSwatch[]>([]);
@@ -54,6 +69,8 @@ export default function ValueTab() {
   const isMobile = useIsMobile();
 
   const activeImage = localImage || image;
+  // Saves made from a Learn reference name its item: the server refuses them once it is no longer open.
+  const learnItem = localImage ? localLearnItem : imageLearnItem;
 
   // Prepare Worksheets (M3): offered as in Create a Grid (in no plan until the owner publishes it).
   // The canvas, grid and framing are Create a Grid's; a photo other than Create a Grid's is
@@ -180,7 +197,7 @@ export default function ValueTab() {
 
   const saveDataUrl = (dataUrl: string, name: string, mime: string) => {
     dataUrlToBlob(dataUrl)
-      .then((blob) => save({ blob, filename: name, mime, title: t('save.imageTitle'), tool: 'value' }))
+      .then((blob) => save({ blob, filename: name, mime, title: t('save.imageTitle'), tool: 'value', ...fromLearn(learnItem) }))
       .catch((error) => console.error('[ValueTab] Failed to prepare image for saving:', error));
   };
 
@@ -194,7 +211,7 @@ export default function ValueTab() {
       const result = await drawing.savePng();
       if (!result) return;
       const filename = sketch.style === 'pencil' ? 'pencil-study.png' : 'clean-outline.png';
-      await save({ blob: result.blob, filename, mime: 'image/png', title: t('save.imageTitle'), tool: 'value' });
+      await save({ blob: result.blob, filename, mime: 'image/png', title: t('save.imageTitle'), tool: 'value', ...fromLearn(learnItem) });
     } catch (error) {
       console.error('[ValueTab] Failed to export the sketch:', error);
     } finally {
@@ -218,7 +235,7 @@ export default function ValueTab() {
     setSavingSketch(true);
     try {
       const blob = await drawing.saveSvg();
-      if (blob) await save({ blob, filename: 'clean-outline.svg', mime: 'image/svg+xml', title: t('save.svgTitle'), tool: 'value' });
+      if (blob) await save({ blob, filename: 'clean-outline.svg', mime: 'image/svg+xml', title: t('save.svgTitle'), tool: 'value', ...fromLearn(learnItem) });
     } catch (error) {
       console.error('[ValueTab] Failed to export sketch SVG:', error);
     } finally {
@@ -588,6 +605,7 @@ export default function ValueTab() {
       settings={worksheetSettings}
       fitted={worksheetsFitted}
       outline={worksheetOutline}
+      learnItem={learnItem ?? (worksheetsFitted ? null : gridImageLearnItem)}
       onClose={() => setWorksheetsOpen(false)}
     />
   ) : null;

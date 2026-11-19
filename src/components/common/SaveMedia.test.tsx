@@ -22,16 +22,18 @@ function Harness({
   tool = 'grid',
   features,
   authorized,
+  learnItem,
 }: {
   filename: string;
   mime?: string;
   tool?: ToolId;
   features?: ExportFeatureId[];
   authorized?: boolean;
+  learnItem?: string | null;
 }) {
   const { save } = useSaveMedia();
   return (
-    <button onClick={() => void save({ blob: new Blob(['x'], { type: mime ?? 'image/png' }), filename, mime, tool, features, authorized })}>
+    <button onClick={() => void save({ blob: new Blob(['x'], { type: mime ?? 'image/png' }), filename, mime, tool, features, authorized, learnItem })}>
       generate
     </button>
   );
@@ -262,6 +264,43 @@ describe('SaveMedia authorization', () => {
     fireEvent.click(screen.getByText('generate'));
     expect(await screen.findByAltText('GIF preview')).toBeInTheDocument();
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('SaveMedia: from a Learn reference (ADR-0018)', () => {
+  it('names the item; with no item the request is exactly as before', async () => {
+    const calls = serverSays(200);
+    render(
+      <SaveMediaProvider>
+        <Harness filename="grid.png" learnItem="D-START-01" />
+        <Harness filename="own.png" learnItem={null} />
+      </SaveMediaProvider>,
+    );
+    fireEvent.click(screen.getAllByText('generate')[0]);
+    expect(await screen.findByAltText('Image preview')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getAllByText('generate')[1]);
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls.map((c) => c.body)).toEqual([
+      { tool: 'tool.grid', features: ['export.image'], learnItem: 'D-START-01' },
+      { tool: 'tool.grid', features: ['export.image'] },
+    ]);
+  });
+
+  it('refused once the item is no longer open: nothing is saved, and it says why', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'not_included', features: [], learnItem: { id: 'D-START-01', reason: 'not_in_plan' } }), { status: 403 })),
+    );
+    render(
+      <SaveMediaProvider>
+        <Harness filename="grid.png" learnItem="D-START-01" />
+      </SaveMediaProvider>,
+    );
+    fireEvent.click(screen.getByText('generate'));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('This picture is a Learn reference that your plan does not include now, so nothing made from it was saved.');
+    expect(screen.queryByAltText(/preview/i)).toBeNull();
   });
 });
 

@@ -15,13 +15,22 @@ export async function assetsFor(db: Db, ids: string[]): Promise<Map<string, Lear
   return new Map((await collections(db).learnAssets.find({ _id: { $in: [...new Set(ids)] } }).toArray()).map((doc) => [doc._id, doc]));
 }
 
+/**
+ * The fields of an item learners receive, by name. Content is read tolerantly
+ * (fields a newer release adds are kept), so anything else an item carries,
+ * such as a reviewer's note, is never sent (ADR-0018).
+ */
+const EXERCISE_FIELDS = ['id', 'kind', 'collection', 'groupId', 'order', 'title', 'objective', 'materials', 'instruction', 'guide', 'mistake', 'success', 'worksheet', 'tools'] as const;
+const CHALLENGE_FIELDS = ['id', 'kind', 'collection', 'groupId', 'order', 'title', 'prompt', 'level', 'skill', 'skillArea', 'reference', 'medium', 'quick', 'tools'] as const;
+
 /** The whole item, its references with their thumbnails and sizes. */
 export function fullItem(item: LearnItem, assets: Map<string, LearnAssetDoc>, admin: boolean) {
-  const { published, references, ...rest } = item;
+  const fields: readonly string[] = item.kind === 'exercise' ? EXERCISE_FIELDS : CHALLENGE_FIELDS;
+  const known = Object.fromEntries(fields.filter((field) => field in item).map((field) => [field, (item as unknown as Record<string, unknown>)[field]]));
   return {
-    ...rest,
-    ...(admin ? { published } : {}),
-    references: references.map((ref) => {
+    ...(known as Omit<LearnItem, 'published' | 'references'>),
+    ...(admin ? { published: item.published } : {}),
+    references: item.references.map((ref) => {
       const doc = assets.get(ref.assetId);
       return {
         assetId: ref.assetId,

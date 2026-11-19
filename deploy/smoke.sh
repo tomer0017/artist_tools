@@ -83,7 +83,7 @@ if [ "$google_only" = true ]; then
   if [ "$code" = 404 ]; then ok "password endpoints switched off (404)"; else bad "sign-up/email answered $code"; fi
 fi
 
-for page in /app /app/measure /admin /admin/billing; do
+for page in /app /app/measure /app/learn /admin /admin/billing; do
   code="$(fetch "$page")"
   location="$(grep -i '^location:' "$TMP/headers" | tr -d '\r' | cut -d' ' -f2-)"
   case "$code $location" in
@@ -92,8 +92,8 @@ for page in /app /app/measure /admin /admin/billing; do
   esac
 done
 
-# Learn (ADR-0017): items and their images only for a signed-in account allowed them, never cached publicly.
-for path in "/api/learn/items?collection=curriculum" "/api/learn/items/D-START-01" "/api/learn/assets/$(printf '0%.0s' $(seq 1 64))"; do
+# Learn (ADR-0017, ADR-0018): items, their images and the person's history only for a signed-in account allowed them, never cached publicly.
+for path in "/api/learn/items?collection=curriculum" "/api/learn/items/D-START-01" "/api/learn/assets/$(printf '0%.0s' $(seq 1 64))" "/api/learn/completions"; do
   code="$(fetch "$path")"
   cache="$(grep -i '^cache-control:' "$TMP/headers" | tr -d '\r' | cut -d' ' -f2-)"
   if [ "$code" = 401 ] && [[ "$cache" == *private* ]]; then ok "${path%%\?*}: signed out, 401, private"; else bad "$path: $code (${cache:-no cache-control})"; fi

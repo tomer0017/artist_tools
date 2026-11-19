@@ -31,6 +31,8 @@ export const THROTTLES = {
   newAccountsPerDay: { limit: 300, windowSeconds: 24 * 60 * 60 },
   /** Learn items and images one account asks for (ADR-0017), counted under the account's id; admins are not counted. */
   learnRequests: { limit: 600, windowSeconds: 10 * 60 },
+  /** Completions one account records or removes (ADR-0018), counted under the account's id. */
+  learnCompletions: { limit: 60, windowSeconds: 10 * 60 },
 } satisfies Record<string, ThrottleRule>;
 
 /** The "address" of counters that cover every visitor at once. */

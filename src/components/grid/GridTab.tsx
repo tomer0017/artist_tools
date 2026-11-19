@@ -8,6 +8,7 @@ import ToolHeader from '@/components/shell/ToolHeader';
 import ToolEmptyState from '@/components/shell/ToolEmptyState';
 import type { GridSettings } from '@/types/project';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { fromLearn } from '@/lib/learn/source';
 import { useAccount, useHasFeature } from '@/components/shell/account';
 import { canvasToBlob } from '@/lib/saveMedia';
 import { A4_CM, cellCounts, exportSize, fillImageScale, previewSize, turn } from '@/lib/grid/geometry';
@@ -36,7 +37,7 @@ export default function GridTab() {
   const t = useTranslations('gridTool');
   const tLocked = useTranslations('studio.locked');
   const tw = useTranslations('worksheets');
-  const { image, gridImage, setGridImage, initGridImageFromReference, gridSettings, setGridSettings, valueSettings } = useProject();
+  const { image, gridImage, gridImageLearnItem, setGridImage, initGridImageFromReference, gridSettings, setGridSettings, valueSettings } = useProject();
   const { save, authorize } = useSaveMedia();
   const locale = useLocale();
   // The A4 PDF: offered to accounts that have it, and shown locked where another plan has it
@@ -242,7 +243,8 @@ export default function GridTab() {
         drawExport(ctx, gs, loaded, { blank });
         const filename = exportFilename(gs, blank);
         canvasToBlob(canvas, 'image/png')
-          .then((blob) => save({ blob, filename, mime: 'image/png', title: t(blank ? 'saveBlankTitle' : 'saveTitle'), tool: 'grid' }))
+          // A blank grid holds no picture; a grid over a Learn reference names its item (ADR-0018).
+          .then((blob) => save({ blob, filename, mime: 'image/png', title: t(blank ? 'saveBlankTitle' : 'saveTitle'), tool: 'grid', ...fromLearn(blank ? null : gridImageLearnItem) }))
           .catch((error) => console.error('[GridTab] Failed to export grid PNG:', error));
       } catch (error) {
         console.error('[GridTab] Failed to export grid PNG:', error);
@@ -259,7 +261,7 @@ export default function GridTab() {
     } else {
       doExport(null);
     }
-  }, [activeImage, gs, save, t]);
+  }, [activeImage, gridImageLearnItem, gs, save, t]);
   const handleExport = useCallback(() => exportGrid(false), [exportGrid]);
   const handleExportBlank = useCallback(() => exportGrid(true), [exportGrid]);
 
@@ -269,7 +271,7 @@ export default function GridTab() {
     if (!activeImage || pdfBusy) return;
     setPdfBusy(true);
     try {
-      if (!(await authorize({ tool: 'grid', features: ['export.pdf'] }))) return;
+      if (!(await authorize({ tool: 'grid', features: ['export.pdf'], ...fromLearn(gridImageLearnItem) }))) return;
       const image = await loadImage(activeImage);
       const layout = gridPrintLayout(gs);
       const reference = rasterizeReference(gs, image, layout);
@@ -312,7 +314,7 @@ export default function GridTab() {
     } finally {
       setPdfBusy(false);
     }
-  }, [activeImage, authorize, gs, locale, pdfBusy, save, t]);
+  }, [activeImage, authorize, gridImageLearnItem, gs, locale, pdfBusy, save, t]);
 
   // Locked is said in words too (as in the navigation), not only by the icon.
   const pdfName = canPdf ? t('savePdf') : `${t('savePdf')} (${tLocked('badge')})`;
@@ -568,7 +570,7 @@ export default function GridTab() {
 
       <canvas ref={exportCanvasRef} className="hidden" />
       {worksheetsOpen && activeImage && (
-        <PrepareWorksheets from="grid" image={activeImage} settings={gs} outline={outlineControls} onClose={() => setWorksheetsOpen(false)} />
+        <PrepareWorksheets from="grid" image={activeImage} settings={gs} outline={outlineControls} learnItem={gridImageLearnItem} onClose={() => setWorksheetsOpen(false)} />
       )}
     </div>
   );

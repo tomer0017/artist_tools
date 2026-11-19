@@ -168,6 +168,12 @@ export interface CompareSession {
   referenceOriginal: string | null;
   artworkCrop: ImageCrop | null;
   referenceCrop: ImageCrop | null;
+  /**
+   * The Learn item the reference was handed over from (ADR-0018), or null:
+   * exports then ask the server whether that item is still open. Cleared
+   * when the reference is replaced or removed.
+   */
+  referenceLearnItem?: string | null;
   artworkTransform: Transform;
   referenceTransform: Transform;
   artworkLocked: boolean;
@@ -200,6 +206,7 @@ export function defaultSession(): CompareSession {
     referenceOriginal: null,
     artworkCrop: null,
     referenceCrop: null,
+    referenceLearnItem: null,
     artworkTransform: { ...IDENTITY_TRANSFORM },
     referenceTransform: { ...IDENTITY_TRANSFORM },
     artworkLocked: true,

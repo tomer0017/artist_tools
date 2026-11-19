@@ -5,6 +5,7 @@ import { gridEn } from './tools/grid';
 import { compareEn } from './tools/compare';
 import { commonEn } from './tools/common';
 import { worksheetsEn } from './tools/worksheets';
+import { learnEn } from './learn';
 
 // English messages: the source of truth for every key. Other languages must
 // provide exactly the same keys (enforced by the type in ./types and by the
@@ -20,6 +21,8 @@ export const en = {
   compareTool: compareEn,
   toolsCommon: commonEn,
   worksheets: worksheetsEn,
+  // Learn's screens (src/components/learn, ADR-0018).
+  learn: learnEn,
   meta: {
     siteDescription: "A painter's toolkit for measuring, value studies, color mixing, and grid drawing.",
     pricingTitle: 'Plans · Studio Companion',
@@ -157,6 +160,9 @@ export const en = {
       difference: { label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs' },
       pdf: { label: 'Print-ready PDFs', detail: 'A4: the reference with its grid and a matching blank grid, to scale' },
       worksheets: { label: 'Worksheets', detail: 'Practice sheets from your photo: the original, an outline, the grid and the values, aligned' },
+      learnCurriculum: { label: 'Drawing course', detail: 'Step-by-step exercises in drawing from observation, with pencil and paper' },
+      learnColor: { label: 'Color course', detail: 'Exercises in seeing and mixing color, after the pencil basics' },
+      learnChallenges: { label: 'Drawing challenges', detail: 'Subjects to draw, from quick sketches to longer studies' },
     },
     faq: {
       freeQ: 'Is Studio Companion free?',
@@ -186,6 +192,7 @@ export const en = {
     signOut: 'Sign out',
     signingOut: 'Signing out…',
     loadingCompare: 'Loading Compare…',
+    loadingLearn: 'Loading Learn…',
     plansLead: 'Start free with every tool. Pro is coming soon.',
     plansLeadPartial: 'What each plan includes right now. Pro is coming soon.',
     // A tool the account's plan does not include (src/components/shell/ToolLocked.tsx).
@@ -350,7 +357,7 @@ export const en = {
     },
     data: {
       section: 'Your data',
-      lead: 'Download everything Studio Companion keeps about you: your profile, preferences, sign-in methods, devices and activity. Your images are not in it, because they never leave your device.',
+      lead: 'Download everything Studio Companion keeps about you: your profile, preferences, sign-in methods, devices, activity and Learn history. Your images are not in it, because they never leave your device.',
       download: 'Download my data',
       preparing: 'Preparing…',
       tooMany: 'Too many downloads in the last hour. Please try again later.',

@@ -29,13 +29,18 @@ interface StoreState {
   // Grid's own working image (see setGridImage / initGridImageFromReference).
   gridImage: string | null;
   gridImageInitialized: boolean;
+  // Which Learn item each picture came from, if any (ADR-0018): saves made
+  // from it name the item, so they are refused once it is no longer open.
+  imageLearnItem: string | null;
+  gridImageLearnItem: string | null;
   isImageLoading: boolean;
   imageLoadError: string | null;
 }
 
 interface StoreActions {
   setActiveTab: (tab: ViewId) => void;
-  setImage: (img: string | null) => void;
+  /** Replace the shared picture; `learnItem` when it is a Learn item's reference (any other picture clears it). */
+  setImage: (img: string | null, learnItem?: string | null) => void;
   setCalibration: (cal: CalibrationLine | null) => void;
   addMeasurement: (line: MeasurementLine) => void;
   updateMeasurement: (id: string, updates: Partial<MeasurementLine>) => void;
@@ -63,7 +68,7 @@ interface StoreActions {
   setGridSettings: (updates: Partial<GridSettings>) => void;
   // Set the Grid's working image directly (Upload / Replace inside Grid). Never
   // touches the main reference image.
-  setGridImage: (img: string | null) => void;
+  setGridImage: (img: string | null, learnItem?: string | null) => void;
   // One-time initialization of the Grid image from the main reference, so Grid
   // never opens empty when a usable reference already exists. No-op once the
   // Grid has its own image.
@@ -95,6 +100,8 @@ function loadFromStorage(): Partial<StoreState> {
       gridSettings: normalizeGridSettings(data.gridSettings),
       gridImage: data.gridImage ?? null,
       gridImageInitialized: data.gridImageInitialized ?? false,
+      imageLearnItem: typeof data.imageLearnItem === 'string' && data.image ? data.imageLearnItem : null,
+      gridImageLearnItem: typeof data.gridImageLearnItem === 'string' && data.gridImage ? data.gridImageLearnItem : null,
     };
   } catch (error) {
     console.error('[useProjectStore] Failed to read project from localStorage:', error);
@@ -115,6 +122,8 @@ function saveToStorage(state: StoreState) {
       gridSettings: state.gridSettings,
       gridImage: state.gridImage,
       gridImageInitialized: state.gridImageInitialized,
+      imageLearnItem: state.image ? state.imageLearnItem : null,
+      gridImageLearnItem: state.gridImage ? state.gridImageLearnItem : null,
       savedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -142,6 +151,8 @@ const initialState: StoreState = {
   gridSettings: { ...DEFAULT_GRID_SETTINGS },
   gridImage: null,
   gridImageInitialized: false,
+  imageLearnItem: null,
+  gridImageLearnItem: null,
   isImageLoading: false,
   imageLoadError: null,
 };
@@ -166,6 +177,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [gridSettings, setGridSettingsRaw] = useState<GridSettings>(normalizeGridSettings(saved.current.gridSettings));
   const [gridImage, setGridImageRaw] = useState<string | null>(saved.current.gridImage ?? null);
   const [gridImageInitialized, setGridImageInitialized] = useState<boolean>(saved.current.gridImageInitialized ?? false);
+  const [imageLearnItem, setImageLearnItem] = useState<string | null>(saved.current.imageLearnItem ?? null);
+  const [gridImageLearnItem, setGridImageLearnItem] = useState<string | null>(saved.current.gridImageLearnItem ?? null);
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [imageLoadError, setImageLoadError] = useState<string | null>(null);
 
@@ -183,19 +196,21 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         activeLayerId, selectedLineId, mode, lineColor,
         showMeasurements, valueSettings, sampledColors, zoom, panOffset, gridSettings,
         gridImage, gridImageInitialized,
+        imageLearnItem, gridImageLearnItem,
         isImageLoading, imageLoadError,
       });
     }, 300);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [image, calibration, measurements, layers, activeLayerId, valueSettings, sampledColors, gridSettings, gridImage, gridImageInitialized, isImageLoading, imageLoadError]);
+  }, [image, calibration, measurements, layers, activeLayerId, valueSettings, sampledColors, gridSettings, gridImage, gridImageInitialized, imageLearnItem, gridImageLearnItem, isImageLoading, imageLoadError]);
 
   const pushUndo = useCallback(() => {
     undoStack.current.push([...measurements]);
     redoStack.current = [];
   }, [measurements]);
 
-  const setImage = useCallback((img: string | null) => {
+  const setImage = useCallback((img: string | null, learnItem: string | null = null) => {
     setImageRaw(img);
+    setImageLearnItem(img && typeof learnItem === 'string' ? learnItem : null);
     setIsImageLoading(!!img);
     setImageLoadError(null);
     if (img) setMode('calibrate');
@@ -319,6 +334,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     setGridSettingsRaw({ ...DEFAULT_GRID_SETTINGS });
     setGridImageRaw(null);
     setGridImageInitialized(false);
+    setImageLearnItem(null);
+    setGridImageLearnItem(null);
     setIsImageLoading(false);
     setImageLoadError(null);
     try {
@@ -343,10 +360,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   // Grid owns its own image. Setting it (Upload / Replace inside Grid) marks the
   // Grid document as initialized so it is never later overwritten by the main
   // reference — and it deliberately does NOT touch the main `image`.
-  const setGridImage = useCallback((img: string | null) => {
+  const setGridImage = useCallback((img: string | null, learnItem: string | null = null) => {
     setGridImageRaw(img);
+    setGridImageLearnItem(img && typeof learnItem === 'string' ? learnItem : null);
     setGridImageInitialized(true);
   }, []);
+
 
   // Copy the main reference into Grid exactly once, so Grid opens ready when a
   // reference already exists. After that the two documents are fully decoupled.
@@ -354,8 +373,9 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     if (gridImageInitialized) return;
     if (!image) return; // nothing to seed yet — a later entry can still init
     setGridImageRaw(image);
+    setGridImageLearnItem(imageLearnItem);
     setGridImageInitialized(true);
-  }, [gridImageInitialized, image]);
+  }, [gridImageInitialized, image, imageLearnItem]);
 
   const store: Store = {
     activeTab, setActiveTab,
@@ -378,6 +398,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     clearAllLines, newProject, exportProjectJSON,
     gridSettings, setGridSettings,
     gridImage, gridImageInitialized, setGridImage, initGridImageFromReference,
+    imageLearnItem, gridImageLearnItem,
     isImageLoading, setImageLoaded,
     imageLoadError, setImageLoadError, clearImageLoadError,
     beginImageUpload,

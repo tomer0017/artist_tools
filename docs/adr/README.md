@@ -23,5 +23,6 @@ change its decision; a new record supersedes it.
 | [0015](0015-print-foundation-grid-pdf.md) | Print foundation: A4 PDFs made in the browser (jsPDF, words as images, true size or stated reduction); the button hidden since M3, the code kept | Accepted |
 | [0016](0016-prepare-worksheets-as-aligned-images.md) | Prepare Worksheets: aligned PNG sheets from one photo, reusing Create a Grid and Study & Simplify | Accepted |
 | [0017](0017-learn-foundations.md) | Learn foundations: versioned content, private assets checked by their bytes, per-item access in the plan catalog, one resolver | Accepted |
+| [0018](0018-learn-screens.md) | Learn screens: the studio's Learn view, personal history and class mode | Accepted |
 
 Format: Context · Decision · Consequences · Alternatives considered.

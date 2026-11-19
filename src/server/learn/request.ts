@@ -1,6 +1,6 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
-import type { Db } from 'mongodb';
+import type { Db, ObjectId } from 'mongodb';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { getEntitlements, type Entitlements } from '@/server/entitlements';
@@ -15,7 +15,7 @@ import { getSession } from '@/server/session';
 export const learnJson = (body: unknown, status = 200) =>
   NextResponse.json(body, { status, headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
 
-export type LearnRequest = { db: Db; entitlements: Entitlements };
+export type LearnRequest = { db: Db; userId: ObjectId; entitlements: Entitlements };
 
 export async function learnRequest(): Promise<LearnRequest | Response> {
   const session = await getSession();
@@ -28,5 +28,5 @@ export async function learnRequest(): Promise<LearnRequest | Response> {
     const { allowed } = await consumeThrottle(db, 'learn', userId.toHexString(), THROTTLES.learnRequests);
     if (!allowed) return learnJson({ error: 'too_many_requests' }, 429);
   }
-  return { db, entitlements };
+  return { db, userId, entitlements };
 }

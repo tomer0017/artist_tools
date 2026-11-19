@@ -22,7 +22,7 @@ export const FIXTURE_LICENCE = {
   notes: null,
 } as const;
 
-const exercise = (id: string, collection: 'curriculum' | 'color', groupId: string, order: number, published: boolean, references: string[], n: string) => ({
+const exercise = (id: string, collection: 'curriculum' | 'color', groupId: string, order: number, published: boolean, references: string[], n: string, tools: string[] = ['grid']) => ({
   id,
   collection,
   groupId,
@@ -37,23 +37,24 @@ const exercise = (id: string, collection: 'curriculum' | 'color', groupId: strin
   success: text('It looks right', 'זה נראה נכון'),
   references: references.map((asset) => ({ asset, alt: text(`Test picture ${asset}`, `תמונת בדיקה ${asset}`) })),
   worksheet: { kind: 'generated' },
-  tools: ['grid'],
+  tools,
 });
 
-const challenge = (id: string, groupId: string, order: number, published: boolean, reference: string, references: string[], n: string) => ({
+type ChallengeTraits = { level?: string; medium?: string; quick?: boolean };
+const challenge = (id: string, groupId: string, order: number, published: boolean, reference: string, references: string[], n: string, traits: ChallengeTraits = {}) => ({
   id,
   groupId,
   order,
   published,
   title: text(`Test challenge ${n}`, `אתגר בדיקה ${n}`),
   prompt: text(`Secret prompt ${id}`, `משימה סודית ${id}`),
-  level: 'beginner',
+  level: traits.level ?? 'beginner',
   skill: text('Contour', 'קו מתאר'),
   skillArea: 3,
   reference,
   references: references.map((asset) => ({ asset, alt: text(`Test picture ${asset}`, `תמונת בדיקה ${asset}`) })),
-  medium: 'pencil',
-  quick: true,
+  medium: traits.medium ?? 'pencil',
+  quick: traits.quick ?? true,
   tools: [],
 });
 
@@ -70,14 +71,16 @@ export function fixtureSeed() {
         { id: 'nature', collection: 'challenges', order: 2, title: text('Nature', 'טבע') },
       ],
       exercises: [
-        exercise('D-TEST-01', 'curriculum', 'basics', 1, true, ['sky'], 'one'),
+        // Every tool shortcut, so the Learn screens' hand-offs are tested (ADR-0018).
+        exercise('D-TEST-01', 'curriculum', 'basics', 1, true, ['sky'], 'one', ['grid', 'value', 'compare', 'measure']),
         exercise('D-TEST-02', 'curriculum', 'basics', 2, true, [], 'two'),
         exercise('D-TEST-03', 'curriculum', 'basics', 3, false, [], 'three'),
         exercise('C-TEST-01', 'color', 'paint', 1, true, ['leaf'], 'four'),
       ],
       challenges: [
         challenge('CH-901', 'objects', 1, true, 'provided', ['wing'], 'one'),
-        challenge('CH-902', 'nature', 2, true, 'life', [], 'two'),
+        // Drawn from one's own photo ("Use my photo"); intermediate, colour welcome, not quick (filters, Random, Quick).
+        challenge('CH-902', 'nature', 2, true, 'own_photo', [], 'two', { level: 'intermediate', medium: 'both', quick: false }),
         challenge('CH-903', 'nature', 3, false, 'life', [], 'three'),
       ],
     },

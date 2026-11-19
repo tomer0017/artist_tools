@@ -13,6 +13,7 @@ import { useTranslations } from 'use-intl';
 import { Download, Loader2, Lock, X } from 'lucide-react';
 import { ProNotice } from '@/components/common/ProFeature';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { fromLearn } from '@/lib/learn/source';
 import { useAccount, useHasFeature } from '@/components/shell/account';
 import { authorizeUse } from '@/lib/features-client';
 import type { ExportFeatureId, FeatureId } from '@/lib/plans';
@@ -42,7 +43,7 @@ import {
 } from './compareArtGif';
 
 /** What went wrong, shown under the sheet (compareTool.export.errors). */
-type ExportError = 'prepare' | 'still' | 'limit' | 'unverified' | 'gif';
+type ExportError = 'prepare' | 'still' | 'limit' | 'unverified' | 'gif' | 'learnLocked';
 
 function Seg<T extends string>({
   value,
@@ -175,7 +176,7 @@ export default function CompareExportSheet() {
       });
       const cropped = applyCrop(canvas, session.crop);
       const blob = await canvasToBlob(cropped, 'image/png');
-      await save({ blob, filename: `compare-${kind}-${Date.now()}.png`, mime: 'image/png', tool: 'compare' });
+      await save({ blob, filename: `compare-${kind}-${Date.now()}.png`, mime: 'image/png', tool: 'compare', ...fromLearn(session.referenceLearnItem) });
     } catch (e) {
       console.error('[CompareExportSheet] still export failed:', e);
       setError('still');
@@ -205,10 +206,11 @@ export default function CompareExportSheet() {
     // Authorized (and counted) before the frames are made, so a refusal costs
     // no encoding; the tool itself must still be included. No answer from the
     // server is a refusal too: nothing is made that cannot be verified.
-    const { access } = await authorizeUse({ tool: 'tool.compare', features: needed });
+    const { access, learnItem } = await authorizeUse({ tool: 'tool.compare', features: needed, ...fromLearn(session.referenceLearnItem) });
     if (access !== 'ok') {
       setBusy(null);
-      if (access === 'locked') {
+      if (access === 'locked' && learnItem) setError('learnLocked');
+      else if (access === 'locked') {
         setProNotice(needed.find((f) => f !== 'export.gif') ?? 'refused');
         void account?.refresh();
       }

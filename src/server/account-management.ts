@@ -136,7 +136,7 @@ export async function exportAccountData(db: Db, userId: ObjectId, now = new Date
   const c = collections(db);
   const user = await c.users.findOne({ _id: userId });
   if (!user) return null;
-  const [accounts, sessions, consents, usage, subscriptions, audit, analytics] = await Promise.all([
+  const [accounts, sessions, consents, usage, subscriptions, audit, analytics, completions] = await Promise.all([
     c.accounts.find({ userId }, { projection: { providerId: 1, createdAt: 1 } }).toArray(),
     c.sessions.find({ userId }, { projection: { userAgent: 1, ipAddress: 1, createdAt: 1, updatedAt: 1, expiresAt: 1 } }).toArray(),
     c.consentEvents.find({ userId }, { sort: { at: 1 } }).toArray(),
@@ -144,6 +144,7 @@ export async function exportAccountData(db: Db, userId: ObjectId, now = new Date
     c.subscriptions.find({ userId }).toArray(),
     c.auditEvents.find({ userId }, { sort: { at: 1 } }).toArray(),
     c.analyticsEvents.find({ userId }, { sort: { at: 1 } }).toArray(),
+    c.learnCompletions.find({ userId }, { sort: { completedAt: 1 }, projection: { itemId: 1, completedAt: 1, contentVersion: 1 } }).toArray(),
   ]);
   return {
     format: 'studio-companion-account-export',
@@ -193,6 +194,8 @@ export async function exportAccountData(db: Db, userId: ObjectId, now = new Date
     featureUsage: usage.map((u) => ({ feature: u.feature, month: u.period, count: u.quantity })),
     activity: audit.map((e) => ({ event: e.type, at: iso(e.at), by: e.actor.split(':')[0], details: e.metadata })),
     productEvents: analytics.map((e) => ({ event: e.name, at: iso(e.at), details: e.props })),
+    // "Mark as completed" in Learn (ADR-0018): the item's ID and when.
+    learnCompletions: completions.map((e) => ({ item: e.itemId, completedAt: iso(e.completedAt), contentVersion: e.contentVersion ?? null })),
   };
 }
 
@@ -238,6 +241,7 @@ export async function removeUserData(db: Db, userId: ObjectId, email: string): P
     c.accessGrants.deleteMany({ userId }),
     c.adminMfa.deleteMany({ _id: userId }),
     c.adminMfaSessions.deleteMany({ userId }),
+    c.learnCompletions.deleteMany({ userId }),
   ]);
   await c.users.deleteOne({ _id: userId });
 }

@@ -1,5 +1,6 @@
 import { Grid3X3, Home, Palette, Ruler, SquareSplitHorizontal, Sun, type LucideIcon } from 'lucide-react';
 import { en } from '@/i18n/messages/en';
+import { isLearnPath } from '@/lib/learn/routes';
 import type { NavViewId, TabId, ViewId } from '@/types/project';
 
 // ─── Tool registry ────────────────────────────────────────────────────────────
@@ -87,8 +88,8 @@ const SLUGS: Record<TabId, string> = {
 /** URL segments of the tools, e.g. for the router to know which tool pages exist. */
 export const TOOL_SLUGS: string[] = Object.values(SLUGS);
 
-/** Every view's URL segment: the tools plus the account and plans pages. */
-const VIEW_SLUGS: Record<Exclude<ViewId, 'home'>, string> = { ...SLUGS, profile: 'profile', plans: 'plans' };
+/** Every view's URL segment: the tools plus the account, plans and Learn pages. */
+const VIEW_SLUGS: Record<Exclude<ViewId, 'home'>, string> = { ...SLUGS, profile: 'profile', plans: 'plans', learn: 'learn' };
 
 /** The studio lives under /app; the site root is the public landing page. */
 const STUDIO_ROOT = '/app';
@@ -105,10 +106,11 @@ export function viewFromPath(segment: string | undefined): ViewId | null {
   return hit ?? null;
 }
 
-/** Parse a studio pathname (/app, /app/study…) into a view; anything else = null. */
+/** Parse a studio pathname (/app, /app/study…) into a view; anything else = null. Learn has screens of its own below /app/learn (src/lib/learn/routes.ts). */
 export function viewFromPathname(pathname: string): ViewId | null {
   if (pathname === STUDIO_ROOT || pathname === `${STUDIO_ROOT}/`) return 'home';
   if (!pathname.startsWith(`${STUDIO_ROOT}/`)) return null;
   const segment = pathname.slice(STUDIO_ROOT.length + 1).replace(/\/$/, '');
+  if (isLearnPath(`${STUDIO_ROOT}/${segment}`)) return 'learn';
   return segment.includes('/') ? null : viewFromPath(segment);
 }

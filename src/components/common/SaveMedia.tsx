@@ -32,6 +32,7 @@ import { useAccount } from '@/components/shell/account';
 import { pathForView } from '@/components/shell/tools';
 import type { ToolId } from '@/lib/account';
 import { authorizeUse, type FeatureDecision } from '@/lib/features-client';
+import { fromLearn } from '@/lib/learn/source';
 import { TOOL_FEATURES, isToolFeature, type ExportFeatureId, type FeatureId } from '@/lib/plans';
 import {
   canShareFile,
@@ -64,12 +65,16 @@ export interface SaveMediaInput {
   authorized?: boolean;
   /** For a file the sheet cannot show itself (a PDF): a picture of it. */
   preview?: Blob;
+  /** The Learn item whose reference this was made from: it must still be open to the account (ADR-0018). */
+  learnItem?: string | null;
 }
 
 /** A protected operation of a tool: the tool, and what it exports (none, e.g. a project file). */
 export interface ToolUse {
   tool: ToolId;
   features: ExportFeatureId[];
+  /** Made from a Learn item's reference: that item must still be open to the account (ADR-0018). */
+  learnItem?: string | null;
 }
 
 interface SaveMediaContextValue {
@@ -109,7 +114,7 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
 
   const ask = useCallback(
     async (use: ToolUse, retry: (() => void) | null): Promise<boolean> => {
-      const decision = await authorizeUse({ tool: TOOL_FEATURES[use.tool], features: use.features });
+      const decision = await authorizeUse({ tool: TOOL_FEATURES[use.tool], features: use.features, ...fromLearn(use.learnItem) });
       if (decision.access === 'ok') return true;
       // Signed out: already on the way to sign in.
       if (decision.access !== 'signed_out') setRefusal({ decision, use, retry: decision.access === 'unavailable' ? retry : null });
@@ -126,7 +131,11 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
     async (media: SaveMediaInput): Promise<boolean> => {
       const mime = media.mime ?? mimeForFilename(media.filename);
       if (!media.authorized) {
-        const use: ToolUse = { tool: media.tool, features: [isGif(mime) ? 'export.gif' : isPdf(mime) ? 'export.pdf' : 'export.image', ...(media.features ?? [])] };
+        const use: ToolUse = {
+          tool: media.tool,
+          features: [isGif(mime) ? 'export.gif' : isPdf(mime) ? 'export.pdf' : 'export.image', ...(media.features ?? [])],
+          ...fromLearn(media.learnItem),
+        };
         if (!(await ask(use, () => void save(media)))) return false;
       }
       const url = URL.createObjectURL(media.blob);
@@ -215,7 +224,9 @@ function RefusalSheet({ refusal, onClose }: { refusal: Refusal; onClose: () => v
         ? { title: t('limitTitle'), body: t('limitBody', { feature: name(feature) }) }
         : tool
           ? { title: t('lockedTitle'), body: t('lockedTool', { tool: name(tool) }) }
-          : { title: t('lockedTitle'), body: t('lockedExport', { feature: name(feature) }) };
+          : decision.learnItem
+            ? { title: t('lockedTitle'), body: t('lockedLearn') }
+            : { title: t('lockedTitle'), body: t('lockedExport', { feature: name(feature) }) };
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
       <button className="absolute inset-0 bg-black/60" aria-label={t('close')} onClick={onClose} />

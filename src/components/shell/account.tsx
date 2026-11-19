@@ -35,7 +35,7 @@ const RETURN_CHECK_MS = 10_000;
 const CHANNEL = 'studio-account';
 
 /** Whether two copies of the account differ in what it may use (worth telling the other tabs). */
-const accessKey = (a: StudioAccount) => JSON.stringify([a.role, a.access, a.plan, [...a.features].sort(), a.offer, a.quotas]);
+const accessKey = (a: StudioAccount) => JSON.stringify([a.role, a.access, a.plan, [...a.features].sort(), a.offer, a.quotas, a.learn?.key ?? null]);
 
 /**
  * Holds the account the server rendered the studio with, and keeps it current,
@@ -193,6 +193,13 @@ export const useAccount = () => useContext(AccountContext);
 export function useHasFeature(feature: FeatureId): boolean {
   const state = useContext(AccountContext);
   return state ? state.account.features.includes(feature) : false;
+}
+
+const NO_LEARN: StudioAccount['learn'] = { visible: false, modules: { curriculum: null, color: null, challenges: null }, key: 'none' };
+
+/** What the studio shows of Learn (ADR-0018): whether it appears at all, and each collection as open, locked or absent. */
+export function useLearnSummary(): StudioAccount['learn'] {
+  return useContext(AccountContext)?.account.learn ?? NO_LEARN;
 }
 
 /** Whether the account may open each tool now (the server's latest decision); no account: nothing opens. */

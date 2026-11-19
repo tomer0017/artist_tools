@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PLAN_IDS, PLAN_NAMES } from '@/lib/plans';
 import { COLLECTION_LABELS, LEARN_COLLECTIONS, emptyContent, itemsOf, orderedItems, ruleText, type LearnContent } from '@/lib/learn/model';
+import { itemPath } from '@/lib/learn/routes';
 import { signInMethods } from '@/server/account-management';
 import { catalogSpec, defaultCatalog, learnSectionOf, planOpens, readCatalog } from '@/server/config/catalog';
 import { UnreadableConfigError, getDraft, getPublished, listVersions } from '@/server/config/versions';
@@ -55,6 +56,8 @@ export default async function AdminLearnPage() {
   const assetById = new Map(assets.map((a) => [a._id, a]));
   const originals = assets.filter((a) => a.role !== 'thumbnail');
   const shown = draft ? `draft version ${draft.version}` : `version ${published?.version ?? '—'} (live)`;
+  // Items of the live version open in the studio (a draft's new items do not exist there yet).
+  const liveIds = new Set(itemsOf(live).map((item) => item.id));
 
   return (
     <AdminShell active="learn">
@@ -118,7 +121,15 @@ export default async function AdminLearnPage() {
                   {items.map((item, index) => (
                     <tr key={item.id} className="border-t border-border align-top">
                       <td className="px-4 py-2 text-muted-foreground">{index + 1}</td>
-                      <td className="px-4 py-2 font-mono text-xs text-foreground">{item.id}</td>
+                      <td className="px-4 py-2 font-mono text-xs text-foreground">
+                        {item.id}
+                        {/* The live version as learners see it (ADR-0018); admins open unpublished items too. */}
+                        {liveIds.has(item.id) && (
+                          <Link href={itemPath(item.id)} className="mt-1 block font-sans text-xs text-primary underline-offset-2 hover:underline">
+                            Open in the studio
+                          </Link>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-foreground">
                         {item.title.en}
                         <span className="block text-muted-foreground" dir="rtl" lang="he">{item.title.he}</span>

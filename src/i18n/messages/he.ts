@@ -6,6 +6,7 @@ import { gridHe } from './tools/grid';
 import { compareHe } from './tools/compare';
 import { commonHe } from './tools/common';
 import { worksheetsHe } from './tools/worksheets';
+import { learnHe } from './learn';
 
 // Hebrew messages. Same keys as English (the type enforces it). Phrasing is
 // gender-neutral: actions are nouns or infinitives ("כניסה", "ליצור חשבון"),
@@ -21,6 +22,7 @@ export const he: Messages = {
   compareTool: compareHe,
   toolsCommon: commonHe,
   worksheets: worksheetsHe,
+  learn: learnHe,
   meta: {
     siteDescription: 'ערכת כלים לציירים: מדידה, לימוד ערכים, ערבוב צבעים ורשת להעברת ציור.',
     pricingTitle: 'מסלולים · Studio Companion',
@@ -158,6 +160,9 @@ export const he: Messages = {
       difference: { label: 'GIF השוואה + הבדלים', detail: 'הנפשות שמדגישות את מה ששונה' },
       pdf: { label: 'קובצי PDF להדפסה', detail: 'A4: תמונת הייחוס עם הרשת ורשת ריקה תואמת, בקנה מידה' },
       worksheets: { label: 'דפי תרגול', detail: 'דפי תרגול מהתמונה שלך: המקור, קו מתאר, הרשת והערכים, מיושרים זה לזה' },
+      learnCurriculum: { label: 'קורס רישום', detail: 'תרגילים צעד אחר צעד ברישום מהתבוננות, בעיפרון ונייר' },
+      learnColor: { label: 'קורס צבע', detail: 'תרגילים בהתבוננות בצבע ובערבוב צבעים, אחרי יסודות העיפרון' },
+      learnChallenges: { label: 'אתגרי רישום', detail: 'נושאים לרישום, מסקיצות מהירות ועד תרגילים ארוכים' },
     },
     faq: {
       freeQ: 'האם Studio Companion חינמי?',
@@ -187,6 +192,7 @@ export const he: Messages = {
     signOut: 'יציאה',
     signingOut: 'יוצאים…',
     loadingCompare: 'טוענים את כלי ההשוואה…',
+    loadingLearn: 'בטעינה…',
     plansLead: 'מתחילים בחינם עם כל הכלים. Pro יגיע בקרוב.',
     plansLeadPartial: 'מה כל מסלול כולל כרגע. Pro יגיע בקרוב.',
     locked: {
@@ -350,7 +356,7 @@ export const he: Messages = {
     },
     data: {
       section: 'הנתונים שלך',
-      lead: 'הורדה של כל מה ש-Studio Companion שומר על החשבון: פרופיל, העדפות, שיטות כניסה, מכשירים ופעילות. התמונות לא כלולות, כי הן לא יוצאות מהמכשיר.',
+      lead: 'הורדה של כל מה ש-Studio Companion שומר על החשבון: פרופיל, העדפות, שיטות כניסה, מכשירים, פעילות והיסטוריית הלמידה. התמונות לא כלולות, כי הן לא יוצאות מהמכשיר.',
       download: 'הורדת הנתונים שלי',
       preparing: 'מכינים…',
       tooMany: 'יותר מדי הורדות בשעה האחרונה. כדאי לנסות שוב מאוחר יותר.',

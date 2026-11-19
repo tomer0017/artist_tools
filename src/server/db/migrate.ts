@@ -96,6 +96,9 @@ export const INDEXES: IndexPlan[] = [
   // Learn's asset metadata (ADR-0017), newest first for the admin page; thumbnails by the asset they preview.
   { collection: 'learn_assets', key: { uploadedAt: -1 }, options: { name: 'learn_assets_by_time' } },
   { collection: 'learn_assets', key: { of: 1 }, options: { name: 'learn_assets_by_original', partialFilterExpression: { of: { $type: 'string' } } } },
+  // Learn completions (ADR-0018): a person's history, newest first, and per item (ticks and counts).
+  { collection: 'learn_completions', key: { userId: 1, completedAt: -1 }, options: { name: 'learn_completions_by_user' } },
+  { collection: 'learn_completions', key: { userId: 1, itemId: 1, completedAt: -1 }, options: { name: 'learn_completions_by_item' } },
 ];
 
 export interface MigrationReport {

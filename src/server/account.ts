@@ -4,6 +4,7 @@ import { TOOL_IDS, type AccountSummary, type ToolId } from '@/lib/account';
 import { DEFAULT_CURRENCY, DEFAULT_LOCALE, isCurrency, isLocale } from '@/lib/locale';
 import { collections } from '@/server/db/collections';
 import { getEntitlements, type Entitlements } from '@/server/entitlements';
+import { learnSummaryOf } from '@/server/learn/live';
 
 /**
  * The signed-in person's own account, read fresh from the database (never from
@@ -46,6 +47,7 @@ export async function getAccountSummary(
       features: entitlements.features,
       offer: entitlements.offer,
       asOf: now.toISOString(),
+      learn: learnSummaryOf(entitlements),
       introsSeen: (user.introsSeen ?? []).filter((tool): tool is ToolId => (TOOL_IDS as readonly string[]).includes(tool)),
       locale: isLocale(user.locale) ? user.locale : DEFAULT_LOCALE,
       currency: isCurrency(user.currency) ? user.currency : DEFAULT_CURRENCY,

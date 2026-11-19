@@ -1,8 +1,10 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
 import type { Db } from 'mongodb';
 import { LEARN_FEATURE_IDS } from '@/lib/plans';
+import type { LearnSummary } from '@/lib/account';
 import { learnAccess, type ItemState, type LearnAccessView, type LearnViewer } from '@/lib/learn/access';
-import type { LearnContent, LearnItem } from '@/lib/learn/model';
+import { LEARN_COLLECTIONS, LEARN_MODULE, type LearnContent, type LearnItem } from '@/lib/learn/model';
 import type { Entitlements } from '@/server/entitlements';
 import { getPublished } from '@/server/config/versions';
 import { learnContentSpec, publishedLearnContent } from './content';
@@ -22,6 +24,25 @@ export function learnViewerOf(entitlements: Entitlements): LearnViewer {
     offered: LEARN_FEATURE_IDS.filter((f) => offered.has(f)),
     access: entitlements.learn,
   };
+}
+
+/**
+ * What the studio shows of Learn for this account (ADR-0018): whether Learn
+ * appears at all, and each collection as open, locked (offered by another
+ * plan) or absent. A module no published plan offers is not shown, so Learn
+ * stays invisible to everyone but admins until a module is published.
+ */
+export function learnSummaryOf(entitlements: Entitlements): LearnSummary {
+  const viewer = learnViewerOf(entitlements);
+  const modules = Object.fromEntries(
+    LEARN_COLLECTIONS.map((collection) => {
+      const feature = LEARN_MODULE[collection];
+      const state = !viewer.active ? null : viewer.admin || viewer.modules.includes(feature) ? 'open' : viewer.offered.includes(feature) ? 'locked' : null;
+      return [collection, state];
+    }),
+  ) as LearnSummary['modules'];
+  const key = createHash('sha256').update(JSON.stringify([modules, viewer.admin ? 'admin' : viewer.access])).digest('base64url').slice(0, 16);
+  return { visible: Object.values(modules).some((state) => state !== null), modules, key };
 }
 
 export interface LiveLearn {

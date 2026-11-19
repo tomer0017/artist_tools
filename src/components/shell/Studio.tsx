@@ -29,6 +29,8 @@ import { useToolAllowed } from '@/components/shell/account';
 // Compare Art (with its gifenc dependency) is code-split so it never weighs down
 // the initial load of the other workspaces.
 const CompareArt = lazy(() => import('@/features/compare-art/CompareArt'));
+// Learn (ADR-0018) is loaded only when it is opened: most accounts never see it.
+const LearnView = lazy(() => import('@/components/learn/LearnView'));
 
 const queryClient = new QueryClient();
 
@@ -165,6 +167,11 @@ function Workspace() {
         {activeTab === 'home' && <HomeScreen />}
         {activeTab === 'profile' && <ProfileScreen />}
         {activeTab === 'plans' && <PlansScreen />}
+        {activeTab === 'learn' && (
+          <Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">{t('loadingLearn')}</div>}>
+            <LearnView />
+          </Suspense>
+        )}
         {/* Measure keeps all of its work in the persisted project store and
             listens for keyboard shortcuts on window, so it mounts only while
             visible rather than being kept alive. Grid is fully persisted too. */}

@@ -185,6 +185,7 @@ export const compareEn = {
     errors: {
       differencePro: 'Compare + Difference GIFs are part of Pro.',
       notInPlan: 'Your plan does not include this GIF.',
+      learnLocked: 'This reference comes from Learn and your plan does not include it now, so nothing was made.',
       limit: 'You have used all the GIFs your plan includes for now. See your account page for when more are available.',
       unverified: 'Nothing was made: your plan could not be checked just now. Check your connection and try again.',
       failed: 'GIF failed. Try a smaller output size in Export.',
@@ -284,6 +285,7 @@ export const compareEn = {
     exactNote: 'The GIF uses the exact alignment shown on screen.',
     errors: {
       prepare: 'Could not prepare images for export.',
+      learnLocked: 'This reference comes from Learn and your plan does not include it now, so nothing was made.',
       still: 'Export failed. The image may be too large.',
       limit: 'You have used all the GIFs your plan includes for now. See your account page for when more are available.',
       unverified: 'Nothing was made: your plan could not be checked just now. Check your connection and try again.',
@@ -519,6 +521,7 @@ export const compareHe: typeof compareEn = {
     errors: {
       differencePro: 'GIF השוואה + הבדלים כלול ב-Pro.',
       notInPlan: 'המסלול שלך לא כולל את ה-GIF הזה.',
+      learnLocked: 'תמונת הייחוס הזו מגיעה מ„ללמוד לרשום” והמסלול הנוכחי כבר לא כולל אותה, ולכן שום דבר לא נוצר.',
       limit: 'נוצלו כל קובצי ה-GIF שהמסלול כולל כרגע. בדף החשבון אפשר לראות מתי יתווספו עוד.',
       unverified: 'שום דבר לא נוצר: לא הצלחנו לבדוק כרגע את המסלול. כדאי לבדוק את החיבור ולנסות שוב.',
       failed: 'יצירת ה-GIF נכשלה. כדאי לנסות גודל קטן יותר באפשרויות השמירה.',
@@ -615,6 +618,7 @@ export const compareHe: typeof compareEn = {
     exactNote: 'ה-GIF שומר בדיוק על היישור שמוצג על המסך.',
     errors: {
       prepare: 'לא הצלחנו להכין את התמונות לשמירה.',
+      learnLocked: 'תמונת הייחוס הזו מגיעה מ„ללמוד לרשום” והמסלול הנוכחי כבר לא כולל אותה, ולכן שום דבר לא נוצר.',
       still: 'השמירה נכשלה. ייתכן שהתמונה גדולה מדי.',
       limit: 'נוצלו כל קובצי ה-GIF שהמסלול כולל כרגע. בדף החשבון אפשר לראות מתי יתווספו עוד.',
       unverified: 'שום דבר לא נוצר: לא הצלחנו לבדוק כרגע את המסלול. כדאי לבדוק את החיבור ולנסות שוב.',

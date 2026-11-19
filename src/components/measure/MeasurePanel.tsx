@@ -7,6 +7,7 @@ import {
   ChevronDown, ChevronRight, Pencil, Plus,
 } from 'lucide-react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { fromLearn } from '@/lib/learn/source';
 import { canvasToBlob } from '@/lib/saveMedia';
 
 export default function MeasurePanel() {
@@ -15,6 +16,7 @@ export default function MeasurePanel() {
     measurements, updateMeasurement, deleteMeasurement, selectedLineId, setSelectedLineId,
     layers, activeLayerId, setActiveLayerId, toggleLayerVisibility, addLayer, deleteLayer,
     calibration, clearAllLines, newProject, exportProjectJSON, image,
+    imageLearnItem,
   } = useProject();
   const { save, authorize } = useSaveMedia();
 
@@ -80,18 +82,18 @@ export default function MeasurePanel() {
         ctx.fillText(line.label || getRealSize(line), mx, my - 8);
       });
       canvasToBlob(canvas, 'image/png')
-        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure' }))
+        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure', ...fromLearn(imageLearnItem) }))
         .catch((error) => console.error('[MeasurePanel] Failed to export annotated PNG:', error));
       } catch (error) {
         console.error('[MeasurePanel] Failed to export annotated PNG:', error);
       }
     };
     img.src = image;
-  }, [image, measurements, getRealSize, save, t]);
+  }, [image, imageLearnItem, measurements, getRealSize, save, t]);
 
   const handleExportJSON = useCallback(async () => {
     // A protected operation of the tool: only while the plan still includes Measure.
-    if (!(await authorize({ tool: 'measure', features: [] }))) return;
+    if (!(await authorize({ tool: 'measure', features: [], ...fromLearn(imageLearnItem) }))) return;
     try {
       const json = exportProjectJSON();
       const blob = new Blob([json], { type: 'application/json' });
@@ -104,7 +106,7 @@ export default function MeasurePanel() {
     } catch (error) {
       console.error('[MeasurePanel] Failed to export project JSON:', error);
     }
-  }, [exportProjectJSON, authorize]);
+  }, [exportProjectJSON, authorize, imageLearnItem]);
 
   const handleNew = () => {
     if (confirmNew) { newProject(); setConfirmNew(false); }

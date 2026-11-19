@@ -56,7 +56,13 @@ export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
  * marked `whenOffered` appears only once some plan (or the account) has it,
  * so nobody is shown a capability no plan includes.
  */
-export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'difference' | 'pdf' | 'worksheets'; label: string; detail: string; features: FeatureId[]; whenOffered?: boolean }[] = [
+export const FEATURE_MATRIX: {
+  id: 'tools' | 'images' | 'gifs' | 'large' | 'difference' | 'pdf' | 'worksheets' | 'learnCurriculum' | 'learnColor' | 'learnChallenges';
+  label: string;
+  detail: string;
+  features: FeatureId[];
+  whenOffered?: boolean;
+}[] = [
   {
     id: 'tools',
     label: 'All five tools',
@@ -69,6 +75,10 @@ export const FEATURE_MATRIX: { id: 'tools' | 'images' | 'gifs' | 'large' | 'diff
   { id: 'difference', label: 'Compare + Difference GIFs', detail: 'Animations that highlight what differs', features: ['export.gif_difference'] },
   { id: 'pdf', label: 'Print-ready PDFs', detail: 'A4: the reference with its grid and a matching blank grid, to scale', features: ['export.pdf'], whenOffered: true },
   { id: 'worksheets', label: 'Worksheets', detail: 'Practice sheets from your photo: the original, an outline, the grid and the values, aligned', features: ['export.worksheets'], whenOffered: true },
+  // Learn's modules (ADR-0018): shown once a published plan offers them, like the exports above.
+  { id: 'learnCurriculum', label: 'Drawing course', detail: 'Step-by-step exercises in drawing from observation, with pencil and paper', features: ['learn.curriculum'], whenOffered: true },
+  { id: 'learnColor', label: 'Color course', detail: 'Exercises in seeing and mixing color, after the pencil basics', features: ['learn.color'], whenOffered: true },
+  { id: 'learnChallenges', label: 'Drawing challenges', detail: 'Subjects to draw, from quick sketches to longer studies', features: ['learn.challenges'], whenOffered: true },
 ];
 
 /** Short names for usage counts and admin screens. */

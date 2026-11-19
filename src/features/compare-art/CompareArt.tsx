@@ -29,7 +29,8 @@ import {
 import ToolHeader, { HeaderIconButton, StepIndicator } from '@/components/shell/ToolHeader';
 import { CompareProvider, useCompare } from './compareArtState';
 import { CompareIntroModal, useCompareIntro } from './onboarding';
-import { openImagePicker } from './compareArtImage';
+import { loadImageMeta, openImagePicker } from './compareArtImage';
+import { useLearnHandoff } from '@/hooks/useLearnHandoff';
 import { ImageCrop, NudgeStep } from './compareArtTypes';
 import CompareUploadStep from './CompareUploadStep';
 import CompareCanvas, { AnchorState, computeAnchorTransform } from './CompareCanvas';
@@ -83,6 +84,20 @@ function Workspace() {
   const [cropReq, setCropReq] = useState<
     { role: 'artwork' | 'reference'; original: string; initialCrop: ImageCrop | null } | null
   >(null);
+
+  // A Learn exercise's or challenge's reference handed over by "Open in
+  // Compare & Correct" (ADR-0018): it becomes the reference, marked with its
+  // item, and the comparison waits for a photo of the drawing.
+  useLearnHandoff('compare', ({ image, learnItem }) => {
+    void loadImageMeta(image)
+      .then((meta) => {
+        store.setReference(image, meta, learnItem);
+        setCropReq(null);
+        setSheet(null);
+        setPhase('images');
+      })
+      .catch((e) => console.error('[CompareArt] The Learn reference could not be opened:', e));
+  });
 
   // Replace ONLY the painting (camera or library). Everything else — reference,
   // crop, alignment, zoom, mode, opacity, split, grid — is preserved because

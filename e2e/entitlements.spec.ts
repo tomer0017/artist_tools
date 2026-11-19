@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
-import { test, expect, type Browser, type Page } from '@playwright/test';
+import { test, expect, type Browser, type Page, type Response } from '@playwright/test';
 import { photo } from './fixtures/photo';
 
 // What each plan may use, enforced (src/server/entitlements.ts,
@@ -611,8 +611,8 @@ async function publishLearn(page: Page, open: boolean) {
 }
 
 test('Learn: a module and a First N list published in Admin → Plans open exactly that item for Free, at once, and taking them back locks it at once', async ({ browser }) => {
-  // Three sign-ins and two publications through the dashboard.
-  test.setTimeout(120_000);
+  // Three sign-ins, two publications through the dashboard, and an open card locking (within a minute).
+  test.setTimeout(240_000);
   const admin = await adminPage(browser);
   const free = await signedIn(browser, 'ENT_Free');
   const pro = await signedIn(browser, 'ENT_Pro');
@@ -635,7 +635,10 @@ test('Learn: a module and a First N list published in Admin → Plans open exact
     const opened = await item(free.page, 'CH-901');
     expect(opened.status).toBe(200);
     expect(opened.body.item.prompt.en).toBe('Secret prompt CH-901');
-    expect(await item(free.page, 'CH-902')).toEqual({ status: 403, body: { error: 'locked', reason: 'not_in_plan', feature: 'learn.challenges' } });
+    // Locked by the rule: refused, with only what its list shows (its title, place and lock; ADR-0018).
+    const closed = await item(free.page, 'CH-902');
+    expect(closed).toMatchObject({ status: 403, body: { error: 'locked', reason: 'not_in_plan', feature: 'learn.challenges', item: { id: 'CH-902', title: { en: 'Test challenge two' }, open: false, lock: 'not_in_plan' } } });
+    expect(JSON.stringify(closed.body)).not.toContain('Secret prompt');
     expect((await item(free.page, 'CH-903')).status).toBe(404);
     expect((await item(free.page, 'D-TEST-01')).body).toMatchObject({ reason: 'module_off' });
     const list = await (await free.page.request.get('/api/learn/items?collection=challenges')).json();
@@ -650,9 +653,56 @@ test('Learn: a module and a First N list published in Admin → Plans open exact
     expect(await item(pro.page, 'CH-901')).toMatchObject({ status: 403, body: { reason: 'module_off' } });
     const proList = await (await pro.page.request.get('/api/learn/items?collection=challenges')).json();
     expect(proList.items.map((r: { id: string; lock: string | null }) => `${r.id}:${r.lock}`)).toEqual(['CH-901:module_off', 'CH-902:module_off']);
+
+    // What Free sees (ADR-0018): Learn on Home with the challenges only (the course is in no plan).
+    await free.page.goto('/app');
+    const onHome = free.page.locator('[data-home-learn]');
+    await expect(onHome.getByRole('link', { name: /^Pick a challenge/ })).toBeVisible();
+    await expect(onHome.getByRole('link', { name: /^Drawing course/ })).toHaveCount(0);
+    await expect(free.page.locator('[data-nav-learn]')).toBeVisible();
+    // The list: CH-901 open, CH-902 locked by the rule (title only), the draft not at all.
+    await free.page.goto('/app/learn/challenges');
+    await expect(free.page.locator('[data-learn-item]')).toHaveCount(2);
+    await expect(free.page.locator('[data-learn-item="CH-901"]')).toHaveAttribute('data-open', 'true');
+    const lockedCard = free.page.locator('[data-learn-item="CH-902"]');
+    await expect(lockedCard).toHaveAttribute('data-open', 'false');
+    await expect(lockedCard.locator('[data-locked-badge]')).toHaveText('Locked');
+    await expect(lockedCard.locator('img')).toHaveCount(0);
+    expect(await free.page.content()).not.toContain('Secret');
+    // Random and Quick never offer the locked one.
+    for (const pick of ['Random', 'Quick'] as const) {
+      await free.page.goto('/app/learn/challenges');
+      await free.page.getByRole('button', { name: pick, exact: true }).click();
+      await expect(free.page).toHaveURL(/\/app\/learn\/challenges\/CH-901\?pick=filters(-quick)?$/);
+    }
+    // Its own address: the locked page, with nothing of its content in the page or its data.
+    const answers: string[] = [];
+    const record = (r: Response) => {
+      if (r.url().includes('/api/learn/items/CH-902')) answers.push(String(r.status()));
+    };
+    free.page.on('response', record);
+    await free.page.goto('/app/learn/challenges/CH-902');
+    const lockedPage = free.page.locator('[data-learn-locked="not_in_plan"]');
+    await expect(lockedPage.getByRole('heading', { level: 1 })).toHaveText('“Test challenge two” is not included in your plan');
+    await expect(lockedPage.getByRole('link', { name: 'Compare plans' })).toHaveAttribute('href', '/app/plans');
+    await expect(lockedPage.getByRole('link', { name: 'Back to Learn' })).toHaveAttribute('href', '/app/learn');
+    expect(await free.page.content()).not.toContain('Secret prompt');
+    expect(answers).toContain('403');
+    free.page.off('response', record);
+    const results = await new AxeBuilder({ page: free.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    expect(results.violations).toEqual([]);
+    // Pro: the module is in Free's plan only, so Pro sees the challenges locked.
+    await pro.page.goto('/app/learn/challenges/CH-901');
+    await expect(pro.page.locator('[data-learn-locked="module_off"]').getByRole('heading', { level: 1 })).toHaveText('“Test challenge one” is not included in your plan');
+    // Free leaves CH-901's card open while the admin takes it back.
+    await free.page.goto('/app/learn/challenges/CH-901');
+    await expect(free.page.locator('[data-learn-card="CH-901"] [data-learn-instruction]')).toHaveText('Secret prompt CH-901');
   } finally {
     if (learnPublished) await publishLearn(admin.page, false);
   }
+  // The open card locks on its next refresh (within a minute), with no navigation.
+  await expect(free.page.locator('[data-learn-card]')).toHaveCount(0, { timeout: 75_000 });
+  await expect(free.page.getByText('Secret prompt CH-901')).toHaveCount(0);
   // Taken back: refused at once, also the picture's address that worked a moment ago.
   expect(await item(free.page, 'CH-901')).toMatchObject({ status: 403, body: { reason: 'module_off' } });
   expect((await free.page.request.get(`/api/learn/assets/${image}`)).status()).toBe(403);

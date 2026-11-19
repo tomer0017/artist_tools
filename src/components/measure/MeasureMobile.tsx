@@ -9,6 +9,7 @@ import ToolHeader, { HeaderIconButton, StepIndicator } from '@/components/shell/
 import { useProject } from '@/hooks/useProjectStore';
 import { MeasureIntroModal, MeasureScaleSuccess, TapCoach, useMeasureIntro, useScaleSuccess } from './onboarding';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { fromLearn } from '@/lib/learn/source';
 import ImageUploader from '@/components/common/ImageUploader';
 import {
   type Point, type MeasurementLine, genId, distanceBetween, realWorldLength, LINE_COLORS,
@@ -40,6 +41,7 @@ export default function MeasureMobile() {
     undo, redo, newProject, clearAllLines, exportProjectJSON,
     setImage, setMode,
     isImageLoading, imageLoadError, setImageLoaded, setImageLoadError, clearImageLoadError, beginImageUpload,
+    imageLearnItem,
   } = useProject();
 
   // Redesigned onboarding: a single illustrated Step-1 modal (auto-shown once,
@@ -637,7 +639,7 @@ export default function MeasureMobile() {
 
       const finish = (blob: Blob | null) => {
         if (!blob) return;
-        void save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure' });
+        void save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure', ...fromLearn(imageLearnItem) });
       };
       if (c.toBlob) c.toBlob(finish, 'image/png');
       else {
@@ -656,19 +658,19 @@ export default function MeasureMobile() {
       console.error('[MeasureMobile] Failed to load image for PNG export:', e);
     };
     img.src = image;
-  }, [image, measurements, layers, getRealSize, save, t]);
+  }, [image, imageLearnItem, measurements, layers, getRealSize, save, t]);
 
   const exportJSON = useCallback(async () => {
     setSheet(null);
     // A protected operation of the tool: only while the plan still includes Measure.
-    if (!(await authorize({ tool: 'measure', features: [] }))) return;
+    if (!(await authorize({ tool: 'measure', features: [], ...fromLearn(imageLearnItem) }))) return;
     try {
       const blob = new Blob([exportProjectJSON()], { type: 'application/json' });
       triggerDownload(blob, 'studio-companion-project.json');
     } catch (error) {
       console.error('[MeasureMobile] Failed to export project JSON:', error);
     }
-  }, [exportProjectJSON, triggerDownload, authorize]);
+  }, [exportProjectJSON, triggerDownload, authorize, imageLearnItem]);
 
   // ---------- Render ----------
   if (!image) {

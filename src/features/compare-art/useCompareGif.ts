@@ -7,6 +7,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useSaveMedia } from '@/components/common/SaveMedia';
+import { fromLearn } from '@/lib/learn/source';
 import { useAccount, useHasFeature } from '@/components/shell/account';
 import { authorizeUse } from '@/lib/features-client';
 import type { ExportFeatureId } from '@/lib/plans';
@@ -25,7 +26,7 @@ import {
 } from './compareArtGif';
 
 /** Why the one-tap GIF did not happen; the button shows the message (compareTool.quickGif.errors). */
-export type QuickGifError = 'differencePro' | 'notInPlan' | 'limit' | 'unverified' | 'failed';
+export type QuickGifError = 'differencePro' | 'notInPlan' | 'learnLocked' | 'limit' | 'unverified' | 'failed';
 
 export interface QuickGifState {
   busy: boolean;
@@ -66,10 +67,11 @@ export function useCompareGif(): QuickGifState {
       if (animation === 'compare-diff') needed.push('export.gif_difference');
       // Authorized (and counted) before the frames are made; the tool itself
       // must still be included, and no answer from the server is a refusal.
-      const { access } = await authorizeUse({ tool: 'tool.compare', features: needed });
+      const { access, learnItem } = await authorizeUse({ tool: 'tool.compare', features: needed, ...fromLearn(session.referenceLearnItem) });
       if (access !== 'ok') {
         setBusy(false);
-        if (access === 'locked') {
+        if (access === 'locked' && learnItem) setError('learnLocked');
+        else if (access === 'locked') {
           setError('notInPlan');
           void account?.refresh();
         }
