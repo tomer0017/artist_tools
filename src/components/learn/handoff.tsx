@@ -2,8 +2,10 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'use-intl';
 import type { ToolId } from '@/lib/account';
+import type { ToolPreset } from '@/lib/learn/model';
 import { useProject } from '@/hooks/useProjectStore';
 import { handOff } from '@/hooks/useLearnHandoff';
+import { setLearnReturn, type LearnReturn } from '@/hooks/useLearnReturn';
 import { loadSession as loadCompareSession } from '@/features/compare-art/compareArtStorage';
 import { useToolAllowed } from '@/components/shell/account';
 import { pathForView } from '@/components/shell/tools';
@@ -18,15 +20,37 @@ import { buttonPrimary, buttonSecondary } from './parts';
 // open in the tool is replaced only after asking. No tool code is duplicated:
 // Measure and Create a Grid take it through the project store, Study &
 // Simplify and Compare & Correct when they open (src/hooks/useLearnHandoff.ts).
+//
+// From a lesson's step (ADR-0019), a link can also set the tool the way the
+// step needs it, as if the person had chosen it: Study's values (3, 5 …) or
+// Create a Grid's columns and rows. Nothing else in the tool changes. The tool
+// then shows the way back to the lesson (src/components/learn/ReturnBar.tsx).
+
+export interface HandoffOptions {
+  preset?: ToolPreset;
+  /** Where "Back to …" leads from the tool. */
+  back?: LearnReturn;
+}
 
 export function useToolHandoff() {
   const router = useRouter();
   const t = useTranslations('learn.item');
-  const { image, gridImage, imageLearnItem, gridImageLearnItem, setImage, setGridImage } = useProject();
+  const { image, gridImage, imageLearnItem, gridImageLearnItem, setImage, setGridImage, setValueSettings, setGridSettings } = useProject();
   const allowed = useToolAllowed();
   const [busy, setBusy] = useState<ToolId | null>(null);
-  const [confirming, setConfirming] = useState<{ tool: ToolId; item: OpenItem } | null>(null);
+  const [confirming, setConfirming] = useState<{ tool: ToolId; item: OpenItem; options: HandoffOptions } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /** A step's preset, set as if chosen in the tool: only what the tool has, and only for that tool. */
+  const applyPreset = useCallback(
+    (tool: ToolId, preset: ToolPreset | undefined) => {
+      if (!preset) return;
+      if (tool === 'value' && preset.levels !== undefined)
+        setValueSettings({ mode: 'grayscale', grayscale: true, levels: preset.levels, posterize: preset.levels, ...(preset.squint !== undefined ? { focus: preset.squint ? 'squint' : 'none' } : {}) });
+      if (tool === 'grid' && preset.columns !== undefined && preset.rows !== undefined) setGridSettings({ cellMode: 'divisions', columns: preset.columns, rows: preset.rows });
+    },
+    [setGridSettings, setValueSettings],
+  );
 
   /** Would handing over replace a picture the person has open in that tool (other than this very reference)? */
   const replacesPicture = useCallback(
@@ -44,17 +68,26 @@ export function useToolHandoff() {
   );
 
   const open = useCallback(
-    async (tool: ToolId, item: OpenItem, confirmed = false) => {
+    async (tool: ToolId, item: OpenItem, options: HandoffOptions = {}, confirmed = false) => {
       setError(null);
       const reference = item.references[0];
-      // Nothing to hand over (no reference, or Color & Mixing), or a tool the plan
-      // does not include (it opens on its locked page): just open the tool.
-      if (!reference || tool === 'color' || !allowed(tool)) {
+      const go = () => {
+        if (options.back) setLearnReturn(options.back);
         router.push(pathForView(tool));
+      };
+      // A tool the plan does not include opens on its locked page: nothing is set or handed over.
+      if (!allowed(tool)) {
+        go();
+        return;
+      }
+      // Nothing to hand over (no reference, or Color & Mixing): open the tool, as the step sets it.
+      if (!reference || tool === 'color') {
+        applyPreset(tool, options.preset);
+        go();
         return;
       }
       if (!confirmed && replacesPicture(tool, item.id)) {
-        setConfirming({ tool, item });
+        setConfirming({ tool, item, options });
         return;
       }
       setConfirming(null);
@@ -64,14 +97,15 @@ export function useToolHandoff() {
         if (tool === 'measure') setImage(picture, item.id);
         else if (tool === 'grid') setGridImage(picture, item.id);
         else handOff({ tool, image: picture, learnItem: item.id });
-        router.push(pathForView(tool));
+        applyPreset(tool, options.preset);
+        go();
       } catch (failure) {
         setError(failure instanceof LearnRequestError && failure.status === 403 ? t('handoffLocked') : t('handoffFailed'));
       } finally {
         setBusy(null);
       }
     },
-    [allowed, replacesPicture, router, setGridImage, setImage, t],
+    [allowed, applyPreset, replacesPicture, router, setGridImage, setImage, t],
   );
 
   return { open, busy, error, confirming, cancel: () => setConfirming(null) };

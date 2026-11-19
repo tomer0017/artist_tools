@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LockReason } from '@/lib/learn/access';
-import type { LearnChallenge, LearnCollection, LearnExercise, Localized } from '@/lib/learn/model';
+import type { LearnChallenge, LearnCollection, LearnExercise, LessonStep, Localized, UnitLevel } from '@/lib/learn/model';
 import type { LearnFeatureId } from '@/lib/plans';
 import { signInPath } from '@/lib/redirects';
 import { useAccount } from '@/components/shell/account';
@@ -26,6 +26,12 @@ export interface ListEntry {
   quick?: boolean;
   medium?: LearnChallenge['medium'];
   reference?: LearnChallenge['reference'];
+  /** A challenge: the lessons it builds on (ADR-0019). */
+  lessons?: string[];
+  /** An exercise: optional (the baseline), its skill line, written as a lesson. */
+  optional?: boolean;
+  skill?: Localized;
+  lesson?: boolean;
   /** Admins only. */
   published?: boolean;
   open: boolean;
@@ -33,10 +39,19 @@ export interface ListEntry {
   thumbnailAssetId: string | null;
 }
 
+export interface ListGroup {
+  id: string;
+  order: number;
+  title: Localized;
+  /** A course unit's one-line goal, and its level (ADR-0019). */
+  summary?: Localized;
+  level?: UnitLevel;
+}
+
 export interface ListAnswer {
   collection: LearnCollection;
   contentVersion: number | null;
-  groups: { id: string; order: number; title: Localized }[];
+  groups: ListGroup[];
   items: ListEntry[];
 }
 
@@ -49,8 +64,18 @@ export interface ReferenceView {
   height: number | null;
 }
 
+/** Any picture of an item (a reference, or a lesson's demonstration, step or mistake picture), with its thumbnail and size. */
+export type ImageView = ReferenceView;
+
 type Common = { id: string; groupId: string; order: number; title: Localized; references: ReferenceView[]; published?: boolean };
-export type OpenExercise = Common & Omit<LearnExercise, keyof Common | 'published'> & { kind: 'exercise' };
+export type OpenStep = Omit<LessonStep, 'image'> & { image?: ImageView };
+export type OpenExercise = Common &
+  Omit<LearnExercise, keyof Common | 'published' | 'mistake' | 'demo' | 'steps'> & {
+    kind: 'exercise';
+    mistake: { mistake: Localized; fix: Localized; image?: ImageView };
+    demo?: { image: ImageView; caption: Localized }[];
+    steps?: OpenStep[];
+  };
 export type OpenChallenge = Common & Omit<LearnChallenge, keyof Common | 'published'> & { kind: 'challenge'; collection: 'challenges' };
 export type OpenItem = OpenExercise | OpenChallenge;
 

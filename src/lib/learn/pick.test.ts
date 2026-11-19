@@ -39,12 +39,32 @@ describe('filters', () => {
   });
 
   it('are read back from the device tolerantly: anything unknown is "all"', () => {
-    expect(readFilters({ level: 'advanced', group: 'plants', medium: 'color', quick: true })).toEqual({ level: 'advanced', group: 'plants', medium: 'color', quick: true });
-    expect(readFilters({ level: 'expert', group: '../x', medium: 'oil', quick: 'yes' })).toEqual(DEFAULT_FILTERS);
+    expect(readFilters({ level: 'advanced', group: 'plants', medium: 'color', quick: true, skill: 'shapes' })).toEqual({ level: 'advanced', group: 'plants', medium: 'color', quick: true, skill: 'shapes' });
+    // Filters remembered before the Skill filter existed (M5) read as every skill.
+    expect(readFilters({ level: 'advanced', group: 'plants', medium: 'color', quick: true })).toEqual({ level: 'advanced', group: 'plants', medium: 'color', quick: true, skill: 'all' });
+    expect(readFilters({ level: 'expert', group: '../x', medium: 'oil', quick: 'yes', skill: '<script>' })).toEqual(DEFAULT_FILTERS);
     expect(readFilters(null)).toEqual(DEFAULT_FILTERS);
     expect(readFilters('nonsense')).toEqual(DEFAULT_FILTERS);
     expect(filtersActive(DEFAULT_FILTERS)).toBe(false);
     expect(filtersActive({ ...DEFAULT_FILTERS, quick: true })).toBe(true);
+    expect(filtersActive({ ...DEFAULT_FILTERS, skill: 'shapes' })).toBe(true);
+  });
+
+  it('the Skill filter is the course unit of the lessons a challenge builds on (ADR-0019); without the course it is ignored', () => {
+    const units: Record<string, string> = { 'D-LINE-04': 'start', 'D-SHAPE-01': 'shapes', 'D-OBS-02': 'shapes' };
+    const unitsOf = (lessons: string[] | undefined) => [...new Set((lessons ?? []).flatMap((id) => (units[id] ? [units[id]] : [])))];
+    const leaf = challenge('CH-012', { lessons: ['D-LINE-04', 'D-SHAPE-01'] });
+    const free = challenge('CH-049');
+    expect(matchesFilters(leaf, { ...DEFAULT_FILTERS, skill: 'start' }, unitsOf)).toBe(true);
+    expect(matchesFilters(leaf, { ...DEFAULT_FILTERS, skill: 'shapes' }, unitsOf)).toBe(true);
+    expect(matchesFilters(leaf, { ...DEFAULT_FILTERS, skill: 'values' }, unitsOf)).toBe(false);
+    // A challenge that builds on no lesson has no skill to match.
+    expect(matchesFilters(free, { ...DEFAULT_FILTERS, skill: 'start' }, unitsOf)).toBe(false);
+    expect(matchesFilters(free, DEFAULT_FILTERS, unitsOf)).toBe(true);
+    // The course not shown to this account (or not loaded yet): the filter hides nothing.
+    expect(matchesFilters(free, { ...DEFAULT_FILTERS, skill: 'start' })).toBe(true);
+    // Random honours it.
+    expect(everyPick([leaf, free], { filters: { ...DEFAULT_FILTERS, skill: 'shapes' }, unitsOf })).toEqual(['CH-012']);
   });
 });
 

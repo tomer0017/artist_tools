@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ObjectId, type Db } from 'mongodb';
-import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
+import { MONGO_STARTUP_TIMEOUT, MONGO_STOP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
 import { fixtureSeed, writeLearnFixture } from '@/test/learn-fixture';
 import { PLAN_FEATURES } from '@/lib/plans';
 import { NO_LEARN_ACCESS, defaultLearnSection, type LearnContent, type LearnSection } from '@/lib/learn/model';
@@ -38,7 +38,7 @@ afterAll(async () => {
   rmSync(assetsDir, { recursive: true, force: true });
   rmSync(seedDir, { recursive: true, force: true });
   await mongo?.stop();
-});
+}, MONGO_STOP_TIMEOUT);
 
 let db: Db;
 beforeEach(async () => {
@@ -85,17 +85,18 @@ describe('importing and publishing content', () => {
     const imported = await importSeed(db, assetsDir, seedDir, 'cli');
     expect(imported).toMatchObject({ status: 'saved', version: 1 });
     if (imported.status !== 'saved') return;
-    expect(imported.assets.map((a) => a.key)).toEqual(['sky', 'leaf', 'wing']);
-    expect(await collections(db).learnAssets.countDocuments()).toBe(6);
+    expect(imported.assets.map((a) => a.key)).toEqual(['sky', 'leaf', 'wing', 'demo-a', 'demo-b', 'mistake', 'sheet']);
+    // Six pictures with their thumbnails, and a static worksheet (no thumbnail).
+    expect(await collections(db).learnAssets.countDocuments()).toBe(13);
     // Only a draft: the published content is still empty.
     expect((await content()).exercises).toEqual([]);
     // A second import never overwrites the draft.
     expect(await importSeed(db, assetsDir, seedDir, 'cli')).toEqual({ status: 'draft_exists', version: 1 });
     expect(await publishDraft(db, learnContentSpec, 'cli')).toMatchObject({ status: 'published', version: 1 });
     const live = await content();
-    expect(live.exercises.map((e) => e.id)).toEqual(['D-TEST-01', 'D-TEST-02', 'D-TEST-03', 'C-TEST-01']);
+    expect(live.exercises.map((e) => e.id)).toEqual(['D-TEST-01', 'D-TEST-02', 'D-TEST-03', 'D-BASE-01', 'D-LESSON-01', 'C-TEST-01']);
     expect(live.exercises[0].references[0].assetId).toBe(imported.assets[0].assetId);
-    expect([...(await everPublishedIds(db)).keys()].sort()).toEqual(['C-TEST-01', 'CH-901', 'CH-902', 'D-TEST-01', 'D-TEST-02']);
+    expect([...(await everPublishedIds(db)).keys()].sort()).toEqual(['C-TEST-01', 'CH-901', 'CH-902', 'D-BASE-01', 'D-LESSON-01', 'D-TEST-01', 'D-TEST-02']);
   });
 
   it('refuses a seed whose references or files are wrong, and saves nothing', async () => {
@@ -250,8 +251,8 @@ describe('the catalog’s Learn section', () => {
 
     const wider = structuredClone(catalog);
     wider.learn.access.free.curriculum = { mode: 'all' };
-    expect(describeCatalogChanges(catalog, wider, await content())).toEqual(['Free · Drawing curriculum: First 1 (D-TEST-01) → All', 'Free: gains D-TEST-02']);
-    expect(describeCatalogChanges(wider, OWNER, await content())).toEqual(['Free: removes Drawing curriculum', 'Free · Drawing curriculum: All → None', 'Free: loses D-TEST-02, D-TEST-01']);
+    expect(describeCatalogChanges(catalog, wider, await content())).toEqual(['Free · Drawing curriculum: First 1 (D-TEST-01) → All', 'Free: gains D-TEST-02, D-BASE-01, D-LESSON-01']);
+    expect(describeCatalogChanges(wider, OWNER, await content())).toEqual(['Free: removes Drawing curriculum', 'Free · Drawing curriculum: All → None', 'Free: loses D-TEST-02, D-TEST-01, D-BASE-01, D-LESSON-01']);
   });
 
   it('the editor saves the section; a catalog that never had one is written back exactly while it says nothing', async () => {

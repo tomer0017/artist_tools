@@ -49,7 +49,11 @@ async function seedFile(folder: string, name: string): Promise<Uint8Array> {
   return new Uint8Array(await readFile(file));
 }
 
-/** References name assets by key in the seed; the content stores their IDs. */
+/**
+ * Pictures name assets by key in the seed; the content stores their IDs:
+ * references, a lesson's demonstration, step and mistake pictures
+ * (ADR-0019), and a static worksheet.
+ */
 function withAssetIds(item: Record<string, unknown>, ids: Map<string, string>, issues: string[]): Record<string, unknown> {
   const id = String(item.id ?? '?');
   const resolve = (key: unknown) => {
@@ -57,15 +61,24 @@ function withAssetIds(item: Record<string, unknown>, ids: Map<string, string>, i
     if (!assetId) issues.push(`${id}: no asset with the key ${String(key)}`);
     return assetId ?? '';
   };
-  const references = Array.isArray(item.references)
-    ? item.references.map((ref) => {
-        const { asset, ...rest } = (ref ?? {}) as Record<string, unknown>;
-        return { assetId: resolve(asset), ...rest };
-      })
-    : item.references;
+  const picture = (ref: unknown) => {
+    const { asset, ...rest } = (ref ?? {}) as Record<string, unknown>;
+    return { assetId: resolve(asset), ...rest };
+  };
+  const within = <T extends Record<string, unknown>>(entries: unknown, field: string): unknown =>
+    Array.isArray(entries) ? entries.map((entry) => ((entry as T)?.[field] ? { ...(entry as T), [field]: picture((entry as T)[field]) } : entry)) : entries;
+  const references = Array.isArray(item.references) ? item.references.map(picture) : item.references;
   const worksheet = item.worksheet as Record<string, unknown> | undefined;
   const sheet = worksheet?.kind === 'static' ? { kind: 'static', assetId: resolve(worksheet.asset) } : worksheet;
-  return { ...item, references, ...(worksheet ? { worksheet: sheet } : {}) };
+  const mistake = item.mistake as Record<string, unknown> | undefined;
+  return {
+    ...item,
+    references,
+    ...(worksheet ? { worksheet: sheet } : {}),
+    ...(item.demo !== undefined ? { demo: within(item.demo, 'image') } : {}),
+    ...(item.steps !== undefined ? { steps: within(item.steps, 'image') } : {}),
+    ...(mistake?.image ? { mistake: { ...mistake, image: picture(mistake.image) } } : {}),
+  };
 }
 
 export async function importSeed(db: Db, assetsDir: string, folder: string, actor: string): Promise<ImportResult> {

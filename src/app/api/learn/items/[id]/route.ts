@@ -1,4 +1,4 @@
-import { LEARN_MODULE, isItemId, itemsOf } from '@/lib/learn/model';
+import { LEARN_MODULE, isItemId, itemImages, itemsOf, listPicture } from '@/lib/learn/model';
 import { UnreadableConfigError } from '@/server/config/versions';
 import { log } from '@/server/log';
 import { liveLearn } from '@/server/learn/live';
@@ -32,11 +32,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       // allow), so its own page can say what is locked; nothing for a module
       // no plan offers, which lists do not show either.
       const listed = view.listed(id);
-      const assets = listed && view.thumbnail(id) && item.references[0] ? await assetsFor(db, [item.references[0].assetId]) : new Map();
+      const picture = listPicture(item);
+      const assets = listed && view.thumbnail(id) && picture ? await assetsFor(db, [picture.assetId]) : new Map();
       const summary = listed ? { item: listEntry(item, state, view.thumbnail(id), assets, false) } : {};
       return learnJson({ error: 'locked', reason: state.reason, feature: LEARN_MODULE[item.collection], ...summary }, 403);
     }
-    const assets = await assetsFor(db, item.references.map((ref) => ref.assetId));
+    const assets = await assetsFor(db, itemImages(item).map((ref) => ref.assetId));
     return learnJson({ contentVersion: version, item: fullItem(item, assets, entitlements.access === 'admin') });
   } catch (error) {
     if (error instanceof UnreadableConfigError) {

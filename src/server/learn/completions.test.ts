@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ObjectId, type Db } from 'mongodb';
-import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
+import { MONGO_STARTUP_TIMEOUT, MONGO_STOP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
 import { writeLearnFixture } from '@/test/learn-fixture';
 import { PLAN_FEATURES } from '@/lib/plans';
 import { defaultLearnSection, type LearnSection } from '@/lib/learn/model';
@@ -42,7 +42,7 @@ afterAll(async () => {
   rmSync(assetsDir, { recursive: true, force: true });
   rmSync(seedDir, { recursive: true, force: true });
   await mongo?.stop();
-});
+}, MONGO_STOP_TIMEOUT);
 
 let db: Db;
 beforeEach(async () => {
@@ -190,7 +190,7 @@ describe('what an open item sends', () => {
     expect(JSON.stringify(sent)).not.toContain('internal');
     const challenge = { ...content.challenges[0], kind: 'challenge' as const, collection: 'challenges' as const, draftNote: 'internal' };
     const sentChallenge = fullItem(challenge as never, new Map(), true);
-    expect(Object.keys(sentChallenge).sort()).toEqual(['collection', 'groupId', 'id', 'kind', 'level', 'medium', 'order', 'prompt', 'published', 'quick', 'reference', 'references', 'skill', 'skillArea', 'title', 'tools']);
+    expect(Object.keys(sentChallenge).sort()).toEqual(['collection', 'focus', 'groupId', 'id', 'kind', 'lessons', 'level', 'medium', 'order', 'prompt', 'published', 'quick', 'reference', 'references', 'skill', 'skillArea', 'title', 'tools']);
   });
 });
 

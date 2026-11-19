@@ -12,7 +12,7 @@ const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(1, s));
 type View = { scale: number; x: number; y: number };
 const FIT: View = { scale: 1, x: 0, y: 0 };
 
-export default function ZoomViewer({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+export default function ZoomViewer({ src, alt, title, onClose }: { src: string; alt: string; title?: string; onClose: () => void }) {
   const t = useTranslations('learn.zoom');
   const [view, setView] = useState<View>(FIT);
   const stage = useRef<HTMLDivElement>(null);
@@ -102,7 +102,7 @@ export default function ZoomViewer({ src, alt, onClose }: { src: string; alt: st
     'flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white';
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={t('title')} data-zoom-viewer className="fixed inset-0 z-[70] flex flex-col bg-black/95" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+    <div role="dialog" aria-modal="true" aria-label={title ?? t('title')} data-zoom-viewer className="fixed inset-0 z-[70] flex flex-col bg-black/95" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <div className="flex items-center gap-2 px-3 py-2">
         <p className="min-w-0 flex-1 truncate text-sm text-white/80">{alt}</p>
         <button type="button" onClick={() => zoomTo(view.scale / 1.5)} aria-label={t('zoomOut')} className={iconButton} disabled={view.scale <= 1}>

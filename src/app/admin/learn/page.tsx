@@ -186,7 +186,14 @@ export default async function AdminLearnPage() {
                 </p>
                 {asset.licence && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    <a href={asset.licence.source} className="underline" rel="noreferrer" target="_blank">Source</a> · rights checked {asset.licence.checkedAt}: {asset.licence.rights}
+                    {asset.licence.source ? (
+                      <a href={asset.licence.source} className="underline" rel="noreferrer" target="_blank">
+                        Source
+                      </a>
+                    ) : (
+                      'Own work, no source page'
+                    )}{' '}
+                    · rights checked {asset.licence.checkedAt}: {asset.licence.rights}
                     {asset.licence.attribution ? ` · Credit: ${asset.licence.attribution}` : ''}
                   </p>
                 )}

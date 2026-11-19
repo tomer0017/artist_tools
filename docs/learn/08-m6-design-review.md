@@ -295,8 +295,8 @@ interface DemoFrame {                    // one picture of "See it"
 
 interface ToolLink {
   tool: ToolId;                          // 'measure' | 'value' | 'grid' | 'compare' | 'color'
-  preset?: { levels: 2 | 3 | 5 }         // Study & Simplify: Values
-         | { columns: number; rows: number };  // Create a Grid
+  preset?: { levels: 3 | 5 | 7 | 9 | 11 | 13; squint?: boolean }  // Study & Simplify: its own value steps
+         | { columns: number; rows: number };  // Create a Grid, 1–16 each
   label: Localized;                      // what it is for: "See the three values"
 }
 
@@ -574,8 +574,9 @@ LESSON                               CHALLENGE
     values;
   - "Print a 4 × 4 grid ›" opens Prepare Worksheets;
   - "Check your copy ›" opens Compare & Correct.
-- **Presets:** Study & Simplify's Values (2, 3 or 5 levels) and Create a
-  Grid (columns × rows). They are applied as if the person had chosen them;
+- **Presets:** Study & Simplify's Values (its own steps: 3, 5, 7 … values,
+  optionally with Squint; as built, it offers no 2) and Create a Grid
+  (columns × rows). They are applied as if the person had chosen them;
   nothing else in the tool changes. Both settings already live in the
   project store.
 - **"Back to Lesson 3":** a small, dismissible pill in the tool after a

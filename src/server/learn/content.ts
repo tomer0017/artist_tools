@@ -9,13 +9,20 @@ import {
   CHALLENGE_LEVELS,
   COLLECTION_LABELS,
   EXERCISE_ID,
+  GRID_DIVISIONS,
   GROUP_ID,
   LEARN_COLLECTIONS,
   MEDIUMS,
   REFERENCE_KINDS,
+  STUDY_LEVELS,
+  UNIT_LEVELS,
   collectionOfId,
   emptyContent,
+  isLesson,
+  itemImages,
   itemsOf,
+  type LearnExercise,
+  type ToolLink,
   type LearnContent,
   type LearnItem,
   type LearnRules,
@@ -44,13 +51,22 @@ const AssetRefSchema = z.object({ assetId: z.string().regex(ASSET_ID), alt: Loca
 const Tools = z.array(z.enum(TOOL_IDS)).max(TOOL_IDS.length);
 const Order = z.number().int().min(0).max(100_000);
 
-const GroupSchema = z.object({ id: z.string().regex(GROUP_ID), collection: z.enum(LEARN_COLLECTIONS), order: Order, title: LocalizedSchema, summary: LocalizedSchema.optional() }).passthrough();
+const GroupSchema = z
+  .object({ id: z.string().regex(GROUP_ID), collection: z.enum(LEARN_COLLECTIONS), order: Order, title: LocalizedSchema, summary: LocalizedSchema.optional(), level: z.enum(UNIT_LEVELS).optional() })
+  .passthrough();
 
 const WorksheetSchema = z.union([
   z.object({ kind: z.literal('none') }).passthrough(),
   z.object({ kind: z.literal('generated') }).passthrough(),
   z.object({ kind: z.literal('static'), assetId: z.string().regex(ASSET_ID) }).passthrough(),
 ]);
+
+// Lessons (ADR-0019): additions only, every one optional, so content written
+// for M6 is still read by M5 (which keeps unknown fields and ignores them).
+const ToolPresetSchema = z.object({ levels: z.number().int().optional(), squint: z.boolean().optional(), columns: z.number().int().optional(), rows: z.number().int().optional() }).passthrough();
+const ToolLinkSchema = z.object({ tool: z.enum(TOOL_IDS), label: LocalizedSchema, preset: ToolPresetSchema.optional() }).passthrough();
+const DemoFrameSchema = z.object({ image: AssetRefSchema, caption: LocalizedSchema }).passthrough();
+const StepSchema = z.object({ text: LocalizedSchema, image: AssetRefSchema.optional(), tool: ToolLinkSchema.optional(), worksheet: z.boolean().optional() }).passthrough();
 
 const ExerciseSchema = z
   .object({
@@ -64,11 +80,17 @@ const ExerciseSchema = z
     materials: LocalizedSchema,
     instruction: LocalizedSchema,
     guide: LocalizedSchema.optional(),
-    mistake: z.object({ mistake: LocalizedSchema, fix: LocalizedSchema }).passthrough(),
+    mistake: z.object({ mistake: LocalizedSchema, fix: LocalizedSchema, image: AssetRefSchema.optional() }).passthrough(),
     success: LocalizedSchema,
     references: z.array(AssetRefSchema).max(20),
     worksheet: WorksheetSchema,
     tools: Tools,
+    optional: z.boolean().optional(),
+    skill: LocalizedSchema.optional(),
+    minutes: z.number().int().min(5).max(120).optional(),
+    demo: z.array(DemoFrameSchema).max(6).optional(),
+    steps: z.array(StepSchema).max(6).optional(),
+    checks: z.array(LocalizedSchema).max(4).optional(),
   })
   .passthrough();
 
@@ -88,6 +110,8 @@ const ChallengeSchema = z
     medium: z.enum(MEDIUMS),
     quick: z.boolean(),
     tools: Tools,
+    lessons: z.array(z.string().regex(EXERCISE_ID)).max(3).optional(),
+    focus: LocalizedSchema.optional(),
   })
   .passthrough();
 
@@ -101,24 +125,89 @@ export const LearnContentSchema = z
 
 const filled = (text: Localized | undefined) => Boolean(text && text.en.trim() && text.he.trim());
 
+type Field = [string, Localized | undefined];
+
+/** A picture's alternative text and credit. */
+const imageFields = (at: string, ref: { alt: Localized; credit?: Localized }): Field[] => [[`${at}.alt`, ref.alt], ...(ref.credit ? [[`${at}.credit`, ref.credit] as Field] : [])];
+
 /** The localized fields an item must have in both languages before it can be published. */
-function textFields(item: LearnItem): [string, Localized | undefined][] {
-  const refs = item.references.flatMap((ref, i): [string, Localized | undefined][] => [
-    [`references.${i}.alt`, ref.alt],
-    ...(ref.credit ? [[`references.${i}.credit`, ref.credit] as [string, Localized]] : []),
-  ]);
-  if (item.kind === 'challenge') return [['title', item.title], ['prompt', item.prompt], ['skill', item.skill], ...refs];
+function textFields(item: LearnItem): Field[] {
+  const refs = item.references.flatMap((ref, i) => imageFields(`references.${i}`, ref));
+  if (item.kind === 'challenge') return [['title', item.title], ['prompt', item.prompt], ['skill', item.skill], ...(item.focus ? [['focus', item.focus] as Field] : []), ...refs];
   return [
     ['title', item.title],
     ['objective', item.objective],
     ['materials', item.materials],
     ['instruction', item.instruction],
-    ...(item.guide ? [['guide', item.guide] as [string, Localized]] : []),
+    ...(item.guide ? [['guide', item.guide] as Field] : []),
     ['mistake.mistake', item.mistake.mistake],
     ['mistake.fix', item.mistake.fix],
+    ...(item.mistake.image ? imageFields('mistake.image', item.mistake.image) : []),
     ['success', item.success],
     ...refs,
+    ...(item.skill ? [['skill', item.skill] as Field] : []),
+    ...(item.demo ?? []).flatMap((frame, i): Field[] => [[`demo.${i}.caption`, frame.caption], ...imageFields(`demo.${i}.image`, frame.image)]),
+    ...(item.steps ?? []).flatMap((step, i): Field[] => [
+      [`steps.${i}.text`, step.text],
+      ...(step.image ? imageFields(`steps.${i}.image`, step.image) : []),
+      ...(step.tool ? [[`steps.${i}.tool.label`, step.tool.label] as Field] : []),
+    ]),
+    ...(item.checks ?? []).map((check, i): Field => [`checks.${i}`, check]),
   ];
+}
+
+/** The longest of an English and a Hebrew text, in characters. */
+const longest = (text: Localized | undefined) => (text ? Math.max([...text.en].length, [...text.he].length) : 0);
+
+/** How long a lesson's parts may be, so a lesson stays short on a phone (docs/learn/08 §3.1). */
+export const LESSON_LIMITS = { skill: 60, caption: 160, step: 220, check: 140, focus: 140, why: 400 } as const;
+
+/** What is wrong with a tool link's preset: Study's values, or Create a Grid's columns and rows, each only for its own tool. */
+function presetIssues(at: string, link: ToolLink): string[] {
+  const preset = link.preset;
+  if (!preset) return [];
+  const issues: string[] = [];
+  if (preset.levels !== undefined && (link.tool !== 'value' || !(STUDY_LEVELS as readonly number[]).includes(preset.levels))) {
+    issues.push(`${at}: values (${preset.levels}) are for Study & Simplify only, one of ${STUDY_LEVELS.join(', ')}`);
+  }
+  if (preset.squint !== undefined && (link.tool !== 'value' || preset.levels === undefined)) issues.push(`${at}: Squint is for Study & Simplify's values only`);
+  for (const key of ['columns', 'rows'] as const) {
+    const value = preset[key];
+    if (value !== undefined && (link.tool !== 'grid' || value < GRID_DIVISIONS.min || value > GRID_DIVISIONS.max)) {
+      issues.push(`${at}: ${key} (${value}) are for Create a Grid only, ${GRID_DIVISIONS.min}–${GRID_DIVISIONS.max}`);
+    }
+  }
+  if (link.tool === 'grid' && (preset.columns === undefined) !== (preset.rows === undefined)) issues.push(`${at}: a grid preset needs both columns and rows`);
+  return issues;
+}
+
+/** A lesson's structure (ADR-0019): checked for every item, published or not. */
+function lessonStructureIssues(item: LearnExercise): string[] {
+  const issues: string[] = [];
+  for (const [i, step] of (item.steps ?? []).entries()) {
+    if (step.tool) issues.push(...presetIssues(`${item.id}: steps.${i}.tool`, step.tool));
+    if (step.worksheet && item.worksheet.kind === 'none') issues.push(`${item.id}: steps.${i} offers the worksheet, but the lesson has none`);
+  }
+  if (!isLesson(item) && (item.demo?.length || item.checks?.length)) issues.push(`${item.id}: a demonstration or self-check needs the lesson's steps`);
+  return issues;
+}
+
+/** What a published lesson must have, and how long its parts may be (docs/learn/08 §3.1). */
+function lessonPublishIssues(item: LearnExercise): string[] {
+  const issues: string[] = [];
+  const over = (field: string, text: Localized | undefined, limit: number) => {
+    if (longest(text) > limit) issues.push(`${item.id}: ${field} is longer than ${limit} characters`);
+  };
+  over('skill', item.skill, LESSON_LIMITS.skill);
+  if (!isLesson(item)) return issues;
+  if (!item.demo?.length) issues.push(`${item.id}: a lesson needs at least one "See it" picture`);
+  if (item.steps!.length < 3) issues.push(`${item.id}: a lesson needs 3 to 6 steps`);
+  if ((item.checks?.length ?? 0) < 2) issues.push(`${item.id}: a lesson needs 2 to 4 self-check questions`);
+  over('guide ("Why it works")', item.guide, LESSON_LIMITS.why);
+  (item.demo ?? []).forEach((frame, i) => over(`demo.${i}.caption`, frame.caption, LESSON_LIMITS.caption));
+  item.steps!.forEach((step, i) => over(`steps.${i}.text`, step.text, LESSON_LIMITS.step));
+  (item.checks ?? []).forEach((check, i) => over(`checks.${i}`, check, LESSON_LIMITS.check));
+  return issues;
 }
 
 /** What stops a content document from being saved, from the document alone. */
@@ -138,20 +227,31 @@ export function contentIssues(content: LearnContent): string[] {
     if (!group) issues.push(`${item.id}: group ${item.groupId} does not exist`);
     else if (group.collection !== item.collection) issues.push(`${item.id}: group ${item.groupId} belongs to the ${COLLECTION_LABELS[group.collection]}`);
     if (new Set(item.tools).size !== item.tools.length) issues.push(`${item.id}: a tool is listed twice`);
+    if (item.kind === 'exercise') issues.push(...lessonStructureIssues(item));
+    if (item.kind === 'challenge' && item.lessons) {
+      if (new Set(item.lessons).size !== item.lessons.length) issues.push(`${item.id}: a lesson is linked twice`);
+      for (const lesson of item.lessons) if (!content.exercises.some((exercise) => exercise.id === lesson)) issues.push(`${item.id}: it builds on ${lesson}, which is not in the content`);
+    }
     if (!item.published) continue;
     for (const [field, text] of textFields(item)) if (!filled(text)) issues.push(`${item.id}: ${field} needs English and Hebrew before it can be published`);
+    if (item.kind === 'exercise') issues.push(...lessonPublishIssues(item));
+    if (item.kind === 'challenge' && longest(item.focus) > LESSON_LIMITS.focus) issues.push(`${item.id}: focus is longer than ${LESSON_LIMITS.focus} characters`);
     if (item.kind === 'challenge' && item.reference === 'provided' && item.references.length === 0) issues.push(`${item.id}: a challenge with a provided reference needs one`);
   }
-  for (const group of content.groups) if (!filled(group.title)) issues.push(`group ${group.id}: its title needs English and Hebrew`);
+  for (const group of content.groups) {
+    if (!filled(group.title)) issues.push(`group ${group.id}: its title needs English and Hebrew`);
+    if (group.summary && !filled(group.summary)) issues.push(`group ${group.id}: its summary needs English and Hebrew`);
+    if (group.level && group.collection === 'challenges') issues.push(`group ${group.id}: a level belongs to course units only`);
+  }
   return issues;
 }
 
-/** Every asset a content document uses: references and static worksheets. */
+/** Every asset a content document uses: pictures (references, and a lesson's demonstration, step and mistake pictures) and static worksheets. */
 export function assetIdsOf(content: LearnContent): { references: Set<string>; worksheets: Set<string> } {
   const references = new Set<string>();
   const worksheets = new Set<string>();
   for (const item of itemsOf(content)) {
-    for (const ref of item.references) references.add(ref.assetId);
+    for (const ref of itemImages(item)) references.add(ref.assetId);
     if (item.kind === 'exercise' && item.worksheet.kind === 'static') worksheets.add(item.worksheet.assetId);
   }
   return { references, worksheets };

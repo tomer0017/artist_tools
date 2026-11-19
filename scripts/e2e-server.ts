@@ -151,7 +151,7 @@ await seedSignedInUser(db, 'admin', 'admin');
 // Learn's screens (e2e/learn-screens.spec.ts, ADR-0018): admins, the only
 // accounts Learn opens for until a plan includes it; one per test that keeps
 // a history or class mode, since tests run in parallel.
-for (const name of ['learner', 'learner-history', 'learner-tools', 'learner-sheets', 'learner-he', 'teacher', 'learner-mobile']) await seedSignedInUser(db, name, 'admin');
+for (const name of ['learner', 'learner-history', 'learner-tools', 'learner-sheets', 'learner-he', 'teacher', 'learner-mobile', 'learner-lesson']) await seedSignedInUser(db, name, 'admin');
 await seedSignedInUser(db, 'signout', 'user');
 // Accounts the admin specs change (plan, role); nothing else relies on them.
 await seedSignedInUser(db, 'target', 'user');

@@ -56,7 +56,7 @@ import { authFromEnvironment } from '@/server/auth';
 import { catalogReadNotes, catalogSpec, defaultCatalog, mergeKnown, planDocMatches, planDocsFor, readCatalog, type Catalog } from '@/server/config/catalog';
 import { getDraft, getPublished, publishIfUnchanged } from '@/server/config/versions';
 import { learnAccess } from '@/lib/learn/access';
-import { LEARN_COLLECTIONS, itemsOf } from '@/lib/learn/model';
+import { LEARN_COLLECTIONS, itemAssetIds, itemsOf } from '@/lib/learn/model';
 import { publishedLearnContent } from '@/server/learn/content';
 import { learnDiscard, learnImportCommand, learnPublish, learnStatus } from './learn-commands';
 import { closeMongo, getDb } from '@/server/db/client';
@@ -555,7 +555,8 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
       const body = response.ok ? ((await response.json()) as { items: Record<string, unknown>[] }) : null;
       const expected = view.list(collection).map(({ item, state }) => `${item.id}:${state.status}`);
       const got = body?.items.map((row) => `${String(row.id)}:${row.open ? 'open' : 'locked'}`) ?? null;
-      const leaks = body?.items.filter((row) => !row.open && ['instruction', 'prompt', 'guide', 'references', 'objective'].some((key) => key in row)) ?? [];
+      // A locked row has its title and place only: nothing of an item's content, a lesson's parts included (ADR-0019).
+      const leaks = body?.items.filter((row) => !row.open && ['instruction', 'prompt', 'guide', 'references', 'objective', 'steps', 'demo', 'checks', 'focus', 'success', 'mistake'].some((key) => key in row)) ?? [];
       if (response.status !== 200 || !same(got, expected) || leaks.length > 0) wrong.push(`${collection}: ${response.status} ${JSON.stringify(got)}`);
     }
     check(`${label}: Learn lists show exactly what the plan allows, locked rows without content${wrong.length ? ` — wrong: ${wrong.join('; ')}` : ''}`, wrong.length === 0);
@@ -576,7 +577,8 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
     const assets = await collections(db).learnAssets.find({}).toArray();
     for (const asset of assets) {
       const target = asset.role === 'thumbnail' ? asset.of : asset._id;
-      const users = itemsOf(content).filter((item) => item.references.some((r) => r.assetId === target) || (item.kind === 'exercise' && item.worksheet.kind === 'static' && item.worksheet.assetId === target));
+      // Exactly the asset route's rule: whoever may open an item using it (references, a lesson's pictures, a static worksheet).
+      const users = itemsOf(content).filter((item) => target !== null && itemAssetIds(item).includes(target));
       const visible = users.filter((item) => view.state(item.id).status !== 'hidden');
       const allowed = asset.role === 'thumbnail' ? visible.some((item) => view.thumbnail(item.id)) : visible.some((item) => view.canOpen(item.id));
       const expected = visible.length === 0 ? 404 : allowed ? 200 : 403;

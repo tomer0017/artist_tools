@@ -150,7 +150,9 @@ export function scanAsset(bytes: Uint8Array, type: LearnAssetType): Scan {
 export const LicenceSchema = z
   .object({
     kind: z.enum(['own', 'commissioned', 'cc0', 'public-domain', 'licensed']),
-    source: z.string().url().max(500).refine((url) => url.startsWith('https://'), 'must be an https address'),
+    // The page of the original. Own and commissioned work (a diagram drawn for
+    // Studio Companion, ADR-0019) may have none; every other kind needs it.
+    source: z.string().url().max(500).refine((url) => url.startsWith('https://'), 'must be an https address').nullable(),
     author: z.string().trim().min(1).max(200),
     title: z.string().trim().min(1).max(300),
     // Shown as links in Admin → Learn: only https, never another scheme (javascript:, data:).
@@ -164,6 +166,7 @@ export const LicenceSchema = z
   .strict()
   .superRefine((licence, ctx) => {
     if ((licence.kind === 'cc0' || licence.kind === 'licensed') && !licence.licenceUrl) ctx.addIssue({ code: 'custom', path: ['licenceUrl'], message: 'is required for this licence' });
+    if (licence.kind !== 'own' && licence.kind !== 'commissioned' && !licence.source) ctx.addIssue({ code: 'custom', path: ['source'], message: 'is required for this licence' });
   });
 
 /** What is missing from an asset's licence before an item using it can be published (empty: complete). */

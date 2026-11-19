@@ -9,11 +9,16 @@ import { itemPath, learnPath } from '@/lib/learn/routes';
 import { useAccount, useLearnSummary } from '@/components/shell/account';
 import { useCompletions, useLearnList, type CompletionsAnswer } from './data';
 import { ClassModeSwitch, useClassMode } from './ClassMode';
+import { useCourseStart } from './useCourseStart';
 import { LearnHeader, LockBadge, buttonPrimary, buttonSecondary, useLocalized } from './parts';
 
-// S1 · The Learn home: two choices — the drawing course (with "Continue" from
-// the person's own completions) and the challenges (Random, Quick, All) — and
-// the class mode switch. Nothing else: no progress bars, streaks or badges.
+// S1 · The Learn home (ADR-0019): two doors. The drawing course teaches step
+// by step ("Start: Lesson 1", or "Continue" from the person's own
+// completions, with the optional baseline drawing offered first); the
+// challenges are subjects to draw on one's own (Random, Quick, All).
+// Experienced artists can open any lesson or go straight to the challenges.
+// Class mode, for teachers, sits at the bottom. No progress bars, streaks or
+// badges.
 
 /** Whether a collection is locked for this account, and whether Pro has it ("Part of Pro"). */
 export function useModuleLock(collection: LearnCollection): null | 'pro' | 'plan' {
@@ -40,22 +45,11 @@ export default function LearnHome() {
   const challengesLock = useModuleLock('challenges');
   const showCourse = summary.modules.curriculum !== null || summary.modules.color !== null;
   const showChallenges = summary.modules.challenges !== null;
-  const course = useLearnList('curriculum', summary.modules.curriculum !== null);
   const challenges = useLearnList('challenges', showChallenges);
   // The person's own history: never asked for in class mode.
   const completions = useCompletions(!classMode.on);
   const [none, setNone] = useState(false);
-
-  const openExercises = course.data?.items.filter((item) => item.open) ?? [];
-  const done = classMode.on ? {} : (completions.data?.summary.items ?? {});
-  const started = Object.keys(done).some((id) => openExercises.some((item) => item.id === id));
-  const next = openExercises.find((item) => !done[item.id]) ?? null;
-  const courseAction =
-    started && next
-      ? { href: itemPath(next.id), label: t('home.continue', { title: loc(next.title) }) }
-      : !started && openExercises[0]
-        ? { href: itemPath(openExercises[0].id), label: t('home.start', { title: loc(openExercises[0].title) }) }
-        : { href: learnPath({ screen: 'curriculum' }), label: t('home.openCourse') };
+  const courseAction = useCourseStart(!classMode.on);
 
   const pick = (quickOnly: boolean) => {
     const id = pickChallenge(challenges.data?.items ?? [], {
@@ -71,10 +65,9 @@ export default function LearnHome() {
   return (
     <>
       <LearnHeader title={t('title')} lead={t('lead')} />
-      <ClassModeSwitch />
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         {showCourse && (
-          <section aria-labelledby="learn-course-title" data-learn-choice="curriculum" className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
+          <section aria-labelledby="learn-course-title" data-learn-choice="curriculum" className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
             <div className="flex items-center gap-3">
               <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
                 <PencilLine className="h-6 w-6" aria-hidden="true" />
@@ -85,18 +78,33 @@ export default function LearnHome() {
               {courseLock && <LockBadge pro={courseLock === 'pro'} />}
             </div>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t('home.courseLead')}</p>
+            {courseAction.where && (
+              <p className="mt-2 text-xs font-medium text-muted-foreground" data-course-where>
+                {courseAction.where}
+              </p>
+            )}
             <div className="mt-auto flex flex-col gap-2 pt-5">
-              <Link href={courseAction.href} className={buttonPrimary} data-course-action>
-                <span className="min-w-0 truncate">{courseAction.label}</span>
+              <Link href={courseAction.href} className={`${buttonPrimary} py-2.5 text-center`} data-course-action>
+                <span className="min-w-0">{courseAction.label}</span>
               </Link>
               <Link href={learnPath({ screen: 'curriculum' })} className={buttonSecondary}>
-                {t('home.allExercises')}
+                {t('home.allLessons')}
               </Link>
+              {courseAction.baseline && (
+                <Link
+                  href={itemPath(courseAction.baseline.id)}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-lg px-2 text-center text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  data-course-baseline
+                >
+                  {t('home.baseline', { title: loc(courseAction.baseline.title) })}
+                </Link>
+              )}
             </div>
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{t('home.experienced')}</p>
           </section>
         )}
         {showChallenges && (
-          <section aria-labelledby="learn-challenges-title" data-learn-choice="challenges" className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
+          <section aria-labelledby="learn-challenges-title" data-learn-choice="challenges" className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
             <div className="flex items-center gap-3">
               <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
                 <Sparkles className="h-6 w-6" aria-hidden="true" />
@@ -136,6 +144,12 @@ export default function LearnHome() {
           </Link>
         </p>
       )}
+      <section aria-labelledby="learn-teachers-title" className="mt-8" data-learn-teachers>
+        <h2 id="learn-teachers-title" className="mb-2 text-sm font-semibold text-muted-foreground">
+          {t('home.teachers')}
+        </h2>
+        <ClassModeSwitch />
+      </section>
     </>
   );
 }

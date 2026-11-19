@@ -12,6 +12,8 @@ export interface TestMongo {
 }
 
 export const MONGO_STARTUP_TIMEOUT = 180_000;
+/** Stopping a replica set can take over Vitest's 10 s hook limit while the whole suite runs. */
+export const MONGO_STOP_TIMEOUT = 60_000;
 
 export async function startTestMongo(): Promise<TestMongo> {
   const replSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } });

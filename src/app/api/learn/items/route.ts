@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LEARN_COLLECTIONS } from '@/lib/learn/model';
+import { LEARN_COLLECTIONS, listPicture } from '@/lib/learn/model';
 import { UnreadableConfigError } from '@/server/config/versions';
 import { log } from '@/server/log';
 import { liveLearn } from '@/server/learn/live';
@@ -27,11 +27,17 @@ export async function GET(request: Request) {
     const admin = entitlements.access === 'admin';
     const { content, version, view } = await liveLearn(db, entitlements);
     const rows = view.list(query.data.collection);
-    const assets = await assetsFor(db, rows.flatMap(({ item }) => (view.thumbnail(item.id) && item.references[0] ? [item.references[0].assetId] : [])));
+    const assets = await assetsFor(
+      db,
+      rows.flatMap(({ item }) => {
+        const picture = listPicture(item);
+        return view.thumbnail(item.id) && picture ? [picture.assetId] : [];
+      }),
+    );
     const groups = content.groups
       .filter((group) => group.collection === query.data.collection && rows.some(({ item }) => item.groupId === group.id))
       .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-      .map(({ id, order, title }) => ({ id, order, title }));
+      .map(({ id, order, title, summary, level }) => ({ id, order, title: { en: title.en, he: title.he }, ...(summary ? { summary: { en: summary.en, he: summary.he } } : {}), ...(level ? { level } : {}) }));
     return learnJson({
       collection: query.data.collection,
       contentVersion: version,

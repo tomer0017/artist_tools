@@ -1,31 +1,65 @@
+import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'use-intl';
 import { ChevronRight, Lock, PencilLine, Sparkles } from 'lucide-react';
+import { classModeOn } from '@/lib/learn/class-mode';
 import { LEARN_MODULE, type LearnCollection } from '@/lib/learn/model';
 import { learnPath } from '@/lib/learn/routes';
 import { useAccount, useLearnSummary } from '@/components/shell/account';
+import { useCourseStart } from './useCourseStart';
+import { buttonPrimary } from './parts';
 
-// Learn on Home (ADR-0018, A4): "Learn to draw" and "Pick a challenge", for
-// accounts Learn is shown to (an admin, or a module some published plan
-// offers). Phones reach Learn from here; wider screens also from the top bar.
-// Kept small: the Learn screens themselves load only when opened.
+// Learn on Home (ADR-0018, A4; ADR-0019): the same two doors as the Learn
+// home, for accounts Learn is shown to (an admin, or a module some published
+// plan offers). The course's door leads straight to the next lesson ("Start:
+// Lesson 1 · …", "Continue: Lesson 3 · …"); the challenges' door to the
+// challenges. Phones reach Learn from here; wider screens also from the top
+// bar. In class mode (this tab) nothing about the person's history is asked
+// for, as everywhere in Learn.
+
+const tabClassMode = () => {
+  try {
+    return classModeOn(window.sessionStorage);
+  } catch {
+    return false;
+  }
+};
 
 export default function LearnOnHome() {
   const t = useTranslations('learn.homeSection');
   const tl = useTranslations('learn');
   const summary = useLearnSummary();
   const account = useAccount()?.account;
+  const [classMode] = useState(tabClassMode);
+  const showCourse = summary.modules.curriculum !== null || summary.modules.color !== null;
+  const course = useCourseStart(summary.visible && summary.modules.curriculum !== null && !classMode);
   if (!summary.visible) return null;
   const lockOf = (collection: LearnCollection) =>
     summary.modules[collection] !== 'locked' ? null : account?.offer.pro.includes(LEARN_MODULE[collection]) && account.plan.effective !== 'pro' ? 'pro' : 'plan';
-  const cards = [
-    summary.modules.curriculum !== null || summary.modules.color !== null
-      ? { key: 'course', href: learnPath({ screen: 'curriculum' }), title: t('course'), lead: t('courseLead'), Icon: PencilLine, lock: lockOf('curriculum') }
+  const doors = [
+    showCourse
+      ? {
+          key: 'course',
+          title: t('course'),
+          lead: t('courseLead'),
+          Icon: PencilLine,
+          lock: lockOf('curriculum'),
+          action: summary.modules.curriculum !== null && !course.loading ? { href: course.href, label: course.label } : { href: learnPath({ screen: 'curriculum' }), label: t('openCourse') },
+          more: { href: learnPath({ screen: 'curriculum' }), label: tl('home.allLessons') },
+        }
       : null,
     summary.modules.challenges !== null
-      ? { key: 'challenges', href: learnPath({ screen: 'challenges' }), title: t('challenges'), lead: t('challengesLead'), Icon: Sparkles, lock: lockOf('challenges') }
+      ? {
+          key: 'challenges',
+          title: t('challenges'),
+          lead: t('challengesLead'),
+          Icon: Sparkles,
+          lock: lockOf('challenges'),
+          action: { href: learnPath({ screen: 'challenges' }), label: t('pick') },
+          more: null,
+        }
       : null,
-  ].filter((card) => card !== null);
+  ].filter((door) => door !== null);
 
   return (
     <section aria-labelledby="home-learn-title" className="mt-7 px-4 md:px-6 lg:px-8" data-home-learn>
@@ -38,14 +72,11 @@ export default function LearnOnHome() {
         </Link>
       </div>
       <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
-        {cards.map(({ key, href, title, lead, Icon, lock }) => (
-          <li key={key}>
-            <Link
-              href={href}
-              className="group flex h-full items-center gap-3 rounded-2xl border border-border bg-card p-3 pe-3.5 shadow-sm transition-colors hover:border-primary/50 active:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:gap-4 md:p-4"
-            >
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary md:h-16 md:w-16">
-                <Icon className="h-7 w-7" aria-hidden="true" />
+        {doors.map(({ key, title, lead, Icon, lock, action, more }) => (
+          <li key={key} className="flex h-full min-w-0 flex-col rounded-2xl border border-border bg-card p-3 shadow-sm md:p-4" data-home-door={key}>
+            <div className="flex items-center gap-3 md:gap-4">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary md:h-14 md:w-14">
+                <Icon className="h-6 w-6" aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
@@ -58,8 +89,21 @@ export default function LearnOnHome() {
                 </span>
                 <span className="mt-1 block text-[13px] leading-snug text-muted-foreground md:text-[15px]">{lead}</span>
               </span>
-              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary rtl:-scale-x-100 rtl:group-hover:-translate-x-0.5" aria-hidden="true" />
-            </Link>
+            </div>
+            <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+              <Link href={action.href} className={`${buttonPrimary} min-h-[44px] py-2 text-center sm:flex-1`} data-home-action={key}>
+                <span className="min-w-0">{action.label}</span>
+              </Link>
+              {more && (
+                <Link
+                  href={more.href}
+                  className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-lg px-2 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {more.label}
+                  <ChevronRight className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
+                </Link>
+              )}
+            </div>
           </li>
         ))}
       </ul>

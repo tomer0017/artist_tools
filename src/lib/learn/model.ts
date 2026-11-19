@@ -48,15 +48,65 @@ export interface AssetRef {
   credit?: Localized;
 }
 
+/** A course unit's level (curriculum groups only, ADR-0019). */
+export const UNIT_LEVELS = ['beginner', 'intermediate'] as const;
+export type UnitLevel = (typeof UNIT_LEVELS)[number];
+
 export interface LearnGroup {
   id: string;
   collection: LearnCollection;
   order: number;
   title: Localized;
   summary?: Localized;
+  /** Course units: Beginner or Intermediate (ADR-0019). */
+  level?: UnitLevel;
 }
 
 export type WorksheetSpec = { kind: 'none' } | { kind: 'generated' } | { kind: 'static'; assetId: string };
+
+// ─── Lessons (ADR-0019, docs/learn/08 §3) ────────────────────────────────────
+// An exercise written as a lesson teaches one skill in seven parts: objective,
+// "See it" (a demonstration), "Do it" (steps on paper), "Check it" (questions
+// for the learner), the common mistake, tools in the steps, "Done when". All
+// additions are optional, and every field M5 reads stays required, so M5
+// still reads lesson content (and shows it as its plainer card).
+
+/** Study & Simplify's own value steps: a lesson's preset is one of them. */
+export const STUDY_LEVELS = [3, 5, 7, 9, 11, 13] as const;
+/** Create a Grid's columns and rows. */
+export const GRID_DIVISIONS = { min: 1, max: 16 } as const;
+
+/** What a tool link sets in its tool, as if the person had chosen it: Study's values (and its Squint), or Create a Grid's columns and rows. */
+export interface ToolPreset {
+  levels?: number;
+  /** Study & Simplify's Squint: small shapes merge into the big ones. */
+  squint?: boolean;
+  columns?: number;
+  rows?: number;
+}
+
+/** A tool, opened from a step with the lesson's subject in it, and why ("See the three values"). */
+export interface ToolLink {
+  tool: ToolId;
+  label: Localized;
+  preset?: ToolPreset;
+}
+
+/** One picture of "See it": a diagram or an annotated photo. Every word is in its caption, never in the picture. */
+export interface DemoFrame {
+  image: AssetRef;
+  caption: Localized;
+}
+
+/** One step on paper. */
+export interface LessonStep {
+  text: Localized;
+  /** A small picture for the step (the subject photo in step 1, say). */
+  image?: AssetRef;
+  tool?: ToolLink;
+  /** The lesson's worksheet (Prepare worksheets, or the static sheet) belongs to this step. */
+  worksheet?: boolean;
+}
 
 export interface LearnExercise {
   id: string;
@@ -69,16 +119,32 @@ export interface LearnExercise {
   title: Localized;
   objective: Localized;
   materials: Localized;
-  /** The short card text. */
+  /** The short card text; for a lesson, its one-line summary. */
   instruction: Localized;
-  /** "More help". */
+  /** "More help" (M5); a lesson's short "Why it works". */
   guide?: Localized;
-  mistake: { mistake: Localized; fix: Localized };
+  mistake: { mistake: Localized; fix: Localized; image?: AssetRef };
+  /** "Done when …": the drawing described, never a score. */
   success: Localized;
+  /** The subject to draw from (for a lesson, often a fallback for the real object). */
   references: AssetRef[];
   worksheet: WorksheetSpec;
   tools: ToolId[];
+  /** Not numbered, and skipped by "Start", "Continue" and "Next lesson": the baseline drawing. */
+  optional?: boolean;
+  /** The one skill, in a few words, for the course list. */
+  skill?: Localized;
+  /** A typical time on paper, in minutes; never a timer. */
+  minutes?: number;
+  demo?: DemoFrame[];
+  /** Their presence makes the exercise a lesson. */
+  steps?: LessonStep[];
+  /** Questions for the learner about the drawing; ticked for oneself, never saved. */
+  checks?: Localized[];
 }
+
+/** An exercise written as a lesson: its steps choose the lesson layout. */
+export const isLesson = (exercise: { steps?: unknown }): boolean => Array.isArray(exercise.steps) && exercise.steps.length > 0;
 
 export const CHALLENGE_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
 export const REFERENCE_KINDS = ['life', 'own_photo', 'provided', 'memory'] as const;
@@ -100,6 +166,10 @@ export interface LearnChallenge {
   medium: (typeof MEDIUMS)[number];
   quick: boolean;
   tools: ToolId[];
+  /** The 1–3 lessons this challenge builds on ("Builds on: Lesson 3"); its skill filter is their units. */
+  lessons?: string[];
+  /** One line: what to pay attention to. */
+  focus?: Localized;
 }
 
 export interface LearnContent {
@@ -129,6 +199,32 @@ export function itemsOf<E extends ExerciseLike, C extends ChallengeLike>(content
     ...content.exercises.map((e) => ({ ...e, kind: 'exercise' as const })),
     ...content.challenges.map((c) => ({ ...c, kind: 'challenge' as const, collection: 'challenges' as const })),
   ];
+}
+
+type ImagesOf = { kind: 'exercise' | 'challenge'; references: AssetRef[]; demo?: DemoFrame[]; steps?: LessonStep[]; mistake?: { image?: AssetRef } };
+
+/** Every picture an item shows: its references, and a lesson's demonstration, step and mistake pictures. */
+export function itemImages(item: ImagesOf): AssetRef[] {
+  if (item.kind === 'challenge') return item.references;
+  return [
+    ...item.references,
+    ...(item.demo ?? []).map((frame) => frame.image),
+    ...(item.steps ?? []).flatMap((step) => (step.image ? [step.image] : [])),
+    ...(item.mistake?.image ? [item.mistake.image] : []),
+  ];
+}
+
+/** Every asset an item uses (its pictures, and its static worksheet): the asset route serves one to whoever may open an item using it. */
+export function itemAssetIds(item: ImagesOf & { worksheet?: WorksheetSpec }): string[] {
+  const ids = itemImages(item).map((ref) => ref.assetId);
+  if (item.kind === 'exercise' && item.worksheet?.kind === 'static') ids.push(item.worksheet.assetId);
+  return [...new Set(ids)];
+}
+
+/** The picture a list shows for an item: a lesson's first demonstration frame, or its first reference. */
+export function listPicture(item: ImagesOf): AssetRef | null {
+  if (item.kind === 'exercise' && item.demo?.[0]) return item.demo[0].image;
+  return item.references[0] ?? null;
 }
 
 /** A collection's items in display order (order, then ID): the order First N counts in. */

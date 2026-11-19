@@ -40,7 +40,47 @@ const exercise = (id: string, collection: 'curriculum' | 'color', groupId: strin
   tools,
 });
 
-type ChallengeTraits = { level?: string; medium?: string; quick?: boolean };
+const picture = (asset: string, alt: string, he: string) => ({ asset, alt: text(alt, he) });
+
+/**
+ * An exercise written as a lesson (ADR-0019): every part, with "Secret" in
+ * each text only an open lesson may send (lists and locked pages never do),
+ * and a tool link with a preset for Study & Simplify and for Create a Grid.
+ */
+const lesson = (id: string, groupId: string, order: number, n: string) => ({
+  ...exercise(id, 'curriculum', groupId, order, true, ['sky'], n, ['value', 'grid', 'compare']),
+  title: text(`Test lesson ${n}`, `שיעור בדיקה ${n}`),
+  objective: text(`Secret objective ${id}`, `מטרה סודית ${id}`),
+  guide: text(`Secret why ${id}`, `למה סודי ${id}`),
+  skill: text(`Skill line ${n}`, `שורת מיומנות ${n}`),
+  minutes: 20,
+  demo: [
+    { image: picture('demo-a', 'Diagram A', 'תרשים א'), caption: text(`Secret caption one ${id}`, `כיתוב סודי א ${id}`) },
+    { image: picture('demo-b', 'Diagram B', 'תרשים ב'), caption: text(`Secret caption two ${id}`, `כיתוב סודי ב ${id}`) },
+  ],
+  steps: [
+    { text: text(`Secret step one ${id}`, `שלב סודי א ${id}`), image: picture('sky', 'The subject', 'הנושא') },
+    { text: text(`Secret step two ${id}`, `שלב סודי ב ${id}`), tool: { tool: 'value', label: text('See three values', 'לראות שלושה ערכים'), preset: { levels: 3 } } },
+    { text: text(`Secret step three ${id}`, `שלב סודי ג ${id}`), tool: { tool: 'grid', label: text('A 3 × 3 grid', 'רשת 3 × 3'), preset: { columns: 3, rows: 3 } } },
+    { text: text(`Secret step four ${id}`, `שלב סודי ד ${id}`), worksheet: true },
+  ],
+  checks: [text(`Secret check one ${id}`, `בדיקה סודית א ${id}`), text(`Secret check two ${id}`, `בדיקה סודית ב ${id}`)],
+  mistake: { mistake: text('A mistake', 'טעות'), fix: text('Its fix', 'התיקון'), image: picture('mistake', 'Before and after', 'לפני ואחרי') },
+});
+
+/** The optional baseline drawing (not numbered; skipped by Start and Continue). */
+const baseline = (id: string, groupId: string, order: number) => ({
+  ...exercise(id, 'curriculum', groupId, order, true, [], 'base', ['compare']),
+  title: text('Test baseline', 'רישום פתיחה לבדיקה'),
+  optional: true,
+  skill: text('A drawing to keep', 'רישום לשמור'),
+  demo: [{ image: picture('demo-a', 'Diagram A', 'תרשים א'), caption: text(`Secret caption ${id}`, `כיתוב סודי ${id}`) }],
+  steps: [1, 2, 3].map((k) => ({ text: text(`Secret step ${k} ${id}`, `שלב סודי ${k} ${id}`) })),
+  checks: [text(`Secret check one ${id}`, `בדיקה סודית א ${id}`), text(`Secret check two ${id}`, `בדיקה סודית ב ${id}`)],
+  worksheet: { kind: 'none' },
+});
+
+type ChallengeTraits = { level?: string; medium?: string; quick?: boolean; lessons?: string[]; focus?: boolean };
 const challenge = (id: string, groupId: string, order: number, published: boolean, reference: string, references: string[], n: string, traits: ChallengeTraits = {}) => ({
   id,
   groupId,
@@ -56,16 +96,26 @@ const challenge = (id: string, groupId: string, order: number, published: boolea
   medium: traits.medium ?? 'pencil',
   quick: traits.quick ?? true,
   tools: [],
+  ...(traits.lessons ? { lessons: traits.lessons } : {}),
+  ...(traits.focus ? { focus: text(`Secret focus ${id}`, `מיקוד סודי ${id}`) } : {}),
 });
+
+/** A one-page A4 PDF: what a static worksheet is (the server checks its type by its first bytes). */
+export const FIXTURE_PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595.28 841.89]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n';
 
 /** The fixture's seed.json content (before assets are stored): items in every state and collection. */
 export function fixtureSeed() {
   return {
     note: 'E2E fixture (synthetic)',
-    assets: ['sky', 'leaf', 'wing'].map((key) => ({ key, role: 'reference', file: `${key}.png`, thumbnail: `${key}.thumb.png`, licence: { ...FIXTURE_LICENCE, title: `Synthetic ${key}` } })),
+    assets: [
+      ...['sky', 'leaf', 'wing', 'demo-a', 'demo-b', 'mistake'].map((key) => ({ key, role: 'reference', file: `${key}.png`, thumbnail: `${key}.thumb.png`, licence: { ...FIXTURE_LICENCE, title: `Synthetic ${key}` } })),
+      // A static worksheet (a PDF), offered as "Print worksheet"; own work with no source page.
+      { key: 'sheet', role: 'worksheet', file: 'sheet.pdf', thumbnail: null, licence: { ...FIXTURE_LICENCE, source: null, title: 'Synthetic worksheet' } },
+    ],
     content: {
       groups: [
-        { id: 'basics', collection: 'curriculum', order: 1, title: text('Basics', 'יסודות') },
+        { id: 'basics', collection: 'curriculum', order: 1, title: text('Basics', 'יסודות'), summary: text('First unit goal', 'מטרת היחידה הראשונה'), level: 'beginner' },
+        { id: 'shapes', collection: 'curriculum', order: 2, title: text('Shapes', 'צורות'), summary: text('Second unit goal', 'מטרת היחידה השנייה'), level: 'beginner' },
         { id: 'paint', collection: 'color', order: 1, title: text('Paint', 'צבע') },
         { id: 'objects', collection: 'challenges', order: 1, title: text('Objects', 'חפצים') },
         { id: 'nature', collection: 'challenges', order: 2, title: text('Nature', 'טבע') },
@@ -73,14 +123,18 @@ export function fixtureSeed() {
       exercises: [
         // Every tool shortcut, so the Learn screens' hand-offs are tested (ADR-0018).
         exercise('D-TEST-01', 'curriculum', 'basics', 1, true, ['sky'], 'one', ['grid', 'value', 'compare', 'measure']),
-        exercise('D-TEST-02', 'curriculum', 'basics', 2, true, [], 'two'),
+        // Not written as a lesson (M5's card), with a static worksheet.
+        { ...exercise('D-TEST-02', 'curriculum', 'basics', 2, true, [], 'two'), worksheet: { kind: 'static', asset: 'sheet' } },
         exercise('D-TEST-03', 'curriculum', 'basics', 3, false, [], 'three'),
+        // Lessons (ADR-0019): the optional baseline, then a lesson with every part.
+        baseline('D-BASE-01', 'shapes', 4),
+        lesson('D-LESSON-01', 'shapes', 5, 'one'),
         exercise('C-TEST-01', 'color', 'paint', 1, true, ['leaf'], 'four'),
       ],
       challenges: [
-        challenge('CH-901', 'objects', 1, true, 'provided', ['wing'], 'one'),
+        challenge('CH-901', 'objects', 1, true, 'provided', ['wing'], 'one', { lessons: ['D-LESSON-01'], focus: true }),
         // Drawn from one's own photo ("Use my photo"); intermediate, colour welcome, not quick (filters, Random, Quick).
-        challenge('CH-902', 'nature', 2, true, 'own_photo', [], 'two', { level: 'intermediate', medium: 'both', quick: false }),
+        challenge('CH-902', 'nature', 2, true, 'own_photo', [], 'two', { level: 'intermediate', medium: 'both', quick: false, lessons: ['D-TEST-01'] }),
         challenge('CH-903', 'nature', 3, false, 'life', [], 'three'),
       ],
     },
@@ -90,11 +144,19 @@ export function fixtureSeed() {
 /** Write the fixture folder (seed.json and its generated images) into `dir`. */
 export function writeLearnFixture(dir: string): string {
   mkdirSync(dir, { recursive: true });
-  const colors: Record<string, [number, number, number]> = { sky: [120, 170, 230], leaf: [80, 160, 90], wing: [220, 150, 60] };
+  const colors: Record<string, [number, number, number]> = {
+    sky: [120, 170, 230],
+    leaf: [80, 160, 90],
+    wing: [220, 150, 60],
+    'demo-a': [240, 236, 226],
+    'demo-b': [226, 232, 240],
+    mistake: [236, 226, 240],
+  };
   for (const [key, [r, g, b]] of Object.entries(colors)) {
     writeFileSync(path.join(dir, `${key}.png`), makePng(96, 64, (x, y) => [(r + x) % 256, (g + y) % 256, b]));
     writeFileSync(path.join(dir, `${key}.thumb.png`), makePng(48, 32, () => [r, g, b]));
   }
+  writeFileSync(path.join(dir, 'sheet.pdf'), FIXTURE_PDF);
   writeFileSync(path.join(dir, 'seed.json'), JSON.stringify(fixtureSeed(), null, 1));
   return dir;
 }

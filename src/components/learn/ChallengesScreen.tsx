@@ -2,19 +2,24 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'use-intl';
-import { ChevronDown, Dices, Timer, X } from 'lucide-react';
+import { Brain, Camera, ChevronDown, Dices, Eye, Timer, X } from 'lucide-react';
 import { CHALLENGE_LEVELS } from '@/lib/learn/model';
+import { unitNumbers, unitsOfLessons } from '@/lib/learn/course';
 import { DEFAULT_FILTERS, FILTERS_KEY, filtersActive, matchesFilters, pickChallenge, readFilters, type ChallengeFilters } from '@/lib/learn/pick';
 import { itemPath, learnPath } from '@/lib/learn/routes';
+import { useLearnSummary } from '@/components/shell/account';
 import { useCompletions, useLearnList, type ListEntry } from './data';
 import { useClassMode } from './ClassMode';
 import { recentlyDone, useModuleLock } from './LearnHome';
 import { DoneTick, DraftBadge, Failed, LearnHeader, Loading, LockBadge, Thumb, buttonPrimary, buttonSecondary, useLocalized } from './parts';
 
-// S4 · The challenges: filters in one row (level, subject, pencil or color,
-// quick only), remembered on this device; Random and Quick pick among the
-// challenges this account may open that match them; then every challenge as
-// a card, locked ones marked (with a thumbnail only where previews allow).
+// S4 · The challenges: practice of one's own, apart from the course. Filters
+// in one row (level, subject, skill, pencil or color, quick only), remembered
+// on this device; the skill is the course's unit a challenge builds on
+// (ADR-0019). Random and Quick pick among the challenges this account may
+// open that match them; then every challenge as a card, locked ones marked
+// (with a thumbnail only where previews allow). A challenge drawn from life
+// or memory shows what to draw from instead of an empty picture.
 
 /** The filters, remembered on this device (never sent anywhere). */
 export function useStoredFilters(): [ChallengeFilters, (next: ChallengeFilters) => void] {
@@ -40,14 +45,22 @@ export default function ChallengesScreen() {
   const loc = useLocalized();
   const router = useRouter();
   const classMode = useClassMode();
+  const summary = useLearnSummary();
   const list = useLearnList('challenges');
+  // The course, for the Skill filter: a challenge's skill is the unit of the lessons it builds on.
+  const course = useLearnList('curriculum', summary.modules.curriculum !== null);
   const completions = useCompletions(!classMode.on);
   const [filters, setFilters] = useStoredFilters();
   const [none, setNone] = useState(false);
   const counts = classMode.on ? {} : (completions.data?.summary.items ?? {});
   const items = list.data?.items ?? [];
-  const shown = items.filter((item) => matchesFilters(item, filters));
+  const lessons = course.data?.items;
+  const unitsOf = lessons ? (ids: string[] | undefined) => unitsOfLessons(ids, lessons) : undefined;
+  const shown = items.filter((item) => matchesFilters(item, filters, unitsOf));
   const groups = (list.data?.groups ?? []).filter((group) => group.id === filters.group || items.some((item) => item.groupId === group.id));
+  const unitIds = new Set(items.flatMap((item) => (unitsOf ? unitsOf(item.lessons) : [])));
+  const units = course.data ? course.data.groups.filter((group) => group.id === filters.skill || unitIds.has(group.id)) : [];
+  const unitNumber = unitNumbers(course.data?.groups ?? [], lessons ?? []);
 
   const set = (change: Partial<ChallengeFilters>) => {
     setNone(false);
@@ -59,6 +72,7 @@ export default function ChallengesScreen() {
       quickOnly,
       recentlyDone: classMode.on ? [] : recentlyDone(completions.data),
       recentlySeen: classMode.recent,
+      unitsOf,
     });
     setNone(id === null);
     if (id) router.push(`${itemPath(id)}?pick=${quickOnly ? 'filters-quick' : 'filters'}`);
@@ -77,7 +91,7 @@ export default function ChallengesScreen() {
         </div>
         {none && (
           <p role="status" className="mt-2 text-sm text-muted-foreground">
-            {items.some((item) => matchesFilters(item, filters)) ? t('challenges.noneOpen') : t('challenges.noMatch')}
+            {items.some((item) => matchesFilters(item, filters, unitsOf)) ? t('challenges.noneOpen') : t('challenges.noMatch')}
           </p>
         )}
       </LearnHeader>
@@ -95,6 +109,17 @@ export default function ChallengesScreen() {
           onChange={(group) => set({ group })}
           options={[{ value: 'all', label: t('challenges.allSubjects') }, ...groups.map((group) => ({ value: group.id, label: loc(group.title) }))]}
         />
+        {units.length > 0 && (
+          <FilterSelect
+            label={t('challenges.skill')}
+            value={filters.skill}
+            onChange={(skill) => set({ skill })}
+            options={[
+              { value: 'all', label: t('challenges.allSkills') },
+              ...units.map((group) => ({ value: group.id, label: unitNumber.get(group.id) ? t('curriculum.unit', { number: unitNumber.get(group.id)!, title: loc(group.title) }) : loc(group.title) })),
+            ]}
+          />
+        )}
         <FilterSelect
           label={t('challenges.medium')}
           value={filters.medium}
@@ -179,7 +204,11 @@ function ChallengeCard({ item, count }: { item: ListEntry; count: number }) {
       data-open={item.open}
       className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <Thumb assetId={item.thumbnailAssetId} kind="challenge" className="aspect-[4/3] w-full rounded-none" />
+      {item.thumbnailAssetId || item.reference === 'provided' ? (
+        <Thumb assetId={item.thumbnailAssetId} kind="challenge" className="aspect-[4/3] w-full rounded-none" />
+      ) : (
+        <Subject reference={item.reference} />
+      )}
       <span className="flex flex-1 flex-col gap-1.5 p-3">
         <span className="text-[15px] font-semibold leading-snug text-foreground">{loc(item.title)}</span>
         <span className="mt-auto flex flex-wrap items-center gap-1.5">
@@ -195,5 +224,17 @@ function ChallengeCard({ item, count }: { item: ListEntry; count: number }) {
         </span>
       </span>
     </Link>
+  );
+}
+
+/** What a challenge without a picture is drawn from: life, one's own photo or memory, said rather than left as an empty frame. */
+function Subject({ reference }: { reference: ListEntry['reference'] }) {
+  const t = useTranslations('learn.item');
+  const Icon = reference === 'own_photo' ? Camera : reference === 'memory' ? Brain : Eye;
+  return (
+    <span className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 bg-secondary/60 px-3 text-center text-[13px] font-semibold text-foreground/90" data-challenge-subject={reference ?? 'life'}>
+      <Icon className="h-7 w-7 text-primary" aria-hidden="true" />
+      {t(`referenceKinds.${reference ?? 'life'}`)}
+    </span>
   );
 }

@@ -169,7 +169,10 @@ implemented or tested yet: no Learn code exists.
   refinements in 08 §12). Two steps, each approved on its own.
 
 #### M6a — the lesson format and the learner screens
-- **Status:** approved 2026-11-19; being implemented.
+- **Status:** approved 2026-11-19 and implemented (ADR-0019), with the three
+  test lessons and three challenges rewritten in the template (private
+  seed). Release and verification: deploy/RELEASES.md. M6b waits for the
+  owner's review.
 - **Scope:**
   - the lesson template and the schema additions (08 §3), read by M5 as
     well;

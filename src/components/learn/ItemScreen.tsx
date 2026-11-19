@@ -1,41 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'use-intl';
-import { Camera, Check, ChevronDown, Dices, Layers, Loader2, Lock, Maximize2, PencilLine, Printer, SearchX, Sparkles, Timer } from 'lucide-react';
-import { useProject } from '@/hooks/useProjectStore';
-import { activeControls, resolveSketch } from '@/lib/sketch/settings';
-import { DEFAULT_FILTERS, matchesFilters, pickChallenge } from '@/lib/learn/pick';
+import { Camera, ChevronDown, Lock, Maximize2, PencilLine, SearchX, Sparkles, Timer } from 'lucide-react';
+import { isLesson } from '@/lib/learn/model';
+import { lessonNumbers, unitsOfLessons } from '@/lib/learn/course';
 import { itemPath, learnPath } from '@/lib/learn/routes';
-import { useAccount, useHasFeature } from '@/components/shell/account';
-import { TOOLS, pathForView } from '@/components/shell/tools';
-import PrepareWorksheets from '@/components/worksheets/PrepareWorksheets';
-import {
-  LearnRequestError,
-  assetUrl,
-  localDay,
-  referenceDataUrl,
-  useCompletionChanges,
-  useCompletions,
-  useLearnItem,
-  useLearnList,
-  type ItemAnswer,
-  type OpenItem,
-} from './data';
+import { useAccount, useLearnSummary } from '@/components/shell/account';
+import { pathForView } from '@/components/shell/tools';
+import { assetUrl, useLearnItem, useLearnList, type ItemAnswer, type OpenItem } from './data';
 import { useClassMode } from './ClassMode';
-import { ReplaceDialog, useToolHandoff } from './handoff';
-import { recentlyDone } from './LearnHome';
-import { useStoredFilters } from './ChallengesScreen';
+import { AnotherOne, Credits, MarkDone, PrepareButton, PrintSheet, ToolShortcuts, useOwnPhotoInput, useWorksheets } from './ItemParts';
+import LessonCard from './LessonCard';
 import ZoomViewer from './ZoomViewer';
-import { DoneTick, DraftBadge, Failed, LearnHeader, Loading, buttonPrimary, buttonSecondary, chip, useLocalized } from './parts';
+import { DraftBadge, Failed, LearnHeader, Loading, buttonPrimary, buttonSecondary, chip, useLocalized } from './parts';
 
-// S3 · An exercise, S5 · a challenge, S9 · either one locked. The whole card
+// S3 · An exercise, S5 · a challenge, S9 · either one locked. The whole page
 // only when the server opens it to this account; otherwise the locked page,
 // which never has the instructions, the guide or the reference (the server
-// does not send them). Designed for paper: the reference large (full screen
-// and zoom on a tap), the short instruction, then what to do — worksheets,
-// a tool with the reference already in it, "Mark as completed" — and "More
-// help" folded away.
+// does not send them).
+//
+// An exercise written as a lesson (ADR-0019) has its own page (LessonCard):
+// the teaching on the page, the subject inside the steps. A challenge keeps
+// the brief: the subject large (full screen and zoom on a tap), the prompt and
+// its focus, the lessons it builds on, then what to do — worksheets, a tool
+// with the reference already in it, "Mark as completed". An exercise not yet
+// written as a lesson keeps M5's card.
 
 export default function ItemScreen({ id, kind }: { id: string; kind: 'exercise' | 'challenge' }) {
   const t = useTranslations('learn');
@@ -64,6 +53,7 @@ export default function ItemScreen({ id, kind }: { id: string; kind: 'exercise' 
   const answer = query.data;
   if (answer.status === 'not_found') return <NotFound back={back} />;
   if (answer.status === 'locked') return <LockedItem answer={answer} back={back} />;
+  if (answer.item.kind === 'exercise' && isLesson(answer.item)) return <LessonCard item={answer.item} back={back} />;
   return <OpenCard item={answer.item} back={back} />;
 }
 
@@ -174,7 +164,7 @@ function OpenCard({ item, back }: { item: OpenItem; back: { href: string; label:
               </div>
             </figure>
           ) : (
-            <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border bg-card p-5 text-sm text-foreground">
+            <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border bg-card p-5 text-sm text-foreground" data-learn-subject>
               {item.kind === 'challenge' ? <Sparkles className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" /> : <PencilLine className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />}
               <p>{item.kind === 'challenge' ? t(`item.noReference.${item.reference}`) : loc(item.materials)}</p>
             </div>
@@ -185,6 +175,11 @@ function OpenCard({ item, back }: { item: OpenItem; back: { href: string; label:
           <p className="text-lg leading-relaxed text-foreground md:text-xl" data-learn-instruction>
             {item.kind === 'exercise' ? loc(item.instruction) : loc(item.prompt)}
           </p>
+          {item.kind === 'challenge' && item.focus && (
+            <p className="mt-2 text-[15px] leading-relaxed text-foreground" data-learn-focus>
+              <span className="font-semibold text-primary">{t('item.focus')}:</span> {loc(item.focus)}
+            </p>
+          )}
           <dl className="mt-3 space-y-1 text-sm text-muted-foreground">
             <div className="flex gap-1.5">
               <dt className="font-semibold text-foreground/90">{item.kind === 'exercise' ? t('item.materials') : t('item.skill')}:</dt>
@@ -196,10 +191,11 @@ function OpenCard({ item, back }: { item: OpenItem; back: { href: string; label:
               {t(`item.referenceKinds.${item.reference}`)} · {t(`item.mediums.${item.medium}`)}
             </p>
           )}
+          {item.kind === 'challenge' && item.lessons && item.lessons.length > 0 && <BuildsOn lessons={item.lessons} />}
 
           <Actions item={item} />
-          <ToolShortcuts item={item} />
-          <MoreHelp item={item} />
+          <ToolShortcuts item={item} back={{ href: itemPath(item.id), kind: item.kind, number: null, title: item.title }} />
+          {item.kind === 'exercise' ? <MoreHelp item={item} /> : <Credits images={item.references} />}
         </div>
       </div>
       {zoom && reference && <ZoomViewer src={assetUrl(reference.assetId)} alt={loc(reference.alt)} onClose={() => setZoom(false)} />}
@@ -207,268 +203,93 @@ function OpenCard({ item, back }: { item: OpenItem; back: { href: string; label:
   );
 }
 
-/** Prepare worksheets (or the static sheet), Use my photo, Mark as completed, Another one. */
-function Actions({ item }: { item: OpenItem }) {
+/** "Builds on: Lesson 2 · Big shapes": the lessons that teach what a challenge practises, as lists show them (a lock when locked). */
+function BuildsOn({ lessons }: { lessons: string[] }) {
   const t = useTranslations('learn.item');
-  const tw = useTranslations('worksheets');
-  const router = useRouter();
-  const classMode = useClassMode();
-  const { gridSettings, valueSettings } = useProject();
-  const offer = useAccount()?.account.offer;
-  const canWorksheets = useHasFeature('export.worksheets');
-  // Offered as in the tools: shown if any plan has it (locked when this one does not), hidden otherwise.
-  const worksheetsOffered = canWorksheets || offer?.free.includes('export.worksheets') === true || offer?.pro.includes('export.worksheets') === true;
-  const reference = item.references[0] ?? null;
-  const generated = reference !== null && (item.kind === 'exercise' ? item.worksheet.kind === 'generated' : item.reference === 'provided');
-  const staticSheet = item.kind === 'exercise' && item.worksheet.kind === 'static' ? item.worksheet.assetId : null;
-  const ownPhoto = item.kind === 'challenge' && item.reference === 'own_photo';
-  const [sheet, setSheet] = useState<{ image: string; learnItem: string | null } | null>(null);
-  const [preparing, setPreparing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const photoInput = useRef<HTMLInputElement>(null);
-
-  // The canvas and grid are Create a Grid's; the picture is fitted to the canvas (as from Study).
-  const settings = useMemo(() => ({ ...gridSettings, rotation: 0 as const, imageScale: 1, imageOffsetX: 0, imageOffsetY: 0 }), [gridSettings]);
-  const outline = useMemo(() => activeControls({ ...resolveSketch(valueSettings), style: 'outline' }), [valueSettings]);
-
-  const openWorksheets = async () => {
-    if (!reference || preparing) return;
-    setError(null);
-    setPreparing(true);
-    try {
-      setSheet({ image: await referenceDataUrl(reference.assetId), learnItem: item.id });
-    } catch (failure) {
-      setError(failure instanceof LearnRequestError && failure.status === 403 ? t('handoffLocked') : t('handoffFailed'));
-    } finally {
-      setPreparing(false);
-    }
-  };
-  const onPhoto = (file: File | undefined) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => setSheet({ image: reader.result as string, learnItem: null });
-    reader.readAsDataURL(file);
-  };
-  // Class mode: the next student starts from the library again, with the same sheet choices.
-  const nextStudent = () => {
-    setSheet(null);
-    router.push(learnPath({ screen: item.kind === 'challenge' ? 'challenges' : 'curriculum' }));
-  };
-
+  const loc = useLocalized();
+  const summary = useLearnSummary();
+  const course = useLearnList('curriculum', summary.modules.curriculum !== null);
+  const entries = course.data?.items ?? [];
+  const numbers = lessonNumbers(entries);
+  const linked = lessons.flatMap((id) => entries.filter((entry) => entry.id === id));
+  if (linked.length === 0) return null;
   return (
-    <div className="mt-5 space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
-        {generated && worksheetsOffered && (
-          <button type="button" onClick={() => void openWorksheets()} disabled={preparing} className={buttonPrimary} data-learn-worksheets>
-            {preparing ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : canWorksheets ? <Layers className="h-5 w-5" aria-hidden="true" /> : <Lock className="h-5 w-5" aria-hidden="true" />}
-            {canWorksheets ? t('worksheets') : t('worksheetsLocked')}
-          </button>
-        )}
-        {staticSheet && (
-          <a href={assetUrl(staticSheet)} download className={buttonPrimary}>
-            <Printer className="h-5 w-5" aria-hidden="true" /> {t('printWorksheet')}
-          </a>
-        )}
-        {ownPhoto && worksheetsOffered && (
-          <>
-            <button type="button" onClick={() => photoInput.current?.click()} className={generated ? buttonSecondary : buttonPrimary} aria-describedby="learn-own-photo-hint">
-              <Camera className="h-5 w-5" aria-hidden="true" /> {t('useMyPhoto')}
-            </button>
-            <input
-              ref={photoInput}
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={(event) => {
-                onPhoto(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </>
-        )}
-        {!classMode.on && <MarkDone itemId={item.id} />}
-        {item.kind === 'challenge' && <AnotherOne currentId={item.id} />}
-      </div>
-      {ownPhoto && worksheetsOffered && (
-        <p id="learn-own-photo-hint" className="text-xs text-muted-foreground">
-          {t('useMyPhotoHint')}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      {sheet && (
-        <PrepareWorksheets
-          from="grid"
-          image={sheet.image}
-          settings={settings}
-          fitted
-          outline={outline}
-          learnItem={sheet.learnItem}
-          lead={sheet.learnItem ? tw('fromReference') : undefined}
-          onNext={classMode.on ? nextStudent : undefined}
-          onClose={() => setSheet(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-/** "Mark as completed": optional; once a day; "Undo" for a few seconds afterwards. Never shown in class mode. */
-function MarkDone({ itemId }: { itemId: string }) {
-  const t = useTranslations('learn.item');
-  const completions = useCompletions(true);
-  const { mark, remove } = useCompletionChanges();
-  const [undoable, setUndoable] = useState<string | null>(null);
-  const [status, setStatus] = useState<'marked' | 'undone' | 'failed' | null>(null);
-  const entry = completions.data?.summary.items[itemId];
-  const today = entry ? localDay(entry.last) === localDay(new Date()) : false;
-
-  useEffect(() => {
-    if (!undoable) return;
-    const timer = window.setTimeout(() => setUndoable(null), 8000);
-    return () => window.clearTimeout(timer);
-  }, [undoable]);
-
-  const onMark = () =>
-    mark.mutate(itemId, {
-      onSuccess: ({ completion }) => {
-        setUndoable(completion.id);
-        setStatus('marked');
-      },
-      onError: () => setStatus('failed'),
-    });
-  const onUndo = () => {
-    if (!undoable) return;
-    remove.mutate(undoable, {
-      onSuccess: () => {
-        setUndoable(null);
-        setStatus('undone');
-      },
-      onError: () => setStatus('failed'),
-    });
-  };
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <button
-        type="button"
-        onClick={onMark}
-        disabled={today || mark.isPending || completions.isPending}
-        className={buttonSecondary}
-        data-mark-done={today ? 'today' : 'ready'}
-      >
-        {mark.isPending ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Check className="h-5 w-5" aria-hidden="true" />}
-        {mark.isPending ? t('marking') : today ? t('doneToday') : t('markDone')}
-      </button>
-      <span className="flex min-h-[20px] flex-wrap items-center gap-2" aria-live="polite">
-        {entry && <DoneTick count={entry.count} />}
-        {status === 'marked' && undoable && (
-          <>
-            <span className="text-sm text-foreground">{t('marked')}</span>
-            <button type="button" onClick={onUndo} disabled={remove.isPending} className="min-h-[36px] rounded-lg px-2 text-sm font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-undo>
-              {t('undo')}
-            </button>
-          </>
-        )}
-        {status === 'undone' && <span className="text-sm text-foreground">{t('undone')}</span>}
-        {status === 'failed' && <span className="text-sm text-destructive">{t('markFailed')}</span>}
-      </span>
-    </div>
-  );
-}
-
-/** "Another one": a new pick the way this one was reached (all challenges, or the filters; quick or not), never this one. */
-function AnotherOne({ currentId }: { currentId: string }) {
-  const t = useTranslations('learn.item');
-  const router = useRouter();
-  const params = useSearchParams();
-  const classMode = useClassMode();
-  const list = useLearnList('challenges');
-  const completions = useCompletions(!classMode.on);
-  const [stored] = useStoredFilters();
-  // How this challenge was reached, from a fixed set (anything else is ignored).
-  const asked = params.get('pick');
-  const how = asked === 'all' || asked === 'quick' || asked === 'filters' || asked === 'filters-quick' ? asked : null;
-  const quickOnly = how === 'quick' || how === 'filters-quick';
-  const filters = how === 'all' || how === 'quick' ? DEFAULT_FILTERS : stored;
-  const items = list.data?.items ?? [];
-  const another = items.some((e) => e.open && e.id !== currentId && matchesFilters(e, quickOnly ? { ...filters, quick: true } : filters));
-  const go = () => {
-    const id = pickChallenge(items, {
-      filters,
-      quickOnly,
-      exclude: currentId,
-      recentlyDone: classMode.on ? [] : recentlyDone(completions.data),
-      recentlySeen: classMode.recent,
-    });
-    if (id && id !== currentId) router.push(`${itemPath(id)}${how ? `?pick=${how}` : ''}`);
-  };
-  return (
-    <button type="button" onClick={go} disabled={!another} className={buttonSecondary} data-another>
-      <Dices className="h-5 w-5" aria-hidden="true" /> {t('another')}
-    </button>
-  );
-}
-
-/** Tool shortcuts: each opens its tool with the reference already in it. */
-function ToolShortcuts({ item }: { item: OpenItem }) {
-  const t = useTranslations('learn.item');
-  const tg = useTranslations();
-  const handoff = useToolHandoff();
-  if (item.tools.length === 0) return null;
-  return (
-    <section aria-labelledby="learn-tools-title" className="mt-6">
-      <h2 id="learn-tools-title" className="mb-2 text-sm font-semibold text-muted-foreground">
-        {t('tools')}
+    <section aria-labelledby="learn-builds-on" className="mt-4" data-learn-builds-on>
+      <h2 id="learn-builds-on" className="text-sm font-semibold text-muted-foreground">
+        {t('buildsOn')}
       </h2>
-      <div className="flex flex-wrap gap-2">
-        {item.tools.map((tool) => {
-          const Icon = TOOLS[tool].icon;
+      <ul className="mt-1.5 flex flex-wrap gap-2">
+        {linked.map((entry) => {
+          const number = numbers.get(entry.id);
           return (
-            <button key={tool} type="button" onClick={() => void handoff.open(tool, item)} disabled={handoff.busy !== null} className={chip} data-open-in={tool}>
-              {handoff.busy === tool ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Icon className="h-4 w-4 text-primary" aria-hidden="true" />}
-              {handoff.busy === tool ? t('opening') : t('openIn', { tool: tg(`tools.${tool}.title`) })}
-            </button>
+            <li key={entry.id}>
+              <Link href={itemPath(entry.id)} className={chip} data-builds-on={entry.id}>
+                {entry.open ? <PencilLine className="h-4 w-4 text-primary" aria-hidden="true" /> : <Lock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                {number ? t('buildsOnLesson', { number, title: loc(entry.title) }) : loc(entry.title)}
+              </Link>
+            </li>
           );
         })}
-      </div>
-      {handoff.error && (
-        <p role="alert" className="mt-2 text-sm text-destructive">
-          {handoff.error}
-        </p>
-      )}
-      {handoff.confirming && (
-        <ReplaceDialog
-          toolName={tg(`tools.${handoff.confirming.tool}.title`)}
-          onReplace={() => void handoff.open(handoff.confirming!.tool, handoff.confirming!.item, true)}
-          onCancel={handoff.cancel}
-        />
-      )}
+      </ul>
     </section>
   );
 }
 
-/** "More help", folded: why, how, the common mistake and its fix, when it is done, and the picture credits. */
-function MoreHelp({ item }: { item: OpenItem }) {
+/** Prepare worksheets (or the static sheet), Use my photo, Mark as completed, Another one. */
+function Actions({ item }: { item: OpenItem }) {
+  const t = useTranslations('learn.item');
+  const classMode = useClassMode();
+  const summary = useLearnSummary();
+  const sheets = useWorksheets(item);
+  const photo = useOwnPhotoInput(sheets.usePhoto);
+  // The Skill filter of "Another one" needs the course's units (ignored without them).
+  const course = useLearnList('curriculum', item.kind === 'challenge' && summary.modules.curriculum !== null);
+  const entries = course.data?.items;
+  const unitsOf = entries ? (lessons: string[] | undefined) => unitsOfLessons(lessons, entries) : undefined;
+
+  return (
+    <div className="mt-5 space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
+        {sheets.generated && <PrepareButton sheets={sheets} />}
+        {sheets.staticSheet && <PrintSheet assetId={sheets.staticSheet} />}
+        {sheets.ownPhoto && (
+          <>
+            <button type="button" onClick={photo.open} className={sheets.generated ? buttonSecondary : buttonPrimary} aria-describedby="learn-own-photo-hint">
+              <Camera className="h-5 w-5" aria-hidden="true" /> {t('useMyPhoto')}
+            </button>
+            {photo.element}
+          </>
+        )}
+        {!classMode.on && <MarkDone itemId={item.id} />}
+        {item.kind === 'challenge' && <AnotherOne currentId={item.id} unitsOf={unitsOf} />}
+      </div>
+      {sheets.ownPhoto && (
+        <p id="learn-own-photo-hint" className="text-xs text-muted-foreground">
+          {t('useMyPhotoHint')}
+        </p>
+      )}
+      {sheets.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {sheets.error}
+        </p>
+      )}
+      {sheets.view}
+    </div>
+  );
+}
+
+/** M5's "More help", folded, for an exercise not yet written as a lesson: why, how, the common mistake and its fix, when it is done, and the picture credits. */
+function MoreHelp({ item }: { item: Extract<OpenItem, { kind: 'exercise' }> }) {
   const t = useTranslations('learn.item');
   const loc = useLocalized();
   const credits = item.references.filter((ref) => ref.credit);
-  const rows: [string, string][] =
-    item.kind === 'exercise'
-      ? [
-          [t('objective'), loc(item.objective)],
-          ...(item.guide ? ([[t('guide'), loc(item.guide)]] as [string, string][]) : []),
-          [t('mistake'), loc(item.mistake.mistake)],
-          [t('fix'), loc(item.mistake.fix)],
-          [t('success'), loc(item.success)],
-        ]
-      : [];
-  if (rows.length === 0 && credits.length === 0) return null;
+  const rows: [string, string][] = [
+    [t('objective'), loc(item.objective)],
+    ...(item.guide ? ([[t('guide'), loc(item.guide)]] as [string, string][]) : []),
+    [t('mistake'), loc(item.mistake.mistake)],
+    [t('fix'), loc(item.mistake.fix)],
+    [t('success'), loc(item.success)],
+  ];
   return (
     <details className="group mt-6 rounded-2xl border border-border bg-card" data-more-help>
       <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 text-[15px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
@@ -476,16 +297,14 @@ function MoreHelp({ item }: { item: OpenItem }) {
         <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
       </summary>
       <div className="space-y-4 px-4 pb-4">
-        {rows.length > 0 && (
-          <dl className="space-y-3 text-sm leading-relaxed">
-            {rows.map(([term, text]) => (
-              <div key={term}>
-                <dt className="font-semibold text-foreground">{term}</dt>
-                <dd className="mt-0.5 text-muted-foreground">{text}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        <dl className="space-y-3 text-sm leading-relaxed">
+          {rows.map(([term, text]) => (
+            <div key={term}>
+              <dt className="font-semibold text-foreground">{term}</dt>
+              <dd className="mt-0.5 text-muted-foreground">{text}</dd>
+            </div>
+          ))}
+        </dl>
         {credits.length > 0 && (
           <div className="border-t border-border pt-3 text-xs leading-relaxed text-muted-foreground">
             <p className="font-semibold text-foreground/90">{t('credits')}</p>
@@ -500,4 +319,3 @@ function MoreHelp({ item }: { item: OpenItem }) {
     </details>
   );
 }
-

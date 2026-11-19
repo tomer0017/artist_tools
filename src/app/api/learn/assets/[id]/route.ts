@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
-import { ASSET_ID, itemsOf } from '@/lib/learn/model';
+import { ASSET_ID, itemAssetIds, itemsOf } from '@/lib/learn/model';
 import { UnreadableConfigError } from '@/server/config/versions';
 import { collections } from '@/server/db/collections';
 import { learnAssetsDir } from '@/server/env';
@@ -10,9 +10,9 @@ import { assetPath } from '@/server/learn/assets';
 import { liveLearn } from '@/server/learn/live';
 import { learnJson, learnRequest } from '@/server/learn/request';
 
-// GET /api/learn/assets/<sha256> (ADR-0017): a Learn reference image, its
-// thumbnail or a static worksheet, only for an account allowed it at this
-// moment — an admin, or an account that may open a published item using it
+// GET /api/learn/assets/<sha256> (ADR-0017): a Learn picture (a reference, or a
+// lesson's demonstration, step or mistake picture, ADR-0019), its thumbnail or
+// a static worksheet, only for an account allowed it at this moment — an admin, or an account that may open a published item using it
 // (a thumbnail also while locked items show thumbnails in lists). Locked:
 // 403, even for a URL that worked before access ended; anything else: 404.
 // The ID is exactly 64 hex characters, so no path is built from the request.
@@ -37,7 +37,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (entitlements.access !== 'admin') {
       const { content, view } = await liveLearn(db, entitlements);
       const target = asset.role === 'thumbnail' ? asset.of : asset._id;
-      const users = itemsOf(content).filter((item) => item.references.some((ref) => ref.assetId === target) || (item.kind === 'exercise' && item.worksheet.kind === 'static' && item.worksheet.assetId === target));
+      const users = itemsOf(content).filter((item) => target !== null && itemAssetIds(item).includes(target));
       const visible = users.filter((item) => view.state(item.id).status !== 'hidden');
       if (visible.length === 0) return learnJson({ error: 'not_found' }, 404);
       const allowed = asset.role === 'thumbnail' ? visible.some((item) => view.thumbnail(item.id)) : visible.some((item) => view.canOpen(item.id));

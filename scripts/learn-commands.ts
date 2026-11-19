@@ -91,7 +91,7 @@ export async function learnStatus(db: Database): Promise<number> {
     }
     console.log(`  files: ${ok} of ${assets.length} present with exactly their recorded bytes`);
   } else if (assets.length > 0) failed = true;
-  for (const asset of assets.filter((a) => a.licence)) console.log(`  ${asset._id.slice(0, 12)}…  ${asset.licence!.kind}  ${asset.licence!.author} — ${asset.licence!.title} (${asset.licence!.source})`);
+  for (const asset of assets.filter((a) => a.licence)) console.log(`  ${asset._id.slice(0, 12)}…  ${asset.licence!.kind}  ${asset.licence!.author} — ${asset.licence!.title} (${asset.licence!.source ?? 'own work, no source page'})`);
 
   const catalog = await getPublished(db, catalogSpec);
   const read = readCatalog(catalog?.document ?? defaultCatalog());

@@ -625,6 +625,12 @@ test('Learn: a module and a First N list published in Admin → Plans open exact
   // Dark launch: nothing for Free or Pro.
   expect(await item(free.page, 'CH-901')).toEqual({ status: 403, body: { error: 'locked', reason: 'module_off', feature: 'learn.challenges' } });
   expect((await free.page.request.get(`/api/learn/assets/${image}`)).status()).toBe(403);
+  // A lesson (ADR-0019) too: refused whole, with nothing of it, and so are its demonstration and mistake pictures.
+  const { item: lesson } = (await item(admin.page, 'D-LESSON-01')).body;
+  expect(await item(free.page, 'D-LESSON-01')).toEqual({ status: 403, body: { error: 'locked', reason: 'module_off', feature: 'learn.curriculum' } });
+  for (const picture of [lesson.demo[0].image.assetId, lesson.demo[1].image.assetId, lesson.mistake.image.assetId]) {
+    expect((await free.page.request.get(`/api/learn/assets/${picture}`)).status(), `lesson picture ${picture}`).toBe(403);
+  }
 
   catalogChanged = true;
   let learnPublished = false;
@@ -697,6 +703,8 @@ test('Learn: a module and a First N list published in Admin → Plans open exact
     // Free leaves CH-901's card open while the admin takes it back.
     await free.page.goto('/app/learn/challenges/CH-901');
     await expect(free.page.locator('[data-learn-card="CH-901"] [data-learn-instruction]')).toHaveText('Secret prompt CH-901');
+    // It builds on a lesson, but no plan offers Free the course: nothing of it is shown.
+    await expect(free.page.locator('[data-learn-card="CH-901"] [data-learn-builds-on]')).toHaveCount(0);
   } finally {
     if (learnPublished) await publishLearn(admin.page, false);
   }

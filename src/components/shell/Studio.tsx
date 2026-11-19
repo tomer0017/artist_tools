@@ -21,6 +21,8 @@ import PlansScreen from '@/components/shell/PlansScreen';
 import ToolLocked from '@/components/shell/ToolLocked';
 import { ToolIntroHost } from '@/components/shell/ToolIntro';
 import { ToolOpenTracker } from '@/components/shell/ToolOpenTracker';
+// Small, outside Learn's lazy code: the way back from a tool to the lesson that opened it (ADR-0019).
+import ReturnBar from '@/components/learn/ReturnBar';
 import { BottomNav, TopNav } from '@/components/shell/AppNav';
 import { isTool, pathForView, viewFromPathname } from '@/components/shell/tools';
 import { OnboardingProvider, OnboardingHost } from '@/onboarding';
@@ -161,6 +163,7 @@ function Workspace() {
       <ToolIntroHost />
       <ToolOpenTracker />
       {!isMobile && <TopNav />}
+      <ReturnBar />
       {/* min-w-0 on every tool root: a flex item otherwise grows to its
           content (e.g. a full-resolution image) and pushes controls offscreen. */}
       <main className="flex min-h-0 min-w-0 flex-1 [&>*]:min-w-0">

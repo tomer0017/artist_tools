@@ -153,8 +153,8 @@ export type LicenceKind = 'own' | 'commissioned' | 'cc0' | 'public-domain' | 'li
  */
 export interface AssetLicence {
   kind: LicenceKind;
-  /** The work's own page at its source (e.g. the museum's object page). */
-  source: string;
+  /** The work's own page at its source (e.g. the museum's object page); none for own or commissioned work (ADR-0019). */
+  source: string | null;
   author: string;
   /** The work's title at its source. */
   title: string;

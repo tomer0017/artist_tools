@@ -12,7 +12,15 @@ import { test, expect, type APIRequestContext, type Browser } from '@playwright/
 
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const COLLECTIONS = ['curriculum', 'color', 'challenges'] as const;
-const PUBLISHED = { 'D-TEST-01': 'learn.curriculum', 'D-TEST-02': 'learn.curriculum', 'C-TEST-01': 'learn.color', 'CH-901': 'learn.challenges', 'CH-902': 'learn.challenges' } as const;
+const PUBLISHED = {
+  'D-TEST-01': 'learn.curriculum',
+  'D-TEST-02': 'learn.curriculum',
+  'D-BASE-01': 'learn.curriculum',
+  'D-LESSON-01': 'learn.curriculum',
+  'C-TEST-01': 'learn.color',
+  'CH-901': 'learn.challenges',
+  'CH-902': 'learn.challenges',
+} as const;
 const UNPUBLISHED = ['D-TEST-03', 'CH-903'];
 
 async function api(browser: Browser, who: string | null) {
@@ -20,25 +28,33 @@ async function api(browser: Browser, who: string | null) {
   return { context, request: context.request };
 }
 
-/** Every asset the content uses, found as an admin: each reference and its thumbnail. */
-async function assetIds(request: APIRequestContext): Promise<{ references: string[]; thumbnails: string[] }> {
-  const references: string[] = [];
-  const thumbnails: string[] = [];
+type Picture = { assetId: string; thumbnailAssetId: string };
+
+/** Every asset the content uses, found as an admin: each picture (references, and a lesson's demonstration, step and mistake pictures) with its thumbnail, and each static worksheet. */
+async function assetIds(request: APIRequestContext): Promise<{ references: string[]; thumbnails: string[]; worksheets: string[] }> {
+  const pictures = new Map<string, string>();
+  const worksheets = new Set<string>();
   for (const id of Object.keys(PUBLISHED)) {
     const { item } = await (await request.get(`/api/learn/items/${id}`)).json();
-    for (const ref of item.references) {
-      references.push(ref.assetId);
-      thumbnails.push(ref.thumbnailAssetId);
-    }
+    const all: Picture[] = [
+      ...item.references,
+      ...(item.demo ?? []).map((frame: { image: Picture }) => frame.image),
+      ...(item.steps ?? []).flatMap((step: { image?: Picture }) => (step.image ? [step.image] : [])),
+      ...(item.mistake?.image ? [item.mistake.image] : []),
+    ];
+    for (const picture of all) pictures.set(picture.assetId, picture.thumbnailAssetId);
+    if (item.worksheet?.kind === 'static') worksheets.add(item.worksheet.assetId);
   }
-  return { references, thumbnails };
+  return { references: [...pictures.keys()], thumbnails: [...pictures.values()], worksheets: [...worksheets] };
 }
 
 test.describe('Learn, dark-launched: no plan includes a Learn module', () => {
   test('Free and Pro: lists are empty, every item and image is refused, and so is an export from an item', async ({ browser }) => {
     const admin = await api(browser, 'admin');
     const assets = await assetIds(admin.request);
-    expect(assets.references).toHaveLength(3);
+    // Six pictures (three references, a lesson's two demonstration frames and its mistake picture) and one static worksheet.
+    expect(assets.references).toHaveLength(6);
+    expect(assets.worksheets).toHaveLength(1);
     await admin.context.close();
 
     for (const who of ['user', 'pro']) {
@@ -57,7 +73,7 @@ test.describe('Learn, dark-launched: no plan includes a Learn module', () => {
         expect(text).not.toContain('Secret');
       }
       for (const id of [...UNPUBLISHED, 'CH-999', 'not-an-item', 'D-TEST-01.json']) expect((await request.get(`/api/learn/items/${id}`)).status(), `${who} ${id}`).toBe(404);
-      for (const id of [...assets.references, ...assets.thumbnails]) {
+      for (const id of [...assets.references, ...assets.thumbnails, ...assets.worksheets]) {
         const response = await request.get(`/api/learn/assets/${id}`);
         expect(response.status(), `${who} asset ${id}`).toBe(403);
         expect(response.headers()['content-type']).toContain('application/json');
@@ -74,7 +90,13 @@ test.describe('Learn, dark-launched: no plan includes a Learn module', () => {
   test('an admin opens every item, unpublished ones too, with its images, privately cached', async ({ browser }) => {
     const { context, request } = await api(browser, 'admin');
     const list = await (await request.get('/api/learn/items?collection=curriculum')).json();
-    expect(list.items.map((row: { id: string; open: boolean; published: boolean }) => `${row.id}:${row.open}:${row.published}`)).toEqual(['D-TEST-01:true:true', 'D-TEST-02:true:true', 'D-TEST-03:true:false']);
+    expect(list.items.map((row: { id: string; open: boolean; published: boolean }) => `${row.id}:${row.open}:${row.published}`)).toEqual([
+      'D-TEST-01:true:true',
+      'D-TEST-02:true:true',
+      'D-TEST-03:true:false',
+      'D-BASE-01:true:true',
+      'D-LESSON-01:true:true',
+    ]);
     // Lists never carry an item's content.
     expect(JSON.stringify(list)).not.toContain('Secret');
     const { item, contentVersion } = await (await request.get('/api/learn/items/D-TEST-01')).json();
@@ -137,15 +159,17 @@ test.describe('Admin → Learn and the Learn section of Admin → Plans', () => 
     await expect(access).toContainText('Free: nothing');
     await expect(access).toContainText('Pro: nothing');
     const curriculum = page.getByRole('table', { name: 'Drawing curriculum' });
-    await expect(curriculum.getByRole('row')).toHaveCount(4);
+    await expect(curriculum.getByRole('row')).toHaveCount(6);
     await expect(curriculum.getByRole('row', { name: /D-TEST-03/ })).toContainText('Unpublished (admins only)');
     await expect(page.getByRole('table', { name: 'Challenges' }).getByRole('row', { name: /CH-901/ }).getByRole('img', { name: 'Test picture wing' })).toBeVisible();
     // The thumbnail really loaded through the authorized route.
     expect(await page.getByRole('img', { name: 'Test picture wing' }).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
-    const assets = page.getByRole('region', { name: /Assets \(3\)/ });
-    await expect(assets.getByRole('listitem')).toHaveCount(3);
+    const assets = page.getByRole('region', { name: /Assets \(7\)/ });
+    await expect(assets.getByRole('listitem')).toHaveCount(7);
     await expect(assets).toContainText('Synthetic sky');
     await expect(assets).toContainText('Studio Companion test suite · own');
+    // Own work may have no source page (ADR-0019): said, not linked.
+    await expect(assets.getByRole('listitem').filter({ hasText: 'Synthetic worksheet' })).toContainText('Own work, no source page');
     await expect(page.getByRole('heading', { name: 'Version history' })).toBeVisible();
     const results = await new AxeBuilder({ page }).withTags(WCAG).analyze();
     expect(results.violations).toEqual([]);
