@@ -11,7 +11,9 @@ version for approval; the details are in documents 01–07.
 > the owner approved a beginner revision,
 > [09-beginner-revision.md](09-beginner-revision.md): six stages from
 > absolute zero, micro-lessons of one small skill, and a much simpler lesson
-> page (ADR-0020). Status per milestone: 07.
+> page (ADR-0020). The founder's sprint brief then asked for a 15-lesson
+> beginner course and a specification through lesson 29:
+> [10-beginner-course.md](10-beginner-course.md). Status per milestone: 07.
 
 ## 1. Answers to the first review
 

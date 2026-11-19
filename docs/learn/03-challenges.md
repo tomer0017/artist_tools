@@ -164,8 +164,18 @@ imagination. IDs continue after CH-050 and are never reused.
 
 | ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Builds on |
 |---|---|---|---|---|---|---|---|---|---|
-| CH-051 | A robot made of shapes | רובוט מצורות | Invent a robot using only circles, squares, triangles and straight lines. | B | Building with simple shapes (2) | Memory or imagination | P/C | ✓ | D-LINE-01, D-FLAT-01, D-FLAT-02 |
-| CH-052 | A street of houses | רחוב של בתים | Draw a street of three houses from squares, triangles and straight lines, each one different. | B | Shapes and straight lines (2) | Memory or imagination | P/C | — | D-HAND-01, D-LINE-01, D-FLAT-02 |
+| CH-051 | A robot made of shapes | רובוט מצורות | Invent a robot using only circles, squares, triangles and straight lines. | B | Building with simple shapes (2) | Memory or imagination | P/C | ✓ | D-BUILD-01, D-BUILD-02, D-BUILD-03 |
+| CH-052 | A street of houses | רחוב של בתים | Draw a street of three houses from squares, triangles and straight lines, each one different. | B | Shapes and straight lines (2) | Memory or imagination | P/C | — | D-HAND-01, D-FLAT-02, D-BUILD-01 |
+| CH-053 | A town of boxes | עיירה של קופסאות | Draw a small town of boxes: houses, a tower and a bus, each one a cube or a long box. | B | Boxes and simple forms (2) | Memory or imagination | P/C | — | D-FORM-01, D-SHAPE-03, D-BUILD-03 |
+| CH-054 | A night sky | שמי לילה | Draw hills under a night sky: dark at the top, lighter near the hills, with a round moon left white. | B | Smooth values (4) | Memory or imagination | P/C | ✓ | D-VAL-01, D-VAL-02 |
+
+**Linked to the 15-lesson course ([10](10-beginner-course.md), test
+content v4):** CH-051 and CH-052 as in the table, and:
+- CH-012 (a leaf) builds on D-LINE-02, D-BUILD-02 and D-BUILD-03.
+- CH-017 (a butterfly) builds on D-BUILD-01…03.
+- CH-002 (keys, drawn exactly as they landed) is observation work: it is
+  intermediate, linked to stage 5, and shows no "Builds on" until that
+  stage is built.
 
 ## Notes for the catalogue
 

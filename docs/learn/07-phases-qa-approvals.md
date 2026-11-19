@@ -208,8 +208,27 @@ implemented or tested yet: no Learn code exists.
   - real staging in English and Hebrew, mobile included, with the PDFs.
 - **Then stop:** the owner reviews it before M6b or more content.
 
+#### The 15-lesson course (sprint to 2026-11-26)
+- **Status:** the founder's sprint brief of 2026-11-19. Lessons 1–15 are
+  built and on staging for admins only, and lessons 16–29 are specified
+  ([10-beginner-course.md](10-beginner-course.md)). Release and
+  verification: deploy/RELEASES.md.
+- **Scope:**
+  - lessons 6–15 (stages 2–4), each with its pictures and A4 sheet;
+  - the units regrouped into the approved stages;
+  - challenges linked to their real prerequisites, plus two new ones;
+  - one code fix: the Learn screen never pans sideways right to left.
+- **Tests:**
+  - every lesson in English and Hebrew, desktop and iPhone (emulated);
+  - the whole "I did it" chain;
+  - the 15 PDFs read back;
+  - the full regression suite;
+  - real staging with Free and Pro.
+- **Then stop:** the founder reviews it before lessons 16–19, M6b or
+  production.
+
 #### M6b — the content editor
-- **Status:** waits for the owner's review of the beginner revision.
+- **Status:** waits for the founder's review of the 15-lesson course.
 - **Scope:**
   - English and Hebrew side by side, with a live phone preview;
   - ordering;
