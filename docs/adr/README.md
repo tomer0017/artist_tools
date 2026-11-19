@@ -24,6 +24,7 @@ change its decision; a new record supersedes it.
 | [0016](0016-prepare-worksheets-as-aligned-images.md) | Prepare Worksheets: aligned PNG sheets from one photo, reusing Create a Grid and Study & Simplify | Accepted |
 | [0017](0017-learn-foundations.md) | Learn foundations: versioned content, private assets checked by their bytes, per-item access in the plan catalog, one resolver | Accepted |
 | [0018](0018-learn-screens.md) | Learn screens: the studio's Learn view, personal history and class mode | Accepted |
-| [0019](0019-learn-lessons.md) | Lessons that teach: the lesson template, the optional baseline, challenges linked to lessons, tool presets and the way back | Accepted |
+| [0019](0019-learn-lessons.md) | Lessons that teach: the lesson template, the optional baseline, challenges linked to lessons, tool presets and the way back | Accepted; its lesson page and publishing rules revised by 0020 |
+| [0020](0020-beginner-lessons.md) | Beginner lessons: one small skill per lesson, one picture, a short task, something to make, one "I did it — next lesson" button with Undo, the rest behind "Need help?"; drafts unnumbered | Accepted |
 
 Format: Context · Decision · Consequences · Alternatives considered.

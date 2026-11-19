@@ -43,9 +43,11 @@ const exercise = (id: string, collection: 'curriculum' | 'color', groupId: strin
 const picture = (asset: string, alt: string, he: string) => ({ asset, alt: text(alt, he) });
 
 /**
- * An exercise written as a lesson (ADR-0019): every part, with "Secret" in
- * each text only an open lesson may send (lists and locked pages never do),
- * and a tool link with a preset for Study & Simplify and for Create a Grid.
+ * An exercise written as a lesson (ADR-0019, ADR-0020): one picture, a task
+ * of three lines, a creative line, with "Secret" in each text only an open
+ * lesson may send (lists and locked pages never do); the subject in the
+ * first line, and a tool link with a preset for Study & Simplify and for
+ * Create a Grid in the other two.
  */
 const lesson = (id: string, groupId: string, order: number, n: string) => ({
   ...exercise(id, 'curriculum', groupId, order, true, ['sky'], n, ['value', 'grid', 'compare']),
@@ -54,29 +56,24 @@ const lesson = (id: string, groupId: string, order: number, n: string) => ({
   guide: text(`Secret why ${id}`, `למה סודי ${id}`),
   skill: text(`Skill line ${n}`, `שורת מיומנות ${n}`),
   minutes: 20,
-  demo: [
-    { image: picture('demo-a', 'Diagram A', 'תרשים א'), caption: text(`Secret caption one ${id}`, `כיתוב סודי א ${id}`) },
-    { image: picture('demo-b', 'Diagram B', 'תרשים ב'), caption: text(`Secret caption two ${id}`, `כיתוב סודי ב ${id}`) },
-  ],
+  demo: [{ image: picture('demo-a', 'Diagram A', 'תרשים א'), caption: text(`Secret caption ${id}`, `כיתוב סודי ${id}`) }],
   steps: [
     { text: text(`Secret step one ${id}`, `שלב סודי א ${id}`), image: picture('sky', 'The subject', 'הנושא') },
     { text: text(`Secret step two ${id}`, `שלב סודי ב ${id}`), tool: { tool: 'value', label: text('See three values', 'לראות שלושה ערכים'), preset: { levels: 3 } } },
     { text: text(`Secret step three ${id}`, `שלב סודי ג ${id}`), tool: { tool: 'grid', label: text('A 3 × 3 grid', 'רשת 3 × 3'), preset: { columns: 3, rows: 3 } } },
-    { text: text(`Secret step four ${id}`, `שלב סודי ד ${id}`), worksheet: true },
   ],
-  checks: [text(`Secret check one ${id}`, `בדיקה סודית א ${id}`), text(`Secret check two ${id}`, `בדיקה סודית ב ${id}`)],
+  create: text(`Secret create ${id}`, `יצירה סודית ${id}`),
   mistake: { mistake: text('A mistake', 'טעות'), fix: text('Its fix', 'התיקון'), image: picture('mistake', 'Before and after', 'לפני ואחרי') },
 });
 
-/** The optional baseline drawing (not numbered; skipped by Start and Continue). */
+/** The optional baseline drawing (not numbered; skipped by Start and Continue): a lesson of one task line. */
 const baseline = (id: string, groupId: string, order: number) => ({
   ...exercise(id, 'curriculum', groupId, order, true, [], 'base', ['compare']),
   title: text('Test baseline', 'רישום פתיחה לבדיקה'),
   optional: true,
   skill: text('A drawing to keep', 'רישום לשמור'),
-  demo: [{ image: picture('demo-a', 'Diagram A', 'תרשים א'), caption: text(`Secret caption ${id}`, `כיתוב סודי ${id}`) }],
-  steps: [1, 2, 3].map((k) => ({ text: text(`Secret step ${k} ${id}`, `שלב סודי ${k} ${id}`) })),
-  checks: [text(`Secret check one ${id}`, `בדיקה סודית א ${id}`), text(`Secret check two ${id}`, `בדיקה סודית ב ${id}`)],
+  demo: [{ image: picture('demo-b', 'Diagram B', 'תרשים ב'), caption: text(`Secret caption ${id}`, `כיתוב סודי ${id}`) }],
+  steps: [{ text: text(`Secret step ${id}`, `שלב סודי ${id}`) }],
   worksheet: { kind: 'none' },
 });
 

@@ -19,7 +19,8 @@ import { useStoredFilters } from './ChallengesScreen';
 import { DoneTick, buttonPrimary, buttonSecondary, chip, useLocalized } from './parts';
 
 // What an exercise's card, a lesson and a challenge share (ADR-0018,
-// ADR-0019): the worksheets, "Mark as completed", "Another one", the tool
+// ADR-0019, ADR-0020): the worksheets, "Mark as completed" (cards and
+// challenges; a lesson has its own button), "Another one", the tool
 // shortcuts and the picture credits. One implementation each, whichever page
 // shows them.
 
@@ -177,13 +178,6 @@ export function MarkDone({ itemId }: { itemId: string }) {
       </span>
     </div>
   );
-}
-
-/** Whether the item was marked as completed today (a lesson's "Next" then leads). */
-export function useDoneToday(itemId: string, enabled: boolean): boolean {
-  const completions = useCompletions(enabled);
-  const entry = completions.data?.summary.items[itemId];
-  return entry ? localDay(entry.last) === localDay(new Date()) : false;
 }
 
 /** "Another one": a new pick the way this one was reached (all challenges, or the filters; quick or not), never this one. */

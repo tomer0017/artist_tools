@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { LockReason } from '@/lib/learn/access';
 import type { LearnChallenge, LearnCollection, LearnExercise, LessonStep, Localized, UnitLevel } from '@/lib/learn/model';
 import type { LearnFeatureId } from '@/lib/plans';
@@ -189,6 +189,8 @@ export function useCompletionPages(enabled: boolean) {
   });
 }
 
+const deleteCompletion = async (completionId: string) => json<{ ok: true }>(await learnFetch(`/api/learn/completions/${completionId}`, { method: 'DELETE' }));
+
 /** Record or remove completions; every list of them is asked again afterwards. */
 export function useCompletionChanges() {
   const client = useQueryClient();
@@ -200,11 +202,24 @@ export function useCompletionChanges() {
       ),
     onSettled: settle,
   });
-  const remove = useMutation({
-    mutationFn: async (completionId: string) => json<{ ok: true }>(await learnFetch(`/api/learn/completions/${completionId}`, { method: 'DELETE' })),
-    onSettled: settle,
-  });
+  const remove = useMutation({ mutationFn: deleteCompletion, onSettled: settle });
   return { mark, remove };
+}
+
+/**
+ * Remove a completion from anywhere, even after the page that recorded it
+ * has gone (the "Undo" of a lesson's "I did it", shown on the next page).
+ * Whether it was removed; every list of completions is asked again.
+ */
+export async function undoCompletion(client: QueryClient, completionId: string): Promise<boolean> {
+  try {
+    await deleteCompletion(completionId);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    void client.invalidateQueries({ queryKey: COMPLETIONS });
+  }
 }
 
 /** The address of a Learn image (the server decides, on every request, whether it is sent). */

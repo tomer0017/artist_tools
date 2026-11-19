@@ -31,11 +31,12 @@ import { LESSON_LIMITS, assetIdsOf, contentIssues, learnContentSpec, publishedLe
 import { importSeed } from './import';
 import { fullItem, listEntry } from './present';
 
-// Lessons (ADR-0019, docs/learn/08 §3) on a real database and in the checks
-// every draft and publication passes: a lesson's parts and their limits, the
-// tool presets, the lessons a challenge builds on, what learners receive (the
-// known fields only, nested ones included), the pictures the asset route
-// serves for an item, and — for rollback safety — M6 content read by M5.
+// Lessons (ADR-0019, revised by ADR-0020) on a real database and in the
+// checks every draft and publication passes: a lesson's parts and their
+// limits, the tool presets, the lessons a challenge builds on, what learners
+// receive (the known fields only, nested ones included), the pictures the
+// asset route serves for an item, and — for rollback safety — M6 content
+// read by M5.
 
 let mongo: TestMongo;
 let assetsDir: string;
@@ -95,13 +96,14 @@ describe('a lesson in the content', () => {
   it('imports and publishes with its pictures stored as assets; every picture it shows is one the asset route serves for it', async () => {
     const doc = await published();
     const lesson = lessonOf(doc);
-    expect(lesson.demo).toHaveLength(2);
-    expect(lesson.steps).toHaveLength(4);
+    expect(lesson.demo).toHaveLength(1);
+    expect(lesson.steps).toHaveLength(3);
+    expect(lesson.create).toEqual({ en: 'Secret create D-LESSON-01', he: 'יצירה סודית D-LESSON-01' });
     expect(lesson.steps![1].tool).toEqual({ tool: 'value', label: { en: 'See three values', he: 'לראות שלושה ערכים' }, preset: { levels: 3 } });
-    for (const ref of [lesson.demo![0].image, lesson.demo![1].image, lesson.steps![0].image!, lesson.mistake.image!]) expect(ref.assetId).toMatch(ASSET_ID);
+    for (const ref of [lesson.demo![0].image, lesson.steps![0].image!, lesson.mistake.image!]) expect(ref.assetId).toMatch(ASSET_ID);
     // The asset route serves an asset to whoever may open an item using it: these are those assets.
     const item = itemsOf(doc).find((i) => i.id === 'D-LESSON-01')!;
-    expect(itemAssetIds(item).sort()).toEqual([...new Set([lesson.references[0].assetId, lesson.demo![0].image.assetId, lesson.demo![1].image.assetId, lesson.mistake.image!.assetId])].sort());
+    expect(itemAssetIds(item).sort()).toEqual([...new Set([lesson.references[0].assetId, lesson.demo![0].image.assetId, lesson.steps![0].image!.assetId, lesson.mistake.image!.assetId])].sort());
     // A static worksheet is one of an item's assets too.
     const sheet = itemsOf(doc).find((i) => i.id === 'D-TEST-02')!;
     expect(sheet.kind === 'exercise' && sheet.worksheet.kind).toBe('static');
@@ -133,38 +135,59 @@ describe('what a published lesson must have', () => {
     expect(contentIssues(content())).toEqual([]);
   });
 
-  it('a demonstration, 3–6 steps, 2–4 checks, both languages, and short parts', () => {
+  it('exactly one picture, a task of 1–3 lines, no self-check questions, both languages, and short parts (ADR-0020)', () => {
     const doc = content();
     const lesson = lessonOf(doc);
     lesson.demo = [];
-    lesson.steps = lesson.steps!.slice(0, 2);
-    lesson.checks = lesson.checks!.slice(0, 1);
+    lesson.steps = [...lesson.steps!, { text: { en: 'A fourth line', he: 'שורה רביעית' } }];
+    lesson.checks = [{ en: 'A check', he: 'בדיקה' }];
     lesson.steps[0].text = { en: 'x'.repeat(LESSON_LIMITS.step + 1), he: 'ש' };
     lesson.steps[1].text = { en: 'Only English', he: ' ' };
+    lesson.objective = { en: 'o'.repeat(LESSON_LIMITS.objective + 1), he: 'מ' };
+    lesson.create = { en: 'Only English', he: '' };
     lesson.guide = { en: 'y'.repeat(LESSON_LIMITS.why + 1), he: 'ל' };
     lesson.skill = { en: 'A skill line far longer than sixty characters, which a list cannot show', he: 'מיומנות' };
     expect(contentIssues(doc)).toEqual(
       expect.arrayContaining([
         'D-LESSON-01: steps.1.text needs English and Hebrew before it can be published',
+        'D-LESSON-01: create needs English and Hebrew before it can be published',
         'D-LESSON-01: skill is longer than 60 characters',
-        'D-LESSON-01: a lesson needs at least one "See it" picture',
-        'D-LESSON-01: a lesson needs 3 to 6 steps',
-        'D-LESSON-01: a lesson needs 2 to 4 self-check questions',
+        'D-LESSON-01: a lesson needs exactly one picture',
+        "D-LESSON-01: a lesson's task has 1 to 3 lines",
+        'D-LESSON-01: self-check questions are no longer shown; remove them before publishing',
+        `D-LESSON-01: objective is longer than ${LESSON_LIMITS.objective} characters`,
         'D-LESSON-01: guide ("Why it works") is longer than 400 characters',
         `D-LESSON-01: steps.0.text is longer than ${LESSON_LIMITS.step} characters`,
       ]),
     );
+    // Two pictures are one too many as well; a creative line has a limit of its own.
+    const two = content();
+    lessonOf(two).demo = [...lessonOf(two).demo!, ...lessonOf(two).demo!];
+    lessonOf(two).create = { en: 'c'.repeat(LESSON_LIMITS.create + 1), he: 'י' };
+    expect(contentIssues(two)).toEqual(['D-LESSON-01: a lesson needs exactly one picture', `D-LESSON-01: create is longer than ${LESSON_LIMITS.create} characters`]);
     // A draft (unpublished) lesson may be unfinished: only its structure is checked.
     lesson.published = false;
     expect(contentIssues(doc).filter((issue) => issue.startsWith('D-LESSON-01'))).toEqual([]);
   });
 
-  it('presets only for their own tool and within its steps; the worksheet step needs a worksheet; no demonstration without steps', () => {
+  it('an M6a lesson kept as a draft (four pictures, six steps, self-checks) is still valid content, so unpublishing keeps it whole', () => {
+    const doc = content();
+    const lesson = lessonOf(doc);
+    lesson.published = false;
+    lesson.demo = [0, 1, 2, 3].map(() => lesson.demo![0]);
+    lesson.steps = [0, 1, 2, 3, 4, 5].map((k) => ({ text: { en: `Step ${k}`, he: `שלב ${k}` }, ...(k === 0 ? { worksheet: true } : {}) }));
+    lesson.checks = [{ en: 'One', he: 'אחת' }, { en: 'Two', he: 'שתיים' }, { en: 'Three', he: 'שלוש' }];
+    delete lesson.create;
+    expect(contentIssues(doc)).toEqual([]);
+  });
+
+  it('presets only for their own tool and within its steps; the worksheet step needs a worksheet; no picture, check or creative line without a task', () => {
     const doc = content();
     const lesson = lessonOf(doc);
     lesson.steps![1].tool = { tool: 'value', label: { en: 'x', he: 'x' }, preset: { levels: 4 } };
     lesson.steps![2].tool = { tool: 'grid', label: { en: 'x', he: 'x' }, preset: { columns: 20 } };
     lesson.steps![0].tool = { tool: 'measure', label: { en: 'x', he: 'x' }, preset: { levels: 3 } };
+    lesson.steps![2].worksheet = true;
     lesson.worksheet = { kind: 'none' };
     const plain = doc.exercises.find((e) => e.id === 'D-TEST-01')!;
     plain.checks = [{ en: 'A check', he: 'בדיקה' }];
@@ -174,8 +197,8 @@ describe('what a published lesson must have', () => {
         'D-LESSON-01: steps.2.tool: columns (20) are for Create a Grid only, 1–16',
         'D-LESSON-01: steps.2.tool: a grid preset needs both columns and rows',
         'D-LESSON-01: steps.0.tool: values (3) are for Study & Simplify only, one of 3, 5, 7, 9, 11, 13',
-        'D-LESSON-01: steps.3 offers the worksheet, but the lesson has none',
-        "D-TEST-01: a demonstration or self-check needs the lesson's steps",
+        'D-LESSON-01: steps.2 offers the worksheet, but the lesson has none',
+        "D-TEST-01: a picture, self-check or creative line needs the lesson's task",
       ]),
     );
   });
@@ -202,18 +225,19 @@ describe('what learners receive', () => {
 
   it('an open lesson: its parts, by name only — anything else it carries, at any depth, never leaves the server', () => {
     const doc = content();
-    const lesson = lessonOf(doc) as unknown as Record<string, unknown> & { steps: Record<string, unknown>[]; demo: Record<string, unknown>[]; checks: Record<string, unknown>[] };
+    const lesson = lessonOf(doc) as unknown as Record<string, unknown> & { steps: Record<string, unknown>[]; demo: Record<string, unknown>[]; create: Record<string, unknown> };
     lesson.review = { hebrew: { by: 'reviewer', at: '2026-11-19' } };
     lesson.steps[1] = { ...lesson.steps[1], note: 'internal' };
     (lesson.steps[1].tool as Record<string, unknown>).secretPreset = 'internal';
     lesson.demo[0] = { ...lesson.demo[0], draftCaption: 'internal' };
-    lesson.checks[0] = { ...lesson.checks[0], comment: 'internal' };
+    lesson.create = { ...lesson.create, comment: 'internal' };
     (lesson.title as Record<string, unknown>).comment = 'internal';
     const item = itemsOf(doc).find((i) => i.id === 'D-LESSON-01')! as LearnItem;
     const sent = fullItem(item, new Map(), false) as Record<string, unknown>;
     expect(Object.keys(sent).sort()).toEqual(
-      ['checks', 'collection', 'demo', 'groupId', 'guide', 'id', 'instruction', 'kind', 'materials', 'minutes', 'mistake', 'objective', 'order', 'references', 'skill', 'steps', 'success', 'title', 'tools', 'worksheet'].sort(),
+      ['collection', 'create', 'demo', 'groupId', 'guide', 'id', 'instruction', 'kind', 'materials', 'minutes', 'mistake', 'objective', 'order', 'references', 'skill', 'steps', 'success', 'title', 'tools', 'worksheet'].sort(),
     );
+    expect(sent.create).toEqual({ en: 'Secret create D-LESSON-01', he: 'יצירה סודית D-LESSON-01' });
     expect(JSON.stringify(sent)).not.toContain('internal');
     expect(JSON.stringify(sent)).not.toContain('reviewer');
     expect((sent.steps as unknown[])[1]).toEqual({ text: { en: 'Secret step two D-LESSON-01', he: 'שלב סודי ב D-LESSON-01' }, tool: { tool: 'value', label: { en: 'See three values', he: 'לראות שלושה ערכים' }, preset: { levels: 3 } } });
@@ -224,7 +248,7 @@ describe('what learners receive', () => {
     expect(challenge).toMatchObject({ lessons: ['D-LESSON-01'], focus: { en: 'Secret focus CH-901' } });
   });
 
-  it('a list row of a locked lesson: its title, skill line and place, never its steps, demonstration or checks', () => {
+  it('a list row of a locked lesson: its title, skill line and place, never its task, picture or creative line', () => {
     const doc = content();
     const view = learnAccess({ ...OPEN_TO_ALL, access: { ...OPEN_TO_ALL.access, rules: { ...OPEN_TO_ALL.access.rules, curriculum: { mode: 'none' } } } }, doc);
     const item = itemsOf(doc).find((i) => i.id === 'D-LESSON-01')!;
@@ -331,6 +355,7 @@ describe('rolling back to M5', () => {
     const read = M5_CONTENT.safeParse(doc);
     expect(read.success, read.success ? '' : JSON.stringify(read.error.issues.slice(0, 3))).toBe(true);
     // What M5 shows of a lesson is complete: its instruction, mistake and success are there.
+    // (M6a, 54e2a16, reads it too: every field it knows is optional, and it keeps the creative line it does not know.)
     const lesson = lessonOf(doc);
     for (const text of [lesson.instruction, lesson.mistake.mistake, lesson.mistake.fix, lesson.success, lesson.objective]) {
       expect(text.en.trim()).not.toBe('');

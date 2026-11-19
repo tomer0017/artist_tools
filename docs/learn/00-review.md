@@ -7,8 +7,11 @@ version for approval; the details are in documents 01–07.
 > **Since then (2026-11-19):** M1–M5 are built and on staging (M5: the
 > Learn screens, ADR-0018). After M5 the owner approved the M6 design review,
 > [08-m6-design-review.md](08-m6-design-review.md), with refinements: it
-> revises the curriculum's order and the lesson structure. Status per
-> milestone: 07.
+> revises the curriculum's order and the lesson structure. After seeing M6a,
+> the owner approved a beginner revision,
+> [09-beginner-revision.md](09-beginner-revision.md): six stages from
+> absolute zero, micro-lessons of one small skill, and a much simpler lesson
+> page (ADR-0020). Status per milestone: 07.
 
 ## 1. Answers to the first review
 

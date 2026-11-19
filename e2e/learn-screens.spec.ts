@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page, type Request } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Request } from '@playwright/test';
 import { photo } from './fixtures/photo';
 
 // Learn's screens (ADR-0018, docs/learn/04 S1–S9; lessons, ADR-0019) on the main test server,
@@ -13,6 +13,9 @@ import { photo } from './fixtures/photo';
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const PROJECT_KEY = 'painter-studio-project';
 const auth = (name: string) => `e2e/.auth/${name}.json`;
+
+/** Wait until an element's animations (a sheet sliding in, say) have finished, so it is measured and checked where it stays. */
+const settled = (locator: Locator) => locator.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((animation) => animation.finished)));
 
 async function axe(page: Page, label: string, only?: string) {
   const builder = new AxeBuilder({ page }).withTags(WCAG);
@@ -75,10 +78,10 @@ test.describe('Learn as an admin: the screens, the card and the tools', () => {
     const basics = page.locator('[data-learn-group="basics"]');
     await expect(basics.getByRole('heading', { name: 'Unit 1 · Basics' })).toBeVisible();
     await expect(basics.getByText('First unit goal')).toBeVisible();
-    await expect(basics.getByRole('link')).toHaveText([/Lesson 1\s*(Up next\s*)?Test exercise one/, /Lesson 2\s*Test exercise two/, /Lesson 3\s*Test exercise three\s*Draft · admins only/]);
+    await expect(basics.getByRole('link')).toHaveText([/Lesson 1\s*(Up next\s*)?Test exercise one/, /Lesson 2\s*Test exercise two/, /Lesson\s*Test exercise three\s*Draft · admins only/]);
     const shapes = page.locator('[data-learn-group="shapes"]');
     await expect(shapes.getByRole('heading', { name: 'Unit 2 · Shapes' })).toBeVisible();
-    await expect(shapes.getByRole('link')).toHaveText([/Optional\s*Test baseline\s*A drawing to keep/, /Lesson 4\s*Test lesson one\s*Skill line one/]);
+    await expect(shapes.getByRole('link')).toHaveText([/Optional\s*Test baseline\s*A drawing to keep/, /Lesson 3\s*Test lesson one\s*Skill line one/]);
     // The baseline counts for nothing: this unit has one numbered lesson.
     await expect(shapes.locator('[data-unit-progress]')).toHaveText('0 of 1 done');
     // "Up next": the first numbered lesson not done (this account has done none).
@@ -292,72 +295,77 @@ test('history: Mark as completed, Undo, once a day; the history lists it, remove
   await context.close();
 });
 
-test.describe('lessons (ADR-0019): the teaching on the page, the baseline optional, tools set as the step needs them', () => {
+test.describe('lessons (ADR-0020): one small skill on the page, the rest behind Need help?, tools set as a task line needs them', () => {
   test.use({ storageState: auth('learner') });
 
-  test('a lesson: objective, See it, Do it, Check it, the mistake, Done when and Why it works, all on the page; only credits could fold', async ({ page }) => {
+  test('a lesson: the objective, one picture, a short task, a creative line, Done when and one button; nothing else on the page', async ({ page }) => {
     const writes: string[] = [];
     page.on('request', (r) => {
       if (r.method() !== 'GET' && r.url().includes('/api/')) writes.push(`${r.method()} ${r.url()}`);
     });
     await page.goto('/app/learn/exercises/D-LESSON-01');
     const lesson = page.locator('[data-learn-lesson]');
-    await expect(lesson.locator('[data-lesson-place]')).toHaveText('Unit 2 · Lesson 4 of 4');
+    // A draft lesson before it has no number, so this admin sees what learners will: Lesson 3 of 3.
+    await expect(lesson.locator('[data-lesson-place]')).toHaveText('Lesson 3 of 3');
     await expect(lesson.getByRole('heading', { name: 'Test lesson one', level: 1 })).toBeVisible();
     await expect(lesson.locator('[data-learn-objective]')).toHaveText('Secret objective D-LESSON-01');
-    await expect(lesson.getByText('About 20 min')).toBeVisible();
-    // See it: a picture at a time, with its caption; the buttons move between them.
-    const demo = lesson.locator('[data-learn-demo]');
-    await expect(demo.getByRole('heading', { name: 'See it' })).toBeVisible();
-    await expect(demo.locator('[data-demo-position]')).toHaveText('Picture 1 of 2');
-    await expect(demo.locator('[data-demo-frame="1"] [data-demo-caption]')).toHaveText('Secret caption one D-LESSON-01');
-    await demo.locator('[data-demo-next]').click();
-    await expect(demo.locator('[data-demo-position]')).toHaveText('Picture 2 of 2');
-    await expect(demo.locator('[data-demo-next]')).toBeDisabled();
-    await demo.locator('[data-demo-zoom]').click();
+    // One picture with its caption, full screen on a tap.
+    await expect(lesson.locator('[data-lesson-picture] img')).toHaveCount(1);
+    await expect(lesson.locator('[data-lesson-picture]').getByRole('img', { name: 'Diagram A' })).toBeVisible();
+    await expect(lesson.locator('[data-lesson-caption]')).toHaveText('Secret caption D-LESSON-01');
+    await lesson.locator('[data-lesson-zoom]').click();
     const viewer = page.getByRole('dialog', { name: 'Picture' });
-    await expect(viewer.getByRole('img', { name: 'Diagram B' })).toBeVisible();
+    await expect(viewer.getByRole('img', { name: 'Diagram A' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(viewer).toHaveCount(0);
-    // Do it: every step on the page; the subject in step 1, tools in steps 2 and 3, the worksheet in step 4.
-    await expect(lesson.locator('[data-lesson-step]')).toHaveCount(4);
+    // The task: three short lines; the subject, and a tool where a line needs one.
+    await expect(lesson.getByRole('heading', { name: 'Your task' })).toBeVisible();
+    await expect(lesson.locator('[data-lesson-step]')).toHaveCount(3);
     await expect(lesson.locator('[data-lesson-step="1"]')).toContainText('Secret step one D-LESSON-01');
     await expect(lesson.locator('[data-lesson-step="1"] [data-step-picture]')).toBeVisible();
     await expect(lesson.locator('[data-lesson-step="2"] [data-step-tool="value"]')).toHaveText(/See three values/);
     await expect(lesson.locator('[data-lesson-step="3"] [data-step-tool="grid"]')).toHaveText(/A 3 × 3 grid/);
-    await expect(lesson.locator('[data-lesson-step="4"]').getByRole('button', { name: 'Prepare worksheets' })).toBeVisible();
-    // Check it: ticked for oneself, never saved (nothing is sent; a reload clears it).
-    const check = lesson.locator('[data-lesson-check="1"]');
-    await check.check();
-    await expect(check).toBeChecked();
-    await expect(lesson.locator('[data-lesson-checks]')).toContainText('Secret check two D-LESSON-01');
-    // The mistake, Done when, Why it works: on the page, nothing folded.
-    await expect(lesson.locator('[data-lesson-mistake]')).toContainText('A mistake');
-    await expect(lesson.locator('[data-lesson-mistake]')).toContainText('Its fix');
-    await expect(lesson.locator('[data-lesson-mistake]').getByRole('img', { name: 'Before and after' })).toBeVisible();
-    await expect(lesson.locator('[data-lesson-done]')).toContainText('It looks right');
-    await expect(lesson.locator('[data-lesson-done]').getByRole('button', { name: 'Mark as completed' })).toBeVisible();
-    await expect(lesson.locator('[data-lesson-why]')).toBeVisible();
-    await expect(lesson.locator('[data-lesson-why]')).toContainText('Secret why D-LESSON-01');
-    await expect(lesson.locator('[data-more-help]')).toHaveCount(0);
-    await expect(lesson.locator('details:not([data-learn-credits])')).toHaveCount(0);
-    // The last lesson: Previous only. Practise it: the challenges that build on it. Tools that help: quick access.
-    await expect(lesson.locator('[data-lesson-next]')).toHaveCount(0);
-    await expect(lesson.locator('[data-lesson-previous]')).toHaveAttribute('href', '/app/learn/exercises/D-TEST-03');
-    await expect(lesson.locator('[data-practise="CH-901"]')).toHaveAttribute('href', '/app/learn/challenges/CH-901');
-    await expect(lesson.locator('[data-learn-tools] [data-open-in]')).toHaveCount(3);
+    // Make something, then Done when and the one button on: the last lesson leads back to the course.
+    await expect(lesson.locator('[data-lesson-create]').getByRole('heading')).toHaveText('Make something');
+    await expect(lesson.locator('[data-lesson-create] p')).toHaveText('Secret create D-LESSON-01');
+    await expect(lesson.locator('[data-lesson-done-when]')).toHaveText('Done when: It looks right');
+    const next = lesson.locator('[data-lesson-next]');
+    await expect(next).toHaveText('I did it — back to the course');
+    await expect(next).toHaveAttribute('data-records', 'true');
+    await expect(next).toHaveAttribute('data-lesson-next', 'course');
+    // The worksheet once, below the button; printing is optional.
+    await expect(lesson.getByRole('button', { name: 'Prepare worksheets' })).toHaveCount(1);
+    await expect(lesson.getByText('Printing is optional: any paper works.')).toBeVisible();
+    // Nothing else on the page: no checklist, carousel, tools row, mistake, "Why", credits or Previous.
+    for (const gone of ['[data-lesson-checks]', '[data-learn-demo]', '[data-learn-tools]', '[data-lesson-mistake]', '[data-lesson-why]', '[data-learn-credits]', '[data-lesson-previous]', '[data-more-help]', 'details']) {
+      await expect(lesson.locator(gone), gone).toHaveCount(0);
+    }
     await axe(page, 'lesson');
+
+    // Need help?: the lesson's own mistake and its picture, why it works, what you need, tools and more practice.
+    await lesson.getByRole('button', { name: 'Need help?' }).click();
+    const help = page.getByRole('dialog', { name: 'Help with this lesson' });
+    await settled(help);
+    await expect(help.locator('[data-lesson-mistake]')).toContainText('The mistake: A mistake');
+    await expect(help.locator('[data-lesson-mistake]')).toContainText('Instead: Its fix');
+    await expect(help.getByRole('img', { name: 'Before and after' })).toBeVisible();
+    await expect(help.locator('[data-lesson-why]')).toContainText('Secret why D-LESSON-01');
+    await expect(help.locator('[data-lesson-materials]')).toContainText('Pencil and paper · About 20 min');
+    await expect(help.locator('[data-learn-tools] [data-open-in]')).toHaveCount(3);
+    await expect(help.locator('[data-practise="CH-901"]')).toHaveAttribute('href', '/app/learn/challenges/CH-901');
+    await axe(page, 'lesson help');
+    await page.keyboard.press('Escape');
+    await expect(help).toHaveCount(0);
+    await expect(lesson.getByRole('button', { name: 'Need help?' })).toBeFocused();
     expect(writes).toEqual([]);
-    await page.reload();
-    await expect(page.locator('[data-lesson-check="1"]')).not.toBeChecked();
   });
 
-  test('a step’s tool link opens the tool set as the step needs it, with the lesson’s subject and the way back', async ({ page }) => {
+  test('a task line’s tool link opens the tool set as the line needs it, with the lesson’s subject and the way back', async ({ page }) => {
     await page.goto('/app/learn/exercises/D-LESSON-01');
     await page.locator('[data-step-tool="value"]').click();
     await expect(page).toHaveURL(/\/app\/study$/);
     const back = page.locator('[data-learn-return]');
-    await expect(back.getByRole('link')).toHaveText('Back to Lesson 4 · Test lesson one');
+    await expect(back.getByRole('link')).toHaveText('Back to Lesson 3 · Test lesson one');
     await expect.poll(() => stored(page).then((p) => p?.valueSettings?.levels ?? null)).toBe(3);
     expect((await stored(page)).valueSettings.mode).toBe('grayscale');
     // The way back only: the tools' own pages are outside this milestone.
@@ -374,6 +382,13 @@ test.describe('lessons (ADR-0019): the teaching on the page, the baseline option
     // Dismissed, it stays gone; leaving the tools ends it anyway.
     await page.locator('[data-learn-return]').getByRole('button', { name: 'Hide this' }).click();
     await expect(page.locator('[data-learn-return]')).toHaveCount(0);
+
+    // The help sheet's tool shortcuts open their tool the same way.
+    await page.goto('/app/learn/exercises/D-LESSON-01');
+    await page.getByRole('button', { name: 'Need help?' }).click();
+    await page.getByRole('dialog', { name: 'Help with this lesson' }).locator('[data-open-in="compare"]').click();
+    await expect(page).toHaveURL(/\/app\/compare$/);
+    await expect(page.locator('[data-learn-return]').getByRole('link')).toHaveText('Back to Lesson 3 · Test lesson one');
   });
 
   test('challenges: the Skill filter is the course’s units; a challenge says what it builds on; life and own-photo challenges say so instead of an empty picture', async ({ page }) => {
@@ -395,25 +410,50 @@ test.describe('lessons (ADR-0019): the teaching on the page, the baseline option
     await page.goto('/app/learn/challenges/CH-901');
     const card = page.locator('[data-learn-card="CH-901"]');
     await expect(card.locator('[data-learn-focus]')).toHaveText('Focus: Secret focus CH-901');
-    await expect(card.locator('[data-builds-on="D-LESSON-01"]')).toHaveText('Lesson 4 · Test lesson one');
+    await expect(card.locator('[data-builds-on="D-LESSON-01"]')).toHaveText('Lesson 3 · Test lesson one');
     await expect(card.locator('[data-builds-on="D-LESSON-01"]')).toHaveAttribute('href', '/app/learn/exercises/D-LESSON-01');
     await axe(page, 'challenge with what it builds on');
   });
 });
 
-test('the optional baseline: not numbered, never counted as starting the course; its Next is Lesson 1', async ({ browser }) => {
+test('“I did it — next lesson”: the person’s own word, recorded once a day, with Undo; the optional baseline is not numbered and never starts the course', async ({ browser }) => {
   const context = await browser.newContext({ storageState: auth('learner-lesson') });
   const page = await context.newPage();
+  const summary = async () => (await (await page.request.get('/api/learn/completions')).json()).summary.items as Record<string, { count: number }>;
+  // Start with no record of the baseline, so the test can run again on the same server.
+  const { completions } = (await (await page.request.get('/api/learn/completions')).json()) as { completions: { id: string; itemId: string }[] };
+  for (const entry of completions.filter((c) => c.itemId === 'D-BASE-01')) expect((await page.request.delete(`/api/learn/completions/${entry.id}`)).status()).toBe(200);
   await page.goto('/app/learn');
   await page.getByRole('link', { name: 'Optional first: Test baseline' }).click();
   await expect(page).toHaveURL(/\/exercises\/D-BASE-01$/);
   await expect(page.locator('[data-lesson-place]')).toHaveText('Optional · a baseline drawing');
-  await expect(page.locator('[data-lesson-next]')).toHaveText(/Next: Lesson 1/);
-  await expect(page.locator('[data-lesson-next]')).toHaveAttribute('href', '/app/learn/exercises/D-TEST-01');
-  await page.getByRole('button', { name: 'Mark as completed' }).click();
-  await expect(page.getByText('Marked as completed.')).toBeVisible();
-  // Done today: "Next" leads.
-  await expect(page.locator('[data-lesson-next]')).toHaveClass(/bg-primary/);
+  // The one button records and moves on to the lesson after it.
+  const next = page.locator('[data-lesson-next]');
+  await expect(next).toHaveText('I did it — next lesson');
+  await expect(next).toHaveAttribute('data-lesson-next', 'D-LESSON-01');
+  await next.click();
+  await expect(page).toHaveURL(/\/exercises\/D-LESSON-01$/);
+  // A note says what was recorded, with Undo: nothing judged the drawing.
+  const note = page.locator('[data-sonner-toast]').filter({ hasText: 'Marked as done: Test baseline' });
+  await expect(note).toBeVisible();
+  expect((await summary())['D-BASE-01']?.count).toBe(1);
+  // The next page is in place (its heading and title) before it is checked.
+  await expect(page.getByRole('heading', { name: 'Test lesson one', level: 1 })).toBeVisible();
+  await expect(page).toHaveTitle(/\S/);
+  await axe(page, 'lesson with the note');
+  await note.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Removed from your history.' })).toBeVisible();
+  await expect.poll(async () => (await summary())['D-BASE-01'] ?? null).toBeNull();
+  // Again, and kept: done today, the button only moves on (a link), and says why.
+  await page.goto('/app/learn/exercises/D-BASE-01');
+  await page.locator('[data-lesson-next]').click();
+  await expect(page).toHaveURL(/\/exercises\/D-LESSON-01$/);
+  await page.goto('/app/learn/exercises/D-BASE-01');
+  await expect(page.locator('[data-lesson-next]')).toHaveText('Next lesson');
+  await expect(page.locator('[data-lesson-next]')).toHaveAttribute('data-records', 'false');
+  await expect(page.locator('[data-lesson-next]')).toHaveAttribute('href', '/app/learn/exercises/D-LESSON-01');
+  await expect(page.locator('[data-lesson-done-today]')).toHaveText('Completed today');
+  expect((await summary())['D-BASE-01']?.count).toBe(1);
   // The course has not started: still Lesson 1, and the baseline is no longer offered first.
   await page.goto('/app/learn');
   await expect(page.getByRole('link', { name: 'Start: Lesson 1 · Test exercise one' })).toBeVisible();
@@ -421,18 +461,24 @@ test('the optional baseline: not numbered, never counted as starting the course;
   await context.close();
 });
 
-test('a lesson in Hebrew: right to left, every part in Hebrew, accessible', async ({ browser }) => {
+test('a lesson in Hebrew: right to left, every part in Hebrew, the help sheet too, accessible', async ({ browser }) => {
   const context = await browser.newContext({ storageState: auth('learner-he'), locale: 'he-IL' });
   await context.addCookies([{ name: 'sc_locale', value: 'he', domain: 'localhost', path: '/' }]);
   const page = await context.newPage();
   await page.goto('/app/learn/exercises/D-LESSON-01');
-  await expect(page.locator('[data-lesson-place]')).toHaveText('יחידה 2 · שיעור 4 מתוך 4');
+  await expect(page.locator('[data-lesson-place]')).toHaveText('שיעור 3 מתוך 3');
   await expect(page.getByRole('heading', { name: 'שיעור בדיקה one', level: 1 })).toBeVisible();
   expect(await page.getByRole('heading', { level: 1 }).evaluate((el) => getComputedStyle(el).direction)).toBe('rtl');
-  await expect(page.locator('[data-learn-demo]').getByRole('heading', { name: 'רואים איך' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'המשימה' })).toBeVisible();
   await expect(page.locator('[data-lesson-step="1"]')).toContainText('שלב סודי א D-LESSON-01');
-  await expect(page.locator('[data-lesson-checks]')).toContainText('רק בשבילך: שום דבר לא נשמר.');
+  await expect(page.locator('[data-lesson-create]')).toContainText('יצירה קטנה');
+  await expect(page.locator('[data-lesson-next]')).toHaveText('סיימתי — חזרה לקורס');
   await axe(page, 'lesson (he)');
+  await page.getByRole('button', { name: 'עזרה' }).click();
+  const help = page.getByRole('dialog', { name: 'עזרה בשיעור הזה' });
+  await settled(help);
+  await expect(help.locator('[data-lesson-mistake]')).toContainText('הטעות: טעות');
+  await axe(page, 'lesson help (he)');
   await context.close();
 });
 
@@ -474,6 +520,13 @@ test('class mode: five students in a row get their sheets, and nothing about the
     await expect(page).toHaveURL(/\/app\/learn\/challenges$/);
     await expect(sheet).toHaveCount(0);
   }
+  // A lesson in class mode: the button only moves on (nothing recorded, nothing asked).
+  await page.goto('/app/learn/exercises/D-BASE-01');
+  await expect(page.locator('[data-lesson-next]')).toHaveText('Next lesson');
+  await expect(page.locator('[data-lesson-next]')).toHaveAttribute('data-records', 'false');
+  await page.locator('[data-lesson-next]').click();
+  await expect(page).toHaveURL(/\/exercises\/D-LESSON-01$/);
+  await expect(page.locator('[data-lesson-next]')).toHaveText('Back to the course');
   await page.goto('/app/learn/history');
   await expect(page.getByText('Class mode is on, so your history is not shown here.')).toBeVisible();
   // Still on after a reload (this tab), and nothing about the history was requested.
@@ -540,9 +593,23 @@ test.describe('on a phone', () => {
     await expect(page.locator('[data-course-action]')).toBeVisible();
     expect(await page.locator('[data-learn-screen]').evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
     await page.goto('/app/learn/exercises/D-LESSON-01');
-    await expect(page.locator('[data-learn-demo] [data-demo-frame="1"] img')).toBeInViewport({ ratio: 0.5 });
+    // The picture is on the first screen, as wide as the page; the button is a full-width tap target.
+    const picture = page.locator('[data-lesson-picture] img');
+    await expect(picture).toBeInViewport({ ratio: 0.5 });
+    const screen = await page.locator('[data-learn-screen]').boundingBox();
+    expect((await picture.boundingBox())!.width).toBeGreaterThan(screen!.width - 40);
+    expect((await page.locator('[data-lesson-next]').boundingBox())!.width).toBeGreaterThan(screen!.width - 40);
     expect(await page.locator('[data-learn-screen]').evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
     await axe(page, 'lesson on a phone');
+    // Need help? comes up from the bottom, within the screen.
+    await page.getByRole('button', { name: 'Need help?' }).click();
+    const help = page.getByRole('dialog', { name: 'Help with this lesson' });
+    await settled(help);
+    const sheet = (await help.boundingBox())!;
+    expect(sheet.x).toBeGreaterThanOrEqual(0);
+    expect(sheet.width).toBeLessThanOrEqual(390);
+    expect(sheet.y + sheet.height).toBeLessThanOrEqual(844 + 1);
+    await axe(page, 'lesson help on a phone');
   });
 });
 

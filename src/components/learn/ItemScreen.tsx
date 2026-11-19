@@ -19,8 +19,8 @@ import { DraftBadge, Failed, LearnHeader, Loading, buttonPrimary, buttonSecondar
 // which never has the instructions, the guide or the reference (the server
 // does not send them).
 //
-// An exercise written as a lesson (ADR-0019) has its own page (LessonCard):
-// the teaching on the page, the subject inside the steps. A challenge keeps
+// An exercise written as a lesson (ADR-0019, ADR-0020) has its own page
+// (LessonCard): one picture, a short task, one button on. A challenge keeps
 // the brief: the subject large (full screen and zoom on a tap), the prompt and
 // its focus, the lessons it builds on, then what to do — worksheets, a tool
 // with the reference already in it, "Mark as completed". An exercise not yet

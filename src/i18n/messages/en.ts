@@ -192,6 +192,7 @@ export const en = {
     signOut: 'Sign out',
     signingOut: 'Signing out…',
     loadingCompare: 'Loading Compare…',
+    notifications: 'Notifications',
     loadingLearn: 'Loading Learn…',
     plansLead: 'Start free with every tool. Pro is coming soon.',
     plansLeadPartial: 'What each plan includes right now. Pro is coming soon.',

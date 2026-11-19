@@ -190,8 +190,26 @@ implemented or tested yet: no Learn code exists.
   - real staging, with Free and Pro unchanged.
 - **Then stop:** the owner sees the lessons before M6b.
 
+#### M6a, revised for beginners
+- **Status:** approved 2026-11-19 after the owner's review of M6a, and
+  implemented ([09-beginner-revision.md](09-beginner-revision.md),
+  ADR-0020). Release and verification: deploy/RELEASES.md.
+- **Scope:**
+  - the simplified lesson page: one picture, a task of 1–3 lines, "Make
+    something", "Done when", one "I did it — next lesson" button with Undo;
+  - the rest behind "Need help?";
+  - the first five micro-lessons of stages 1–2, with code-drawn pictures and
+    optional A4 practice sheets;
+  - two starter challenges;
+  - the three M6a lessons unpublished, nothing deleted.
+- **Tests:**
+  - the same as M6a, plus the help sheet, the button with Undo, class mode
+    and the phone layout;
+  - real staging in English and Hebrew, mobile included, with the PDFs.
+- **Then stop:** the owner reviews it before M6b or more content.
+
 #### M6b — the content editor
-- **Status:** waits for the owner's review of M6a.
+- **Status:** waits for the owner's review of the beginner revision.
 - **Scope:**
   - English and Hebrew side by side, with a live phone preview;
   - ordering;
@@ -202,6 +220,8 @@ implemented or tested yet: no Learn code exists.
 - **Tests:** editor e2e, validation, the rights checklist, audit entries.
 
 ### M7 — Content production, in batches
+- **Revised:** the sequence and the lesson size are now 09's six stages of
+  micro-lessons. The list below is the earlier plan, kept for its process.
 - **Scope:**
   - the 20 lessons (19 numbered and the optional baseline) in the lesson
     template, and the 50 challenges linked to them: text in both languages,

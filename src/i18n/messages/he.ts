@@ -192,6 +192,7 @@ export const he: Messages = {
     signOut: 'יציאה',
     signingOut: 'יוצאים…',
     loadingCompare: 'טוענים את כלי ההשוואה…',
+    notifications: 'התראות',
     loadingLearn: 'בטעינה…',
     plansLead: 'מתחילים בחינם עם כל הכלים. Pro יגיע בקרוב.',
     plansLeadPartial: 'מה כל מסלול כולל כרגע. Pro יגיע בקרוב.',

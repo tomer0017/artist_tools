@@ -91,6 +91,7 @@ const ExerciseSchema = z
     demo: z.array(DemoFrameSchema).max(6).optional(),
     steps: z.array(StepSchema).max(6).optional(),
     checks: z.array(LocalizedSchema).max(4).optional(),
+    create: LocalizedSchema.optional(),
   })
   .passthrough();
 
@@ -153,14 +154,18 @@ function textFields(item: LearnItem): Field[] {
       ...(step.tool ? [[`steps.${i}.tool.label`, step.tool.label] as Field] : []),
     ]),
     ...(item.checks ?? []).map((check, i): Field => [`checks.${i}`, check]),
+    ...(item.create ? [['create', item.create] as Field] : []),
   ];
 }
 
 /** The longest of an English and a Hebrew text, in characters. */
 const longest = (text: Localized | undefined) => (text ? Math.max([...text.en].length, [...text.he].length) : 0);
 
-/** How long a lesson's parts may be, so a lesson stays short on a phone (docs/learn/08 §3.1). */
-export const LESSON_LIMITS = { skill: 60, caption: 160, step: 220, check: 140, focus: 140, why: 400 } as const;
+/** How long a lesson's parts may be, so a lesson stays short on a phone (ADR-0020). */
+export const LESSON_LIMITS = { skill: 60, objective: 120, caption: 160, step: 160, create: 140, focus: 140, why: 400 } as const;
+
+/** A lesson's task on paper: one to three short lines (ADR-0020). */
+export const LESSON_TASK_LINES = { min: 1, max: 3 } as const;
 
 /** What is wrong with a tool link's preset: Study's values, or Create a Grid's columns and rows, each only for its own tool. */
 function presetIssues(at: string, link: ToolLink): string[] {
@@ -188,11 +193,16 @@ function lessonStructureIssues(item: LearnExercise): string[] {
     if (step.tool) issues.push(...presetIssues(`${item.id}: steps.${i}.tool`, step.tool));
     if (step.worksheet && item.worksheet.kind === 'none') issues.push(`${item.id}: steps.${i} offers the worksheet, but the lesson has none`);
   }
-  if (!isLesson(item) && (item.demo?.length || item.checks?.length)) issues.push(`${item.id}: a demonstration or self-check needs the lesson's steps`);
+  if (!isLesson(item) && (item.demo?.length || item.checks?.length || item.create)) issues.push(`${item.id}: a picture, self-check or creative line needs the lesson's task`);
   return issues;
 }
 
-/** What a published lesson must have, and how long its parts may be (docs/learn/08 §3.1). */
+/**
+ * What a published lesson must have, and how long its parts may be
+ * (ADR-0020): exactly one picture, a task of one to three lines, no
+ * self-check questions (the lesson page no longer shows them), every part
+ * short enough for a phone.
+ */
 function lessonPublishIssues(item: LearnExercise): string[] {
   const issues: string[] = [];
   const over = (field: string, text: Localized | undefined, limit: number) => {
@@ -200,13 +210,14 @@ function lessonPublishIssues(item: LearnExercise): string[] {
   };
   over('skill', item.skill, LESSON_LIMITS.skill);
   if (!isLesson(item)) return issues;
-  if (!item.demo?.length) issues.push(`${item.id}: a lesson needs at least one "See it" picture`);
-  if (item.steps!.length < 3) issues.push(`${item.id}: a lesson needs 3 to 6 steps`);
-  if ((item.checks?.length ?? 0) < 2) issues.push(`${item.id}: a lesson needs 2 to 4 self-check questions`);
+  if (item.demo?.length !== 1) issues.push(`${item.id}: a lesson needs exactly one picture`);
+  if (item.steps!.length > LESSON_TASK_LINES.max) issues.push(`${item.id}: a lesson's task has ${LESSON_TASK_LINES.min} to ${LESSON_TASK_LINES.max} lines`);
+  if (item.checks?.length) issues.push(`${item.id}: self-check questions are no longer shown; remove them before publishing`);
+  over('objective', item.objective, LESSON_LIMITS.objective);
   over('guide ("Why it works")', item.guide, LESSON_LIMITS.why);
+  over('create', item.create, LESSON_LIMITS.create);
   (item.demo ?? []).forEach((frame, i) => over(`demo.${i}.caption`, frame.caption, LESSON_LIMITS.caption));
   item.steps!.forEach((step, i) => over(`steps.${i}.text`, step.text, LESSON_LIMITS.step));
-  (item.checks ?? []).forEach((check, i) => over(`checks.${i}`, check, LESSON_LIMITS.check));
   return issues;
 }
 

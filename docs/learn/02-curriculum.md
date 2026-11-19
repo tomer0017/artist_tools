@@ -42,6 +42,14 @@ people (and teachers) choose.
 >   shading simple 3-D forms under one light source.
 > - Every exercise is written as a lesson in the template of 08 §3.
 >
+> **Revised again by [09](09-beginner-revision.md), approved on 2026-11-19,**
+> for a complete beginner:
+> - six stages of micro-lessons, from pencil control to realistic drawing;
+> - the first five are built: D-HAND-01 (new), D-LINE-01, D-LINE-02 (the
+>   reserved IDs, the same skills), D-FLAT-01 and D-FLAT-02 (new);
+> - D-LINE-04, D-SHAPE-01 and D-START-01 move to stages 3 and 5,
+>   unpublished until those stages are written.
+>
 > The texts below remain drafts.
 
 ## How to read an exercise

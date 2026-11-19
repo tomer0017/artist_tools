@@ -125,7 +125,7 @@ function LessonRow({ item, number, collection, count, upNext }: { item: ListEntr
       <Thumb assetId={item.thumbnailAssetId} kind="exercise" className="h-14 w-14" />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <span data-lesson-label>{item.optional || number === null ? t('optional') : t('number', { number })}</span>
+          <span data-lesson-label>{item.optional ? t('optional') : number !== null ? t('number', { number }) : t('unnumbered')}</span>
           {upNext && <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">{t('upNext')}</span>}
         </span>
         <span className="block text-[15px] font-semibold leading-snug text-foreground">{loc(item.title)}</span>

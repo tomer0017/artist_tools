@@ -64,12 +64,14 @@ export interface LearnGroup {
 
 export type WorksheetSpec = { kind: 'none' } | { kind: 'generated' } | { kind: 'static'; assetId: string };
 
-// ─── Lessons (ADR-0019, docs/learn/08 §3) ────────────────────────────────────
-// An exercise written as a lesson teaches one skill in seven parts: objective,
-// "See it" (a demonstration), "Do it" (steps on paper), "Check it" (questions
-// for the learner), the common mistake, tools in the steps, "Done when". All
+// ─── Lessons (ADR-0019, revised by ADR-0020) ─────────────────────────────────
+// An exercise written as a lesson teaches one small skill: its objective, one
+// picture, a short task on paper (1–3 lines), one small thing to make with the
+// skill, "Done when", and one button on. The rest (the common mistake, why it
+// works, what you need, tools, practice, credits) is behind "Need help?". All
 // additions are optional, and every field M5 reads stays required, so M5
-// still reads lesson content (and shows it as its plainer card).
+// still reads lesson content (and shows it as its plainer card). Self-check
+// questions (`checks`) are M6a's: kept so its drafts still read, never shown.
 
 /** Study & Simplify's own value steps: a lesson's preset is one of them. */
 export const STUDY_LEVELS = [3, 5, 7, 9, 11, 13] as const;
@@ -92,19 +94,19 @@ export interface ToolLink {
   preset?: ToolPreset;
 }
 
-/** One picture of "See it": a diagram or an annotated photo. Every word is in its caption, never in the picture. */
+/** A lesson's picture: a diagram or an annotated photo. Every word is in its caption, never in the picture. A published lesson has exactly one (ADR-0020). */
 export interface DemoFrame {
   image: AssetRef;
   caption: Localized;
 }
 
-/** One step on paper. */
+/** One line of the task on paper. */
 export interface LessonStep {
   text: Localized;
   /** A small picture for the step (the subject photo in step 1, say). */
   image?: AssetRef;
   tool?: ToolLink;
-  /** The lesson's worksheet (Prepare worksheets, or the static sheet) belongs to this step. */
+  /** M6a: the worksheet belonged to this step. The lesson now offers its sheet once, below the task (ADR-0020). */
   worksheet?: boolean;
 }
 
@@ -139,8 +141,10 @@ export interface LearnExercise {
   demo?: DemoFrame[];
   /** Their presence makes the exercise a lesson. */
   steps?: LessonStep[];
-  /** Questions for the learner about the drawing; ticked for oneself, never saved. */
+  /** M6a's self-check questions: kept for its drafts, never shown, and a published lesson has none (ADR-0020). */
   checks?: Localized[];
+  /** One small thing to make with the new skill ("Draw a fence of straight posts"): one line, never another lesson (ADR-0020). */
+  create?: Localized;
 }
 
 /** An exercise written as a lesson: its steps choose the lesson layout. */

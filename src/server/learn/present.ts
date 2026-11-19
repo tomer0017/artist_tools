@@ -96,6 +96,7 @@ export function fullItem(item: LearnItem, assets: Map<string, LearnAssetDoc>, ad
     ...(item.demo ? { demo: item.demo.map((frame) => ({ image: imageView(frame.image, assets), caption: text(frame.caption) })) } : {}),
     ...(item.steps ? { steps: item.steps.map((step) => stepView(step, assets)) } : {}),
     ...(item.checks ? { checks: item.checks.map(text) } : {}),
+    ...(item.create ? { create: text(item.create) } : {}),
   };
 }
 

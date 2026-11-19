@@ -206,11 +206,13 @@ function Workspace() {
  * layout around it, so that every page can hand it a fresh copy.
  */
 export default function Studio() {
+  const t = useTranslations('studio');
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Sonner />
+        {/* Short notes over the page, such as a lesson's "Marked as done … Undo" (in the page's language and direction). */}
+        <Sonner containerAriaLabel={t('notifications')} />
         <SaveMediaProvider>
           <ProjectProvider>
             <OnboardingProvider>

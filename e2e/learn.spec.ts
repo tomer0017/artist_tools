@@ -52,7 +52,7 @@ test.describe('Learn, dark-launched: no plan includes a Learn module', () => {
   test('Free and Pro: lists are empty, every item and image is refused, and so is an export from an item', async ({ browser }) => {
     const admin = await api(browser, 'admin');
     const assets = await assetIds(admin.request);
-    // Six pictures (three references, a lesson's two demonstration frames and its mistake picture) and one static worksheet.
+    // Six pictures (three references, a lesson's picture and its mistake picture, the baseline's picture) and one static worksheet.
     expect(assets.references).toHaveLength(6);
     expect(assets.worksheets).toHaveLength(1);
     await admin.context.close();

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { firstLesson, lessonNumbers, neighbours, started, unitNumbers, unitProgress, unitsOfLessons, upNext, type CourseEntry } from './course';
 
-// The course's rules (ADR-0019, the owner's refinement 2): the optional
-// baseline drawing has no number and is skipped by Start, Continue, Next and
-// the unit counts; nothing is a prerequisite; locked lessons keep their place.
+// The course's rules (ADR-0019, the owner's refinement 2; ADR-0020): the
+// optional baseline drawing and drafts have no number and are skipped by
+// Start, Continue, Next and the unit counts; nothing is a prerequisite;
+// locked lessons keep their place.
 
 const entry = (id: string, groupId: string, traits: Partial<CourseEntry> = {}): CourseEntry => ({ id, groupId, open: true, ...traits });
 
@@ -64,6 +65,40 @@ describe('the course', () => {
       shapes: { done: 1, total: 2 },
       measuring: { done: 0, total: 1 },
     });
+  });
+
+  it('drafts, which only admins see, have no number and are skipped like the baseline, so an admin sees the numbers learners will (ADR-0020)', () => {
+    const admin: CourseEntry[] = [
+      entry('D-HAND-01', 'lines'),
+      entry('D-LINE-01', 'lines'),
+      entry('D-FLAT-01', 'flat'),
+      entry('D-LINE-04', 'forms', { published: false }),
+      entry('D-START-01', 'observe', { optional: true, published: false }),
+      entry('D-SHAPE-01', 'observe', { published: false }),
+    ];
+    expect([...lessonNumbers(admin)]).toEqual([
+      ['D-HAND-01', 1],
+      ['D-LINE-01', 2],
+      ['D-FLAT-01', 3],
+    ]);
+    // The last published lesson leads back to the course, not into the drafts.
+    expect(neighbours(admin, 'D-FLAT-01')).toEqual({ previous: admin[1], next: null });
+    // A draft opened by an admin: the numbered lessons around it.
+    expect(neighbours(admin, 'D-LINE-04')).toEqual({ previous: admin[2], next: null });
+    expect(firstLesson([entry('D-LINE-04', 'forms', { published: false }), ...admin])?.id).toBe('D-HAND-01');
+    expect(upNext(admin, doneOf(['D-HAND-01', 'D-LINE-01', 'D-FLAT-01']))).toBeNull();
+    expect(started(admin, doneOf(['D-SHAPE-01']))).toBe(false);
+    // Units of drafts only have no number and no count.
+    expect([...unitNumbers([{ id: 'lines' }, { id: 'flat' }, { id: 'forms' }, { id: 'observe' }], admin)]).toEqual([
+      ['lines', 1],
+      ['flat', 2],
+    ]);
+    expect(Object.fromEntries(unitProgress(admin, doneOf(['D-HAND-01'])))).toEqual({ lines: { done: 1, total: 2 }, flat: { done: 0, total: 1 } });
+  });
+
+  it('an optional lesson later in the course leads to the numbered lesson after it', () => {
+    const later: CourseEntry[] = [entry('D-HAND-01', 'lines'), entry('D-START-01', 'observe', { optional: true }), entry('D-OBS-02', 'observe')];
+    expect(neighbours(later, 'D-START-01')).toEqual({ previous: later[0], next: later[2] });
   });
 
   it('a challenge’s skills are the units of the lessons it builds on, as this list shows them', () => {

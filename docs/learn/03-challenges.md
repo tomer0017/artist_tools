@@ -157,6 +157,16 @@ the Skill column are skill areas, each taught by these exercises:
 | CH-049 | A favourite place from memory | מקום אהוב מהזיכרון | Draw a place you love, from memory. | B | Composition, recall (10) | Memory | P/C | ✓ | — |
 | CH-050 | A story in one picture | סיפור בתמונה אחת | Draw one moment that tells a story. | I | Composition, focal point (10) | Memory or Own photo | P/C | — | Study |
 
+## First challenges (added 2026-11-19, [09](09-beginner-revision.md))
+
+For the first beginner lessons: fun, small, and drawn from memory or
+imagination. IDs continue after CH-050 and are never reused.
+
+| ID | English | עברית | Prompt | Level | Skill (area) | Reference | Medium | Quick | Builds on |
+|---|---|---|---|---|---|---|---|---|---|
+| CH-051 | A robot made of shapes | רובוט מצורות | Invent a robot using only circles, squares, triangles and straight lines. | B | Building with simple shapes (2) | Memory or imagination | P/C | ✓ | D-LINE-01, D-FLAT-01, D-FLAT-02 |
+| CH-052 | A street of houses | רחוב של בתים | Draw a street of three houses from squares, triangles and straight lines, each one different. | B | Shapes and straight lines (2) | Memory or imagination | P/C | — | D-HAND-01, D-LINE-01, D-FLAT-02 |
+
 ## Notes for the catalogue
 
 - **Repeatable by design:** every prompt names a kind of subject, not one

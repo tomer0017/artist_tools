@@ -1,6 +1,8 @@
 # 0019 — Lessons that teach: the lesson template, the optional baseline, challenges linked to lessons
 
-**Status:** Accepted (2026-11-19). Milestone M6a of the Learn plan, designed
+**Status:** Accepted (2026-11-19); its lesson page (§4) and publishing rules
+(§2) are revised by [ADR-0020](0020-beginner-lessons.md), after the owner's
+review of M6a. Milestone M6a of the Learn plan, designed
 in [docs/learn/08-m6-design-review.md](../learn/08-m6-design-review.md) and
 approved by the owner with ten refinements (08 §12). It changes ADR-0018's
 exercise card into a lesson, and keeps everything else of ADR-0018 and
