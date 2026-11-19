@@ -30,8 +30,24 @@ const ALT = {
   overlay: 'The drawing’s lines in red over the reference',
 };
 
-/** Pixel statistics of an image on the page, read back through a canvas. */
+/**
+ * Pixel statistics of an image on the page, read back through a canvas. A
+ * redraw can replace the drawing (a new image, the old one released) between
+ * finding it and decoding it, and decoding then fails ("The source image
+ * cannot be decoded", seen in CI run 46): read the current drawing again.
+ */
 async function stats(page: Page, alt: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await drawingStats(page, alt);
+    } catch (error) {
+      if (attempt >= 5 || !/cannot be decoded|EncodingError|not attached|detached/i.test(String(error))) throw error;
+      await page.waitForTimeout(250);
+    }
+  }
+}
+
+async function drawingStats(page: Page, alt: string) {
   const img = page.getByRole('img', { name: alt, exact: true }).first();
   await expect(img).toBeVisible({ timeout: DRAWING });
   return img.evaluate(async (el: HTMLImageElement) => {
