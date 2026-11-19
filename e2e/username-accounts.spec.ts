@@ -58,9 +58,20 @@ async function signIn(page: Page, username: string, password: string, path = '/s
   await form.getByRole('button', { name: /^(Sign in|כניסה)$/ }).click();
 }
 
+/**
+ * Who the page's session is. A request sent on a kept-alive connection the
+ * server closed while it sat idle fails with ECONNRESET (CI run 47); this
+ * read changes nothing, so it is sent again.
+ */
 async function me(page: Page) {
-  const response = await page.request.get('/api/me');
-  return { status: response.status(), user: response.ok() ? (await response.json()).user : null };
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await page.request.get('/api/me');
+      return { status: response.status(), user: response.ok() ? (await response.json()).user : null };
+    } catch (error) {
+      if (attempt >= 3 || !/ECONNRESET|socket hang up/i.test(String(error))) throw error;
+    }
+  }
 }
 
 async function openAccount(page: Page, username: string) {
