@@ -613,6 +613,19 @@ test.describe('on a phone', () => {
     expect(sheet.y + sheet.height).toBeLessThanOrEqual(844 + 1);
     await axe(page, 'lesson help on a phone');
   });
+
+  test('mobile: in Hebrew, right to left, a lesson fits the phone and never pans sideways', async ({ page, context }) => {
+    await context.addCookies([{ name: 'sc_locale', value: 'he', domain: 'localhost', path: '/' }]);
+    await page.goto('/app/learn/exercises/D-LESSON-01');
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.locator('[data-lesson-picture] img')).toBeInViewport({ ratio: 0.5 });
+    // Nothing reaches past the screen's edges …
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    // … and the lesson scrolls up and down only: right to left, WebKit with visible scrollbars (the emulated
+    // iPhone, Safari on a Mac) counts the scrollbar's width as sideways overflow, which could otherwise pan.
+    await expect(page.locator('[data-learn-screen]')).toHaveCSS('overflow-x', 'hidden');
+    await axe(page, 'lesson in Hebrew on a phone');
+  });
 });
 
 test.describe('Learn stays invisible to Free and Pro while no plan offers it', () => {

@@ -42,8 +42,9 @@ export default function LearnView() {
 
   return (
     <ClassModeProvider>
-      {/* A new scroll position for each screen. */}
-      <div key={pathname} data-learn-screen={route.screen} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background">
+      {/* A new scroll position for each screen. It scrolls up and down only: right to left, WebKit with visible
+          scrollbars (Safari on a Mac, the emulated iPhone) counts the scrollbar's width as sideways overflow. */}
+      <div key={pathname} data-learn-screen={route.screen} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-background">
         <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(env(safe-area-inset-bottom)+40px)] pt-4 md:px-6 md:pt-6 lg:px-8">
           {route.screen === 'home' && <LearnHome />}
           {route.screen === 'curriculum' && <CurriculumScreen />}
