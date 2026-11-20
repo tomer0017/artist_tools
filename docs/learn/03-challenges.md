@@ -174,8 +174,8 @@ content v4):** CH-051 and CH-052 as in the table, and:
 - CH-012 (a leaf) builds on D-LINE-02, D-BUILD-02 and D-BUILD-03.
 - CH-017 (a butterfly) builds on D-BUILD-01…03.
 - CH-002 (keys, drawn exactly as they landed) is observation work: it is
-  intermediate, linked to stage 5, and shows no "Builds on" until that
-  stage is built.
+  intermediate, and since content v6 it builds on D-OBS-08, D-SHAPE-01 and
+  D-OBS-03 (lessons 20–22).
 
 ## Notes for the catalogue
 

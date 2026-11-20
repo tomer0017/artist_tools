@@ -227,6 +227,17 @@ implemented or tested yet: no Learn code exists.
 - **Then stop:** the founder reviews it before lessons 16–19, M6b or
   production.
 
+#### Lessons 16–29 (approved 2026-11-20)
+- **Status:** the founder approved lessons 1–15 and asked for lessons 16–29
+  in the same way, in small batches, admins only. They are built and on
+  staging as content versions 5–7 ([10](10-beginner-course.md)). No code
+  change was needed.
+- **Tests:** each batch was checked locally (every lesson in English and
+  Hebrew, on desktop and iPhone; the whole chain of lessons; the PDFs), then
+  on staging (the catalog unchanged, Free and Pro refused everything).
+- **Then stop:** the founder reviews it before M6b, the colour module, art
+  history, or opening Learn to any plan.
+
 #### M6b — the content editor
 - **Status:** waits for the founder's review of the 15-lesson course.
 - **Scope:**

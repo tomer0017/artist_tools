@@ -51,8 +51,9 @@ people (and teachers) choose.
 >   unpublished until those stages are written.
 >
 > **Extended by [10](10-beginner-course.md) (the founder's sprint brief,
-> 2026-11-19):** a course of 29 micro-lessons. Lessons 1–15 are built, and
-> D-LINE-04 is rewritten as lesson 10, cylinder and ellipse. The reserved
+> 2026-11-19, and the approval of 2026-11-20):** a course of 29
+> micro-lessons, all built. D-LINE-04 is rewritten as lesson 10 (cylinder
+> and ellipse), and D-SHAPE-01 as lesson 21 (big shapes and negative space). The reserved
 > IDs below are used only for the skills they were kept for: D-SHAPE-03,
 > D-VAL-01, D-VAL-02, D-LIGHT-01…03, D-OBS-03/04/07, D-COPY-01…04 and
 > D-SUBJ-04.

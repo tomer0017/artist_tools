@@ -53,6 +53,72 @@ so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
 
+## Lessons 16–29 on staging: Learn content versions 5–7 (2026-11-20, 02:25–03:05Z)
+
+After the founder approved lessons 1–15 and asked for lessons 16–29 in the
+same direction (docs/learn/10), each stage was built as its own content
+version and published on staging in turn, for admins only. There was no
+release: staging still runs `9808770`, and no code changed. No Free/Pro
+plan setting was published or changed. Production and GitHub Pages are
+untouched.
+
+**Each version** went through the same steps. The private seed was copied to
+a 0700 folder on the server, checked file by file against the local
+SHA-256s, and deleted after the import. Then, in order:
+- a dump;
+- `learn-import`;
+- `learn-publish`;
+- `learn-status`;
+- the read-only capture, compared with the one taken before;
+- `entitlement-test`.
+
+| Version | Published | Content | Adds | Dump first | Assets |
+|---|---|---|---|---|---|
+| 5 | 02:26Z | `fdef32cf20ada603` | Lessons 16–19: light on a box, a ball, core and cast shadow, a cylinder | `mongodb-20261120T022532Z` | 60 already stored, 12 new; 124 of 124 files intact |
+| 6 | 02:36Z | `c81d6ba3fe1ff9b7` | Lessons 20–24, observation (D-SHAPE-01, M6a's draft, rewritten as lesson 21); CH-002 linked to lessons 20–22 | `mongodb-20261120T023645Z` | 72 already stored, 15 new; 149 of 149 files intact |
+| 7 | 02:51Z | `67f0c6a110ce967d` | Lessons 25–29, the first realistic drawing; a sixth unit | `mongodb-20261120T025057Z` | 87 already stored, 15 new; 174 of 174 files intact |
+
+- **Every version, on staging:**
+  - the capture identical: the catalog (version 6, its publication time and
+    history) and `plans` with their update times;
+  - `entitlement-test` 24/24: as Free and as Pro, each item (28, 32, then
+    37) is refused as published, with exports from it; 0 items open, 0
+    images served.
+- **After version 7, in real browsers** (fresh temporary Free, Pro and
+  Hebrew accounts; removed, 0 left; passwords only in a 0600 file, deleted,
+  as were the sign-in states):
+  - the Learn checks 3/3:
+    - the 36 published items answer 403, the draft D-START-01 404;
+    - each of the 174 asset files answers as it should;
+    - no lesson text reaches them, every "Make something" line included;
+    - completions are refused (a sample: the completions throttle allows 60
+      attempts per 10 minutes per account);
+    - signed out, everything answers 401;
+    - on an iPhone (WebKit, emulated), the same refusals;
+  - smoke 27/27.
+- **Locally, the same build and each version** (emulated browsers, not
+  physical devices):
+  - every lesson in English and Hebrew, in desktop Chromium and iPhone 13
+    WebKit: title, place, picture, the enlarged picture, task, "Make
+    something", "Done when", where the button leads, the sheet's bytes, the
+    help sheet with the focus returned, axe, no sideways overflow, no
+    console errors;
+  - "I did it — next lesson" from lesson 1 to the last;
+  - a returning person;
+  - class mode;
+  - lesson 26's button opens Create a Grid at 4 × 4 with the lesson's photo
+    and the way back;
+  - v7: 121/121.
+- **The history replayed** (M4, M6a, v3, v4, v5, v6, v7) on a throwaway
+  database: no content issue. Each version only adds to the one before.
+- **The practice sheets:** the 14 new PDFs read back as one A4 portrait page
+  each, no images, every mark at least 18 mm from the edges, and no words
+  but the lesson's ID.
+- **Not verified on staging:** an admin's view of the lessons, by design (no
+  temporary admin, ADR-0012): the founder's check.
+- **Rollback:** any earlier content version can be restored (its files are
+  all still stored). The code rollback is unchanged.
+
 ## The 15-lesson beginner course on staging, `9808770` (2026-11-20, 00:43–01:20Z)
 
 The founder's sprint brief of 2026-11-19, with a deadline of 2026-11-26: lessons 6–15 and one A4 sheet per lesson, admins only, then stop for the
@@ -947,4 +1013,4 @@ WebKit with iPhone 13 emulation); no traces, videos or automatic screenshots.
 
 ## Awaiting deployment
 
-Nothing: `9808770` is live (the 15-lesson beginner course, dark-launched; Learn content version 4). Google, plus username sign-in for accounts admins create; the plan catalog's live version is 6, with exactly the owner's version 2 content (versions 3–6 are the two audited publication checks), and no plan includes a Learn module.
+Nothing: `9808770` is live (the beginner drawing course, dark-launched; Learn content version 7, lessons 1–29). Google, plus username sign-in for accounts admins create; the plan catalog's live version is 6, with exactly the owner's version 2 content (versions 3–6 are the two audited publication checks), and no plan includes a Learn module.
