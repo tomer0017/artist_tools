@@ -2,7 +2,8 @@
 
 **Status:** the sprint brief of 2026-11-19 (deadline Thursday 2026-11-26,
 Israel time). Lessons 1–15 are built as private test content (version 4) and
-are published on staging for admins only. Lessons 16–29 are specified. Work
+are published on staging for admins only, since 2026-11-20 00:56Z (release
+`9808770`, verified: deploy/RELEASES.md). Lessons 16–29 are specified. Work
 stops here for the founder's review. Production is unchanged.
 
 The brief builds on [09](09-beginner-revision.md): the same learner (a
