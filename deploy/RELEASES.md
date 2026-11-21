@@ -1013,4 +1013,38 @@ WebKit with iPhone 13 emulation); no traces, videos or automatic screenshots.
 
 ## Awaiting deployment
 
-Nothing: `9808770` is live (the beginner drawing course, dark-launched; Learn content version 7, lessons 1–29). Google, plus username sign-in for accounts admins create; the plan catalog's live version is 6, with exactly the owner's version 2 content (versions 3–6 are the two audited publication checks), and no plan includes a Learn module.
+Nothing: `9808770` is live (the beginner drawing course, dark-launched; Learn content version 9, lessons 1–29 and optional practice). Google, plus username sign-in for accounts admins create; the plan catalog's live version is 6, with exactly the owner's version 2 content (versions 3–6 are the two audited publication checks), and no plan includes a Learn module.
+
+## Private Learn content integration (2026-11-22, Israel time)
+
+- **Application release:** `98087705983eba28ac612a2697308fbdbc0c915a`, unchanged.
+  This is a content-only deployment; no build, migration or production action.
+- **Content v8:** founder-approved graphite eye construction (27), matching eye
+  shading (28), realistic apple (29), HE/EN instructions and A4 worksheets.
+- **Content v9:** published at `2026-11-21T23:07:32.952Z`. Existing simple apple
+  added as optional practice after lesson 19. Existing D-START-01 published as
+  an optional, unnumbered Before & After mug activity before lesson 1; lesson 24
+  offers the optional redraw with the same reference. No new lesson IDs.
+- **Checks passed:** all 29 numbered lessons load through the real admin pipeline;
+  approved 27–29 text and asset hashes match, all three PDFs are single-page A4;
+  optional baseline does not affect numbering, next lesson or unit counts.
+  Free/Pro authorization using actual published plans denies lesson content and
+  assets, including thumbnails. Anonymous item/image/PDF requests return 401.
+- **Browser check:** existing admin session shows lessons 1–29, the unnumbered
+  baseline at the course start, the apple image in lesson 19 and the comparison
+  prompt in lesson 24. No completion actions were taken.
+- **HTTPS smoke:** 26 checks passed initially; the health expectation used a full
+  SHA whereas the endpoint emits `9808770`. The health-only recheck passed.
+  The initial targeted access check expected only `hidden`; it was corrected to
+  accept existing `locked` or `hidden` states, both denying content and thumbnails.
+  The corrected targeted check passed. No application defect or code fix.
+- **Preserved:** application release, catalog v6, plans, grants, other configuration
+  and completion records verified unchanged. All numbered IDs/order unchanged;
+  v9 preserves approved lessons 27–29 exactly. No production writes.
+- **Private evidence/rollback:** staging-only DB backup, v8 content snapshot,
+  operator source and verification report under private staging content storage
+  `content-reviews/learn-integration-20261122`. Existing graphite originals,
+  worksheet source and commercial-use/provenance evidence remain under
+  `content-reviews/graphite-27-29-20261121`; existing apple/mug rights are retained.
+- **Review:** ready for founder hands-on staging review. Real-printer validation
+  remains manual; Learn is not open to Free/Pro accounts.
