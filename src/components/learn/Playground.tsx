@@ -278,10 +278,11 @@ export function Playground({ entries, groups, ready }: { entries: ListEntry[]; g
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
               <SaveToggle id={current} saved={saved.includes(current)} onToggle={toggleSave} />
-              {!classMode.on && <MarkDone itemId={current} />}
               <Link href={itemPath(current)} className={buttonSecondary} data-playground-open>
                 {t('playground.open')}
               </Link>
+              {/* Last: its line for "Marked as completed · Undo" is kept free below it, so nothing shifts. */}
+              {!classMode.on && <MarkDone itemId={current} />}
             </div>
             <ChallengeTimer session={session} onChange={setSession} challengeId={current} />
           </article>

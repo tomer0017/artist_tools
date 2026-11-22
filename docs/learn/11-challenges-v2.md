@@ -41,7 +41,8 @@ expert a light one.
 **Private:** `studio-companion-private/challenges-v2` (`challenges.mjs`, its
 output `challenges.json`, `PROVENANCE.md`). They are original text written
 for Studio Companion, in English and gender-neutral Hebrew, with no pictures.
-Nine start from the founder's examples in the brief.
+Eight start from the founder's examples in the brief; the ninth (keys
+dropped on a table) was already CH-002.
 
 | Category | Ideas | Light | Creative | Challenging |
 |---|---|---|---|---|
@@ -59,7 +60,7 @@ Nine start from the founder's examples in the brief.
 - a short title and one clear task;
 - one primary skill;
 - a tip;
-- a twist where it helps (29 of the 60).
+- a twist where it helps (31 of the 60).
 
 **No idea:**
 - names a medium;
