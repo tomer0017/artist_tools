@@ -16,6 +16,9 @@ const auth = (name: string) => `e2e/.auth/${name}.json`;
 
 /** Wait until an element's animations (a sheet sliding in, say) have finished, so it is measured and checked where it stays. */
 const settled = (locator: Locator) => locator.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+/** The same for the whole page: every animation and transition that ends has ended (a colour mid-fade is not what stays on screen). */
+const calm = (page: Page) =>
+  page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => undefined))));
 
 async function axe(page: Page, label: string, only?: string) {
   const builder = new AxeBuilder({ page }).withTags(WCAG);
@@ -215,24 +218,22 @@ test.describe('Learn as an admin: the screens, the card and the tools', () => {
     await context.close();
   });
 
-  test('challenges: filters remembered on this device; Random and Quick pick only matching challenges; "Another one" never the same', async ({ page }) => {
+  test('challenges: filters remembered on this device; the effort filter, never a skill rating; "Another one" never the same', async ({ page }) => {
     await page.goto('/app/learn/challenges');
-    const cards = page.locator('[data-learn-item]');
+    const cards = page.locator('[data-learn-browse] [data-learn-item]');
     await expect(cards).toHaveCount(3);
     await expect(page.getByText('3 challenges')).toBeVisible();
     await axe(page, 'challenges');
-    await page.getByLabel('Level').selectOption('intermediate');
+    // A challenge's level is shown as the effort it asks, never as a skill rating (ADR-0021).
+    await expect(page.getByLabel('Effort').locator('option')).toHaveText(['Any effort', 'Light', 'Creative', 'Challenging']);
+    await page.getByLabel('Effort').selectOption('intermediate');
     await expect(cards).toHaveCount(1);
     await expect(cards.first()).toHaveAttribute('data-learn-item', 'CH-902');
     await page.reload();
-    await expect(page.getByLabel('Level')).toHaveValue('intermediate');
+    await expect(page.getByLabel('Effort')).toHaveValue('intermediate');
     await expect(cards).toHaveCount(1);
-    // Quick with these filters: none is quick.
-    await page.getByRole('button', { name: 'Quick', exact: true }).click();
-    await expect(page.getByRole('status').filter({ hasText: /No challenge matches|None of these/ })).toBeVisible();
-    await page.getByRole('button', { name: 'Random' }).click();
-    await expect(page).toHaveURL(/\/challenges\/CH-902\?pick=filters$/);
     // The only one matching: "Another one" has nothing else to offer.
+    await page.goto('/app/learn/challenges/CH-902?pick=filters');
     await expect(page.getByRole('button', { name: 'Another one' })).toBeDisabled();
 
     await page.goto('/app/learn/challenges');
@@ -241,16 +242,10 @@ test.describe('Learn as an admin: the screens, the card and the tools', () => {
     await expect(page.getByRole('button', { name: 'Quick only' })).toHaveAttribute('aria-pressed', 'true');
     await expect(cards).toHaveCount(2);
     await page.getByRole('button', { name: 'Clear filters' }).click();
-    for (let i = 0; i < 3; i++) {
-      await page.goto('/app/learn/challenges');
-      await page.getByRole('button', { name: 'Quick', exact: true }).click();
-      await expect(page).toHaveURL(/\/challenges\/CH-90[13]\?pick=filters-quick$/);
-    }
-    // "Another one" from a quick pick: the other quick challenge, never the same.
-    const here = page.url().match(/CH-90\d/)![0];
+    // "Another one" from a quick challenge: the other quick challenge, never the same.
+    await page.goto('/app/learn/challenges/CH-901?pick=filters-quick');
     await page.getByRole('button', { name: 'Another one' }).click();
-    await expect(page).not.toHaveURL(new RegExp(`${here}\\?`));
-    await expect(page).toHaveURL(/\/challenges\/CH-90[13]\?pick=filters-quick$/);
+    await expect(page).toHaveURL(/\/challenges\/CH-903\?pick=filters-quick$/);
   });
 });
 
@@ -400,8 +395,6 @@ test.describe('lessons (ADR-0020): one small skill on the page, the rest behind 
     await skill.selectOption('shapes');
     await expect(cards).toHaveCount(1);
     await expect(cards.first()).toHaveAttribute('data-learn-item', 'CH-901');
-    await page.getByRole('button', { name: 'Random' }).click();
-    await expect(page).toHaveURL(/\/challenges\/CH-901\?pick=filters$/);
     await page.goto('/app/learn/challenges');
     await page.getByRole('button', { name: 'Clear filters' }).click();
     await expect(page.locator('[data-learn-item="CH-902"] [data-challenge-subject="own_photo"]')).toHaveText('From your photo');
@@ -571,6 +564,159 @@ test('in Hebrew: right to left, every screen in Hebrew, accessible', async ({ br
   await context.close();
 });
 
+test.describe('Challenges V2: the creative playground (ADR-0021)', () => {
+  test.use({ storageState: auth('learner-playground'), reducedMotion: 'reduce' });
+
+  test('a mood (an effort, never a skill) and a spin give one idea; never the same twice in a row; Save; Mark as completed, voluntary', async ({ page }) => {
+    await page.goto('/app/learn/challenges');
+    const playground = page.locator('[data-playground]');
+    await expect(playground.getByRole('heading', { name: 'Need an idea?', level: 2 })).toBeVisible();
+    await expect(playground.getByRole('radio')).toHaveCount(4);
+    await expect(playground.getByRole('radio', { name: /Surprise me/ })).toBeChecked();
+    await expect(playground.locator('[data-mood]')).toContainText(['Something light', 'Let me create', 'Challenge me!', 'Surprise me 🎲']);
+    await expect(playground.locator('[data-playground-idle]')).toBeVisible();
+    // No timer until asked for.
+    await expect(page.locator('[data-timer]')).toHaveCount(0);
+    await calm(page);
+    await axe(page, 'the playground');
+
+    // "Let me create": the one creative idea, with its prompt; spinning again in a mood of one gives it again.
+    await playground.locator('[data-mood="create"]').click();
+    await expect(playground.getByRole('radio', { name: /Let me create/ })).toBeChecked();
+    await playground.getByRole('button', { name: 'Spin', exact: true }).click();
+    const result = playground.locator('[data-playground-result]');
+    await expect(result).toHaveAttribute('data-playground-result', 'CH-902');
+    await expect(result.locator('[data-playground-prompt]')).toHaveText('Secret prompt CH-902');
+    await expect(result.locator('[data-effort]')).toHaveText('Creative');
+    await playground.getByRole('button', { name: 'Spin again' }).click();
+    await expect(result).toHaveAttribute('data-playground-result', 'CH-902');
+    // "Challenge me!": nothing of that effort yet, said kindly.
+    await playground.locator('[data-mood="challenge"]').click();
+    await playground.getByRole('button', { name: 'Spin again' }).click();
+    await expect(playground.locator('[data-playground-empty]')).toHaveText('No idea in this mood yet. Try another mood, or Surprise me.');
+    // "Something light": two ideas; a spin never repeats the one on screen.
+    await playground.locator('[data-mood="light"]').click();
+    await playground.getByRole('button', { name: 'Spin again' }).click();
+    for (let i = 0; i < 4; i++) {
+      const before = (await result.getAttribute('data-playground-result'))!;
+      expect(['CH-901', 'CH-903']).toContain(before);
+      await playground.getByRole('button', { name: 'Spin again' }).click();
+      await expect(result).toHaveAttribute('data-playground-result', before === 'CH-901' ? 'CH-903' : 'CH-901');
+    }
+    // CH-901: its twist and its tip; its effort reads "Light".
+    if ((await result.getAttribute('data-playground-result')) !== 'CH-901') await playground.getByRole('button', { name: 'Spin again' }).click();
+    await expect(result.locator('[data-playground-twist]')).toHaveText('Twist: Secret twist CH-901');
+    await expect(result.locator('[data-playground-tip]')).toHaveText('Secret focus CH-901');
+    await expect(result.locator('[data-effort]')).toHaveText('Light');
+    await calm(page);
+    await axe(page, 'an idea on the playground');
+
+    // Save: kept in this browser, the idea on screen too, after a reload.
+    await result.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(result.getByRole('button', { name: 'Saved' })).toHaveAttribute('aria-pressed', 'true');
+    await page.reload();
+    await expect(page.locator('[data-playground-result]')).toHaveAttribute('data-playground-result', 'CH-901');
+    await page.locator('[data-saved-only]').click();
+    const cards = page.locator('[data-learn-browse] [data-learn-item]');
+    await expect(cards).toHaveCount(1);
+    await expect(cards.first()).toHaveAttribute('data-learn-item', 'CH-901');
+    await expect(cards.first().locator('[data-saved-badge]')).toHaveText('Saved');
+    // Mark as completed: the person's own word, in the history, with Undo; nothing judged.
+    await page.locator('[data-playground-result]').getByRole('button', { name: 'Mark as completed' }).click();
+    await expect(page.locator('[data-playground-result]').getByText('Marked as completed.')).toBeVisible();
+    await expect(cards.first().locator('[data-done-count]')).toHaveAttribute('data-done-count', '1');
+    // Unsaved: the saved list is empty, said kindly.
+    await page.locator('[data-playground-result]').getByRole('button', { name: 'Saved' }).click();
+    await expect(cards).toHaveCount(0);
+    await expect(page.getByText('Nothing saved yet: tap Save on an idea you like.')).toBeVisible();
+  });
+
+  test('the timer: off by default; worked out from the clock after reloads and a long absence; pause and resume; time up, kindly', async ({ page }) => {
+    // A fake clock that the test moves on by minutes and hours (it also flows on by the few real seconds the test takes).
+    await page.clock.install({ time: new Date('2026-11-22T10:00:00Z') });
+    await page.goto('/app/learn/challenges');
+    await page.locator('[data-playground]').getByRole('button', { name: 'Spin', exact: true }).click();
+    const result = page.locator('[data-playground-result]');
+    const id = (await result.getAttribute('data-playground-result'))!;
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer', 'off');
+    await result.getByRole('button', { name: 'Add a timer (optional)' }).click();
+    await expect(result.getByText('Draw whatever you can in the time you chose. Whatever comes out is part of the fun.')).toBeVisible();
+    await expect(result.locator('[data-timer-choice]')).toHaveText(['10 min', '30 min', '60 min', 'Stopwatch']);
+    await result.locator('[data-timer-choice="10"]').click();
+    await expect(result.locator('[data-timer-clock]')).toHaveText(/^(10:00|9:5\d)$/);
+    // Four minutes on, the page reloaded: the same idea and the right time.
+    await page.clock.fastForward('04:00');
+    await page.reload();
+    await expect(result).toHaveAttribute('data-playground-result', id);
+    await expect(result.locator('[data-timer-clock]')).toHaveText(/^(6:00|5:[45]\d)$/);
+    // Paused for half an hour: still six minutes left.
+    await result.getByRole('button', { name: 'Pause' }).click();
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer', 'paused');
+    const paused = await result.locator('[data-timer-clock]').textContent();
+    expect(paused).toMatch(/^(6:00|5:[45]\d)$/);
+    await page.clock.fastForward('30:00');
+    await page.reload();
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer', 'paused');
+    await expect(result.locator('[data-timer-clock]')).toHaveText(paused!);
+    await result.getByRole('button', { name: 'Resume' }).click();
+    // Three hours away (the phone locked, the tab asleep, the browser closed): time is up, said kindly; the paused half hour never counted.
+    await page.clock.fastForward('03:00:00');
+    await page.reload();
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer', 'up');
+    await expect(result.locator('[data-timer-up-note]')).toHaveText("Time's up! Keep going if you like: whatever you drew is part of the fun.");
+    await expect(result.locator('[data-timer-clock]')).toHaveText(/^3:04:[0-5]\d$/);
+    await calm(page);
+    await axe(page, 'the timer, time up');
+    await result.getByRole('button', { name: 'Close the timer' }).click();
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer', 'off');
+    // The stopwatch: open-ended, counting up.
+    await result.getByRole('button', { name: 'Add a timer (optional)' }).click();
+    await result.locator('[data-timer-choice="stopwatch"]').click();
+    await page.clock.fastForward('01:30');
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer-kind', 'stopwatch');
+    await expect(result.locator('[data-timer-clock]')).toHaveText(/^1:[34]\d$/);
+    // A new spin keeps the session going: the timer follows the idea on screen.
+    await page.locator('[data-playground]').getByRole('button', { name: 'Spin again' }).click();
+    await expect(result).not.toHaveAttribute('data-playground-result', id);
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer', 'running');
+    await result.getByRole('button', { name: 'Reset' }).click();
+    await expect(result.locator('[data-timer]')).toHaveAttribute('data-timer', 'off');
+  });
+
+  test('the reel: a short turn through other ideas that lands on one; none for people who ask for less motion', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: auth('learner-playground'), reducedMotion: 'no-preference' });
+    const page = await context.newPage();
+    await page.goto('/app/learn/challenges');
+    await page.locator('[data-mood="surprise"]').click();
+    await page.locator('[data-playground]').getByRole('button', { name: /^Spin/ }).click();
+    await expect(page.locator('[data-reel]')).toBeVisible();
+    await expect(page.locator('[data-reel]')).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('[data-playground-result]')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('[data-reel]')).toHaveCount(0);
+    await context.close();
+  });
+
+  test('the playground in Hebrew: right to left, the founder’s words for the moods, accessible', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: auth('learner-he'), locale: 'he-IL', reducedMotion: 'reduce' });
+    await context.addCookies([{ name: 'sc_locale', value: 'he', domain: 'localhost', path: '/' }]);
+    const page = await context.newPage();
+    await page.goto('/app/learn/challenges');
+    const playground = page.locator('[data-playground]');
+    await expect(playground.getByRole('heading', { name: 'צריך רעיון?', level: 2 })).toBeVisible();
+    expect(await playground.evaluate((el) => getComputedStyle(el).direction)).toBe('rtl');
+    await expect(playground.locator('[data-mood]')).toContainText(['בא לי משהו קליל', 'בא לי ליצור', 'תאתגרו אותי!', 'תפתיעו אותי 🎲']);
+    await playground.getByRole('button', { name: 'להגריל', exact: true }).click();
+    const result = page.locator('[data-playground-result]');
+    await expect(result.getByRole('button', { name: 'לשמור' })).toBeVisible();
+    await result.getByRole('button', { name: 'להוסיף טיימר (לבחירה)' }).click();
+    await expect(result.locator('[data-timer-choice]')).toHaveText(['10 דקות', '30 דקות', '60 דקות', 'סטופר']);
+    await expect(page.getByLabel('רמת השקעה').locator('option')).toHaveText(['כל רמות ההשקעה', 'קליל', 'יצירתי', 'מאתגר']);
+    await calm(page);
+    await axe(page, 'the playground (he)');
+    await context.close();
+  });
+});
+
 test.describe('on a phone', () => {
   test.use({ storageState: auth('learner-mobile'), viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
@@ -612,6 +758,24 @@ test.describe('on a phone', () => {
     expect(sheet.width).toBeLessThanOrEqual(390);
     expect(sheet.y + sheet.height).toBeLessThanOrEqual(844 + 1);
     await axe(page, 'lesson help on a phone');
+  });
+
+  test('mobile: the playground fits a phone: the moods two by two, a spin, the idea and its timer on screen', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/app/learn/challenges');
+    const playground = page.locator('[data-playground]');
+    const moods = playground.locator('[data-mood]');
+    const [a, b] = [(await moods.nth(0).boundingBox())!, (await moods.nth(1).boundingBox())!];
+    expect(Math.abs(a.y - b.y)).toBeLessThan(2);
+    await playground.getByRole('button', { name: 'Spin', exact: true }).click();
+    const result = page.locator('[data-playground-result]');
+    await expect(result).toBeVisible();
+    await result.getByRole('button', { name: 'Add a timer (optional)' }).click();
+    await result.locator('[data-timer-choice="10"]').click();
+    await expect(result.locator('[data-timer-clock]')).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    await calm(page);
+    await axe(page, 'the playground on a phone');
   });
 
   test('mobile: in Hebrew, right to left, a lesson fits the phone and never pans sideways', async ({ page, context }) => {

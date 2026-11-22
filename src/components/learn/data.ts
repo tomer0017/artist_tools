@@ -142,10 +142,11 @@ export function useLearnList(collection: LearnCollection, enabled = true) {
   });
 }
 
-export function useLearnItem(id: string) {
+export function useLearnItem(id: string, enabled = true) {
   const key = useLearnKey();
   return useQuery({
     queryKey: ['learn', 'item', id, key],
+    enabled,
     queryFn: async (): Promise<ItemAnswer> => {
       const response = await learnFetch(`/api/learn/items/${id}`);
       if (response.status === 404) return { status: 'not_found' };

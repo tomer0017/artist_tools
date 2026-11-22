@@ -10,6 +10,7 @@ import { pathForView } from '@/components/shell/tools';
 import { assetUrl, useLearnItem, useLearnList, type ItemAnswer, type OpenItem } from './data';
 import { useClassMode } from './ClassMode';
 import { AnotherOne, Credits, MarkDone, PrepareButton, PrintSheet, ToolShortcuts, useOwnPhotoInput, useWorksheets } from './ItemParts';
+import { SaveToggle, useSavedChallenges } from './Playground';
 import LessonCard from './LessonCard';
 import ZoomViewer from './ZoomViewer';
 import { DraftBadge, Failed, LearnHeader, Loading, buttonPrimary, buttonSecondary, chip, useLocalized } from './parts';
@@ -175,6 +176,11 @@ function OpenCard({ item, back }: { item: OpenItem; back: { href: string; label:
           <p className="text-lg leading-relaxed text-foreground md:text-xl" data-learn-instruction>
             {item.kind === 'exercise' ? loc(item.instruction) : loc(item.prompt)}
           </p>
+          {item.kind === 'challenge' && item.twist && (
+            <p className="mt-2 text-[15px] leading-relaxed text-foreground" data-learn-twist>
+              <span className="font-semibold text-primary">{t('playground.twist')}:</span> {loc(item.twist)}
+            </p>
+          )}
           {item.kind === 'challenge' && item.focus && (
             <p className="mt-2 text-[15px] leading-relaxed text-foreground" data-learn-focus>
               <span className="font-semibold text-primary">{t('item.focus')}:</span> {loc(item.focus)}
@@ -242,6 +248,7 @@ function Actions({ item }: { item: OpenItem }) {
   const summary = useLearnSummary();
   const sheets = useWorksheets(item);
   const photo = useOwnPhotoInput(sheets.usePhoto);
+  const [saved, toggleSaved] = useSavedChallenges();
   // The Skill filter of "Another one" needs the course's units (ignored without them).
   const course = useLearnList('curriculum', item.kind === 'challenge' && summary.modules.curriculum !== null);
   const entries = course.data?.items;
@@ -261,6 +268,7 @@ function Actions({ item }: { item: OpenItem }) {
           </>
         )}
         {!classMode.on && <MarkDone itemId={item.id} />}
+        {item.kind === 'challenge' && <SaveToggle id={item.id} saved={saved.includes(item.id)} onToggle={toggleSaved} />}
         {item.kind === 'challenge' && <AnotherOne currentId={item.id} unitsOf={unitsOf} />}
       </div>
       {sheets.ownPhoto && (

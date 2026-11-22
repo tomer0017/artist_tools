@@ -77,7 +77,7 @@ const baseline = (id: string, groupId: string, order: number) => ({
   worksheet: { kind: 'none' },
 });
 
-type ChallengeTraits = { level?: string; medium?: string; quick?: boolean; lessons?: string[]; focus?: boolean };
+type ChallengeTraits = { level?: string; medium?: string; quick?: boolean; lessons?: string[]; focus?: boolean; twist?: boolean };
 const challenge = (id: string, groupId: string, order: number, published: boolean, reference: string, references: string[], n: string, traits: ChallengeTraits = {}) => ({
   id,
   groupId,
@@ -95,6 +95,7 @@ const challenge = (id: string, groupId: string, order: number, published: boolea
   tools: [],
   ...(traits.lessons ? { lessons: traits.lessons } : {}),
   ...(traits.focus ? { focus: text(`Secret focus ${id}`, `מיקוד סודי ${id}`) } : {}),
+  ...(traits.twist ? { twist: text(`Secret twist ${id}`, `טוויסט סודי ${id}`) } : {}),
 });
 
 /** A one-page A4 PDF: what a static worksheet is (the server checks its type by its first bytes). */
@@ -129,7 +130,7 @@ export function fixtureSeed() {
         exercise('C-TEST-01', 'color', 'paint', 1, true, ['leaf'], 'four'),
       ],
       challenges: [
-        challenge('CH-901', 'objects', 1, true, 'provided', ['wing'], 'one', { lessons: ['D-LESSON-01'], focus: true }),
+        challenge('CH-901', 'objects', 1, true, 'provided', ['wing'], 'one', { lessons: ['D-LESSON-01'], focus: true, twist: true }),
         // Drawn from one's own photo ("Use my photo"); intermediate, colour welcome, not quick (filters, Random, Quick).
         challenge('CH-902', 'nature', 2, true, 'own_photo', [], 'two', { level: 'intermediate', medium: 'both', quick: false, lessons: ['D-TEST-01'] }),
         challenge('CH-903', 'nature', 3, false, 'life', [], 'three'),

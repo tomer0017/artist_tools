@@ -15,7 +15,7 @@ import { LearnRequestError, assetUrl, localDay, referenceDataUrl, useCompletionC
 import { useClassMode } from './ClassMode';
 import { ReplaceDialog, useToolHandoff } from './handoff';
 import { recentlyDone } from './LearnHome';
-import { useStoredFilters } from './ChallengesScreen';
+import { useStoredFilters } from './filters';
 import { DoneTick, buttonPrimary, buttonSecondary, chip, useLocalized } from './parts';
 
 // What an exercise's card, a lesson and a challenge share (ADR-0018,

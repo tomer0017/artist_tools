@@ -675,11 +675,11 @@ test('Learn: a module and a First N list published in Admin → Plans open exact
     await expect(lockedCard.locator('[data-locked-badge]')).toHaveText('Locked');
     await expect(lockedCard.locator('img')).toHaveCount(0);
     expect(await free.page.content()).not.toContain('Secret');
-    // Random and Quick never offer the locked one.
-    for (const pick of ['Random', 'Quick'] as const) {
-      await free.page.goto('/app/learn/challenges');
-      await free.page.getByRole('button', { name: pick, exact: true }).click();
-      await expect(free.page).toHaveURL(/\/app\/learn\/challenges\/CH-901\?pick=filters(-quick)?$/);
+    // The playground's spins never land on the locked one (ADR-0021).
+    await free.page.goto('/app/learn/challenges');
+    for (let i = 0; i < 4; i++) {
+      await free.page.locator('[data-playground] [data-spin]').click();
+      await expect(free.page.locator('[data-playground-result]')).toHaveAttribute('data-playground-result', 'CH-901');
     }
     // Its own address: the locked page, with nothing of its content in the page or its data.
     const answers: string[] = [];

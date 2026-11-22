@@ -161,6 +161,7 @@ export interface LearnChallenge {
   published: boolean;
   title: Localized;
   prompt: Localized;
+  /** Challenges V2 reads it as the effort the person feels like, never as a skill rating: beginner is light, intermediate is to create, advanced is a challenge (ADR-0021). */
   level: (typeof CHALLENGE_LEVELS)[number];
   skill: Localized;
   /** 1–10, the skill areas of docs/learn/03-challenges.md. */
@@ -172,8 +173,10 @@ export interface LearnChallenge {
   tools: ToolId[];
   /** The 1–3 lessons this challenge builds on ("Builds on: Lesson 3"); its skill filter is their units. */
   lessons?: string[];
-  /** One line: what to pay attention to. */
+  /** One line: what to pay attention to, or a word of encouragement (Challenges V2 shows it as a gentle tip). */
   focus?: Localized;
+  /** One creative twist that makes the prompt one's own ("…and it is made of glass"): optional, one line (ADR-0021). */
+  twist?: Localized;
 }
 
 export interface LearnContent {

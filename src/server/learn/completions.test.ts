@@ -190,7 +190,7 @@ describe('what an open item sends', () => {
     expect(JSON.stringify(sent)).not.toContain('internal');
     const challenge = { ...content.challenges[0], kind: 'challenge' as const, collection: 'challenges' as const, draftNote: 'internal' };
     const sentChallenge = fullItem(challenge as never, new Map(), true);
-    expect(Object.keys(sentChallenge).sort()).toEqual(['collection', 'focus', 'groupId', 'id', 'kind', 'lessons', 'level', 'medium', 'order', 'prompt', 'published', 'quick', 'reference', 'references', 'skill', 'skillArea', 'title', 'tools']);
+    expect(Object.keys(sentChallenge).sort()).toEqual(['collection', 'focus', 'groupId', 'id', 'kind', 'lessons', 'level', 'medium', 'order', 'prompt', 'published', 'quick', 'reference', 'references', 'skill', 'skillArea', 'title', 'tools', 'twist']);
   });
 });
 

@@ -79,6 +79,7 @@ export function fullItem(item: LearnItem, assets: Map<string, LearnAssetDoc>, ad
       quick: item.quick,
       ...(item.lessons ? { lessons: [...item.lessons] } : {}),
       ...(item.focus ? { focus: text(item.focus) } : {}),
+      ...(item.twist ? { twist: text(item.twist) } : {}),
     };
   }
   return {

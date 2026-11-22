@@ -1,5 +1,9 @@
 # 03 — The 50 challenges (proposal, for approval)
 
+> **Since 2026-11-22:** Challenges V2 ([11](11-challenges-v2.md), ADR-0021) opens the screen on a
+> creative playground (a mood, a spin, one idea, an optional timer) and adds 60 new, private
+> ideas in 8 categories (CH-055 … CH-114). The proposal below is kept as written.
+
 Fifty reusable drawing challenges. Each one can be done again and again with a
 different subject ("a family member" is a different drawing every time).
 People browse them, skip freely, ask for a random one at their level, or ask

@@ -113,6 +113,7 @@ const ChallengeSchema = z
     tools: Tools,
     lessons: z.array(z.string().regex(EXERCISE_ID)).max(3).optional(),
     focus: LocalizedSchema.optional(),
+    twist: LocalizedSchema.optional(),
   })
   .passthrough();
 
@@ -134,7 +135,7 @@ const imageFields = (at: string, ref: { alt: Localized; credit?: Localized }): F
 /** The localized fields an item must have in both languages before it can be published. */
 function textFields(item: LearnItem): Field[] {
   const refs = item.references.flatMap((ref, i) => imageFields(`references.${i}`, ref));
-  if (item.kind === 'challenge') return [['title', item.title], ['prompt', item.prompt], ['skill', item.skill], ...(item.focus ? [['focus', item.focus] as Field] : []), ...refs];
+  if (item.kind === 'challenge') return [['title', item.title], ['prompt', item.prompt], ['skill', item.skill], ...(item.focus ? [['focus', item.focus] as Field] : []), ...(item.twist ? [['twist', item.twist] as Field] : []), ...refs];
   return [
     ['title', item.title],
     ['objective', item.objective],
@@ -163,6 +164,8 @@ const longest = (text: Localized | undefined) => (text ? Math.max([...text.en].l
 
 /** How long a lesson's parts may be, so a lesson stays short on a phone (ADR-0020). */
 export const LESSON_LIMITS = { skill: 60, objective: 120, caption: 160, step: 160, create: 140, focus: 140, why: 400 } as const;
+/** A challenge's twist: one line, like its focus (ADR-0021). */
+export const CHALLENGE_LIMITS = { twist: 140 } as const;
 
 /** A lesson's task on paper: one to three short lines (ADR-0020). */
 export const LESSON_TASK_LINES = { min: 1, max: 3 } as const;
@@ -247,6 +250,7 @@ export function contentIssues(content: LearnContent): string[] {
     for (const [field, text] of textFields(item)) if (!filled(text)) issues.push(`${item.id}: ${field} needs English and Hebrew before it can be published`);
     if (item.kind === 'exercise') issues.push(...lessonPublishIssues(item));
     if (item.kind === 'challenge' && longest(item.focus) > LESSON_LIMITS.focus) issues.push(`${item.id}: focus is longer than ${LESSON_LIMITS.focus} characters`);
+    if (item.kind === 'challenge' && longest(item.twist) > CHALLENGE_LIMITS.twist) issues.push(`${item.id}: twist is longer than ${CHALLENGE_LIMITS.twist} characters`);
     if (item.kind === 'challenge' && item.reference === 'provided' && item.references.length === 0) issues.push(`${item.id}: a challenge with a provided reference needs one`);
   }
   for (const group of content.groups) {
