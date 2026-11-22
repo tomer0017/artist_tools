@@ -51,8 +51,9 @@ Constraints of the brief:
 - **The idea:** its category, its effort ("Light", "Creative",
   "Challenging"), the title, the task, the twist ("Twist: …") when it has
   one, the tip, the skill it builds, and a reference thumbnail when it has
-  one. Then **Save**, **Mark as completed** (not in class mode), **Open the
-  challenge**, and the timer.
+  one. Then **Save**, **Open the challenge**, **Mark as completed** (not in
+  class mode; last, so its "Marked as completed · Undo" line falls before
+  the timer), and the timer.
 - **Below, "All challenges":** the list as before, with its filters. "Level"
   is now **Effort**, with the same values relabelled. A **Saved** filter is
   new, and a saved card shows "Saved".

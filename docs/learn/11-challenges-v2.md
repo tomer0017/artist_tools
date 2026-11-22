@@ -6,7 +6,8 @@
 - **Built:** the playground, the timer and saving, by
   [ADR-0021](../adr/0021-challenges-creative-playground.md); 60 new ideas in
   8 categories as private content.
-- **On staging, admins only:** content version 10 on top of the owner's
+- **On staging, admins only:** release `c1ee8bc` (2026-11-22 01:08Z) and
+  content version 10 (`9585deef076f5df5`, 01:12Z) on top of the owner's
   version 9. Release and verification: deploy/RELEASES.md.
 - **Next:** work stops here for the founder's review. Production and the
   published plans are unchanged.

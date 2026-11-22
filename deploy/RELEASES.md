@@ -12,6 +12,7 @@ commit (`version.commit`), so it can be checked over HTTPS alone.
 
 | Released (UTC) | Commit | What changed | Data changes (migration) | Dump taken first |
 |---|---|---|---|---|
+| 2026-11-22 01:08:25 | `c1ee8bc` | **Challenges V2: the creative playground** (the founder's brief of 2026-11-22; dark launch; ADR-0021, docs/learn/11; includes `4cbb200`). The Challenges screen opens on "Need an idea?": four moods (efforts, never skill ratings), a spin with a short reel, one idea with an optional twist and a tip, Save, Mark as completed, and an optional timer (10/30/60 minutes or a stopwatch) worked out from wall-clock timestamps in the browser; a Saved filter in the list; clearing this device removes what the playground keeps. **After the release:** Learn content version 10 (the owner's version 9 plus 8 categories and 60 private ideas, CH-055…CH-114) published by a guarded operator script. No Free/Pro plan setting published or changed | 48 indexes ensured; no plan changed (0 plans updated; "Catalog version 6: applied"). Then content version 10 (no new asset) | yes (release step, 01:08:19, `mongodb-20261122T010819Z`), and before the content (`mongodb-20261122T011240Z`) |
 | 2026-11-20 00:45:56 | `9808770` | **The 15-lesson beginner course** (the founder's sprint brief of 2026-11-19, deadline 2026-11-26; dark launch; docs/learn/10; includes `78b7fb2`). Code: the Learn screen scrolls up and down only. Right to left, WebKit with visible scrollbars had counted the scrollbar's width as sideways overflow: 5 px on every Learn screen in Hebrew. Content, afterwards: Learn test content version 4 (lessons 6–15, the units regrouped into the approved stages, the challenges linked to their lessons, CH-053 and CH-054). No Free/Pro plan setting published or changed | none (48 indexes ensured, 0 plans updated) | `mongodb-20261120T004549Z`; before the content `mongodb-20261120T005627Z` |
 | 2026-11-19 17:28:22 | `a748e6d` | **Beginner lessons, the M6a revision** (approved by the owner after reviewing M6a; dark launch, ADR-0020, docs/learn/09; includes `a7dcb29`). A lesson is one small skill: the objective, one picture, "Your task" in 1–3 lines, "Make something", "Done when", and one button, "I did it — next lesson" (records the person's own word once a day, never in class mode, with "Marked as done … Undo"; nothing judges the drawing). The rest is behind "Need help?" (the mistake and its picture, why, what you need, tools, more practice, credits); the practice sheet is optional ("any paper works"). Publishing rules: one picture, 1–3 task lines, no self-checks; drafts are no longer numbered. **After the release:** test content version 3 (five micro-lessons with code-drawn pictures and A4 practice sheets, two starter challenges; the three M6a lessons unpublished, kept whole) imported and published. Published plan settings unchanged | 48 indexes ensured; no plan changed (0 plans updated; "Catalog version 6: applied"). Then content version 3 and 25 new asset records (by `learn-import` / `learn-publish`) | yes (release step, 17:28:17, `mongodb-20261119T172817Z`), and before the import (`mongodb-20261119T173351Z`) |
 | 2026-11-19 14:52:53 | `54e2a16` | **Lessons that teach, Learn milestone M6a** (approved by the owner with their refinements; dark launch, ADR-0019). An exercise with steps is a lesson: See it (a picture at a time), Do it (steps with the subject, tool links that set the tool and lead back, the worksheet), Check it (never saved), the common mistake, Done when and Next; nothing folded but credits. The course in units with "Up next" and an optional, unnumbered baseline; two doors on the Learn home and Home ("Start: Lesson 1 · …"); challenges with a Skill filter, focus lines and "Builds on"; "Lesson" replaces "Exercise". Content additions only (M5 reads them). **After the release:** test content version 2 (the three lessons rewritten, with diagrams drawn in code and annotated CC0 references; the three challenges linked) imported and published. Published plan settings unchanged | 48 indexes ensured; no plan changed (0 plans updated; "Catalog version 6: applied"). Then content version 2 and 21 new asset records (by `learn-import` / `learn-publish`) | yes (release step, 14:52:47, `mongodb-20261119T145247Z`), and before the import (`mongodb-20261119T145703Z`) |
@@ -52,6 +53,100 @@ Google sign-in unchanged. The releases directory keeps the newest five builds,
 so `77b92be` is no longer on disk; going back to it means rebuilding it with
 `studio-release staging 77b92be` (its code runs against the newer data, since
 every migration was additive).
+
+## Challenges V2 on staging, `c1ee8bc`, then Learn content version 10 (2026-11-22, 01:05–01:30Z)
+
+The founder's brief "Creative Playground (Challenges V2)" of 2026-11-22
+(ADR-0021, docs/learn/11): the Challenges screen opens on a playground (a
+mood, a spin, one idea, an optional timer, Save, Mark as completed), and 60
+new private ideas in 8 categories are published for admins only. No Free/Pro
+plan setting was published or changed; the course and the 7 existing
+challenges are unchanged. Production and GitHub Pages are untouched.
+
+- **Before:**
+  - CI run 57 (`c1ee8bc`, with `4cbb200`) green: type check, lint, unit
+    and integration tests, and the e2e suite. Run 56 (`4cbb200` alone) was
+    cancelled by the newer push.
+  - Read-only checks on staging (`9808770`):
+    - `learn-status`: content version 9 `05bd7c9ba382fd1f` (the owner's,
+      2026-11-21 23:07Z), no draft; 183 assets, 183 of 183 files intact;
+    - the capture: catalog version 6 `f8a1a43e4cedbed7`, `plans`
+      `48f75a1f7925d6c5`, no draft.
+- **The release** (01:05:38–01:08:25):
+  - the dump `mongodb-20261122T010819Z`;
+  - 48 indexes ensured, "0 plans updated", "Catalog version 6: applied";
+  - healthy at 01:08:25 (`/api/health`: `c1ee8bc`).
+- **After the release, with content version 9 still live:** smoke 27/27,
+  `entitlement-test` 24/24 (37 items, 183 images), `login-test` 13/13.
+- **The content:**
+  - **Upload:** the private folder `challenges-v2`'s two files (the ideas and
+    the operator script) went to a 0700 folder of the site user,
+    `content-reviews/challenges-v2-20261122`. Both match the local SHA-256s.
+  - **`snapshot`:** version 9 and fingerprints of what must not change
+    (the release, other configuration, plans, grants, completions).
+  - **`check`,** publishing nothing:
+    - 68 changes, all additions (8 categories, 60 ideas);
+    - the 30 lessons, the 7 challenges and their 4 groups identical;
+    - 29 numbered lessons;
+    - the document stored exactly as built, no content issue;
+    - Free and Pro open 0 items.
+  - **`apply`,** after the dump `mongodb-20261122T011240Z`: content version
+    10 live at 01:12Z (actor `cli`, content `9585deef076f5df5`), published
+    only because version 9 was still live and no draft existed
+    (`publishIfUnchanged`). The fingerprints were unchanged afterwards.
+  - **`verify`:**
+    - version 10 is exactly version 9 plus the additions;
+    - an admin's entitlements open all 60 ideas, with title, task, twist,
+      tip and skill exactly as written;
+    - Free and Pro, from the plans as published: 0 of 97 items open,
+      0 thumbnails;
+    - signed out, CH-055 and CH-114 answer 401.
+  - **`learn-status`:** 183 of 183 files intact (no new asset).
+  - **The capture:** identical (the catalog with its history and times, and
+    `plans`).
+  - **`entitlement-test`:** 24/24 (97 items, 183 images).
+  - **Evidence:** in the private folder (0600).
+- **In real browsers** (`lab/qa/staging-v2.spec.ts`; temporary Free, Pro and
+  Hebrew accounts; removed, 0 left; passwords only in a 0600 file, deleted, as
+  were the sign-in states), 5/5:
+  - for each of the three accounts:
+    - each of the 67 challenges answers 403, and the list is empty;
+    - none of the new text reaches the account;
+    - no Learn on Home;
+    - the Challenges screen and an idea's page lead Home, with no
+      playground;
+    - recording a new idea is refused;
+  - signed out, 401;
+  - on an iPhone (WebKit, emulated), the bottom bar keeps its six items.
+
+  A first run timed out after 10 minutes, with no failed expectation: it
+  checked every phrase with its own `expect`. The rerun used one per
+  response and took 29 s.
+- **Smoke** 27/27 again at the end.
+- **Not verified on staging:** an admin's view of the playground. No
+  temporary admin exists, by design (ADR-0012): the founder checks it.
+- **Locally** (emulated browsers, not physical devices):
+  - **Unit and integration:** 93/93 targeted tests (Learn, roulette,
+    timer, device data, i18n).
+  - **Browser tests:** `learn-screens` and `entitlements` 39/39 on the
+    fixture, Chromium and iPhone WebKit; `learn-screens` 26/26 again after
+    the last change, and CI run 57 ran the whole suite. They cover:
+    - the moods and the spin rules;
+    - the reel;
+    - Save after a reload, and the Saved filter;
+    - Mark as completed;
+    - the timer after reloads, three hours away, pause and resume, time
+      up and the stopwatch;
+    - Hebrew, phones, axe;
+    - Free with a challenge module.
+  - **Screenshots:** of the private ideas on the same build.
+- **Rollback:**
+  - **The code:** `9808770` reads content version 10. It shows the 67
+    challenges in its old list and ignores the twist. It is in releases/
+    with `a748e6d`, `54e2a16` and `ab42467`; `324e136` was pruned.
+  - **The content:** version 9 can be published again with the operator
+    script's `rollback` or Admin's restore. The 60 ideas stay, unpublished.
+  - **The floor stays `224bb65`.**
 
 ## Lessons 16–29 on staging: Learn content versions 5–7 (2026-11-20, 02:25–03:05Z)
 
@@ -1013,7 +1108,7 @@ WebKit with iPhone 13 emulation); no traces, videos or automatic screenshots.
 
 ## Awaiting deployment
 
-Nothing: `9808770` is live (the beginner drawing course, dark-launched; Learn content version 9, lessons 1–29 and optional practice). Google, plus username sign-in for accounts admins create; the plan catalog's live version is 6, with exactly the owner's version 2 content (versions 3–6 are the two audited publication checks), and no plan includes a Learn module.
+Nothing: `c1ee8bc` is live (Challenges V2 and the beginner drawing course, dark-launched; Learn content version 10: lessons 1–29 with optional practice, 67 challenges). Google, plus username sign-in for accounts admins create; the plan catalog's live version is 6, with exactly the owner's version 2 content (versions 3–6 are the two audited publication checks), and no plan includes a Learn module.
 
 ## Private Learn content integration (2026-11-22, Israel time)
 
