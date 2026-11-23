@@ -9,6 +9,7 @@ import { formatMoney } from '@/lib/money';
 import { hasAllTools, isDefaultSplit } from '@/lib/plans';
 import { registrationMode } from '@/server/auth';
 import { basePrice } from '@/server/billing/paypal/subscriptions';
+import { subscriptionsOpen } from '@/server/billing/summary';
 import { paypalConfig } from '@/server/env';
 import { getDb } from '@/server/db/client';
 import { describablePlanOffer } from '@/server/entitlements';
@@ -22,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const offer = await describablePlanOffer(getDb);
   return {
     title: t('pricingTitle'),
-    description: offer && hasAllTools(offer.free) ? t('pricingDescription') : t('pricingDescriptionPartial'),
+    description: (await subscriptionsOpen(getDb())) ? t('pricingDescriptionLive') : offer && hasAllTools(offer.free) ? t('pricingDescription') : t('pricingDescriptionPartial'),
     alternates: { languages: { en: '/pricing', he: '/he/pricing' } },
   };
 }
@@ -63,7 +64,7 @@ export default async function PricingPage() {
         </header>
 
         <h1 className="mt-10 text-[30px] font-bold leading-tight tracking-tight text-foreground md:text-[40px]">{t('title')}</h1>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">{offer && isDefaultSplit(offer) ? t('lead') : t('leadPartial')}</p>
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">{base ? t('leadLive') : offer && isDefaultSplit(offer) ? t('lead') : t('leadPartial')}</p>
 
         <div className="mt-6">
           {offer ? (

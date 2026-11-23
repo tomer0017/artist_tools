@@ -28,6 +28,7 @@ export const en = {
     pricingTitle: 'Plans · Studio Companion',
     pricingDescription: 'Studio Companion is free, with all five tools. Pro is coming soon.',
     pricingDescriptionPartial: 'Studio Companion has a free plan with no time limit. Pro is coming soon.',
+    pricingDescriptionLive: 'Studio Companion has a free plan with no time limit, and Pro by monthly subscription.',
     signInTitle: 'Sign in or sign up · Studio Companion',
     signUpTitle: 'Create your account · Studio Companion',
     forgotTitle: 'Reset your password · Studio Companion',
@@ -127,6 +128,8 @@ export const en = {
     plansHeading: 'Free to start. Pro is coming soon.',
     plansLead: 'All five tools are free, with no time limit. Pro will add larger and richer exports.',
     plansLeadPartial: 'A free plan with no time limit. Pro is coming soon; the plans page shows what each one includes.',
+    plansHeadingLive: 'Free to start. Pro when you want more.',
+    plansLeadLive: 'A free plan with no time limit, and Pro by monthly subscription: the plans page shows what each one includes.',
     privacy: 'Everything runs in your browser. Your images never leave your device.',
     deleted: 'Your account was deleted. Thank you for using Studio Companion.',
   },
@@ -134,6 +137,7 @@ export const en = {
     title: 'Plans',
     lead: 'Start free with all five tools. Pro, with larger and richer exports, is coming soon.',
     leadPartial: 'Start free, with no time limit. Pro is coming soon. Here is what each plan includes.',
+    leadLive: 'Start free, with no time limit, or subscribe to Pro. Here is what each plan includes.',
     unavailable: 'What each plan includes cannot be shown just now. Please try again in a moment.',
     free: 'Free',
     freeLead: 'Everything you need to plan, study and check a painting.',
@@ -174,8 +178,11 @@ export const en = {
       proQ: 'What will Pro add?',
       proA: 'Large GIFs (up to 800 px) and Compare + Difference animations, with more export options planned.',
       proAPartial: 'Everything marked for Pro in the comparison above. Pro is coming soon.',
+      proQLive: 'What does Pro add?',
+      proAPartialLive: 'Everything marked for Pro in the comparison above.',
       buyQ: 'Can I buy Pro now?',
       buyA: 'Not yet. Pro is coming soon. There is no payment anywhere in Studio Companion today, and nothing is ever charged.',
+      buyALive: 'Yes. Subscribe through PayPal from this page. Pro renews every month until you stop it: stop renewal at any time on your account page, and you keep Pro until the end of the month you have paid for.',
       uploadQ: 'Are my images uploaded?',
       uploadA: 'No. Every tool runs in your browser, and your images stay on your device.',
     },
@@ -196,6 +203,7 @@ export const en = {
     loadingLearn: 'Loading Learn…',
     plansLead: 'Start free with every tool. Pro is coming soon.',
     plansLeadPartial: 'What each plan includes right now. Pro is coming soon.',
+    plansLeadLive: 'Start free, and subscribe to Pro whenever you want more.',
     // A tool the account's plan does not include (src/components/shell/ToolLocked.tsx).
     locked: {
       badge: 'Locked',
@@ -203,6 +211,7 @@ export const en = {
       title: '{tool} is not included in your plan',
       reason: {
         pro: 'It is part of Pro, which is coming soon. Pro cannot be bought yet.',
+        proLive: 'It is part of Pro: the plans page shows the price and how to subscribe.',
         off: 'It is not available on any plan right now.',
         plan: 'Your plan does not include it right now.',
       },
@@ -258,6 +267,7 @@ export const en = {
       summaryFreePartial: 'Free, with no time limit. What it includes is listed below.',
       subscription: 'Subscription',
       subscriptionNone: 'None (billing is not live yet)',
+      subscriptionNoneLive: 'None',
       status: {
         none: 'None',
         trialing: 'Trial',
@@ -274,6 +284,8 @@ export const en = {
       upgradeTitle: 'Upgrade to Pro',
       upgradeLead: 'Large GIFs and Compare + Difference animations. Paid plans are not available yet: Pro is coming soon.',
       upgradeLeadPartial: 'Everything marked Pro above. Paid plans are not available yet: Pro is coming soon.',
+      upgradeLeadLive: 'Large GIFs and Compare + Difference animations, by monthly subscription.',
+      upgradeLeadPartialLive: 'Everything marked Pro above, by monthly subscription.',
       upgradeSoon: 'Upgrade: coming soon',
     },
     features: {
@@ -452,6 +464,7 @@ export const en = {
     googleDataNoteWithEmail: 'With Google, we use your name, email address and profile picture from Google to create your account.',
     noMarketing: 'Signing in never subscribes you to marketing emails.',
     plansLink: 'Free now, Pro coming soon: <link>compare plans</link>',
+    plansLinkLive: 'Free to start, Pro by subscription: <link>compare plans</link>',
     passwordHint: 'At least 12 characters. A short sentence or a few unrelated words work well.',
     signUp: {
       title: 'Create your free account',

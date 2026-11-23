@@ -11,8 +11,8 @@ import { TOOLS, pathForView } from './tools';
 // a reload, another tool handing off, a tab left open while access changed).
 // The tool itself is not mounted, or stays hidden with its work if it was
 // already open: nothing is deleted. Why it is locked comes from the published
-// plans: part of Pro, or not on any plan right now. Pro cannot be bought yet,
-// so the way on is back Home or to the plan comparison, never a payment.
+// plans: part of Pro, or not on any plan right now. The way on is back Home or
+// to the plan comparison, which offers checkout once Pro can be bought.
 
 export default function ToolLocked({ tool }: { tool: TabId }) {
   const t = useTranslations('studio.locked');
@@ -41,7 +41,7 @@ export default function ToolLocked({ tool }: { tool: TabId }) {
         <h1 id="tool-locked-title" className="mt-1.5 text-xl font-bold leading-snug text-foreground md:text-2xl">
           {t('title', { tool: tt('title') })}
         </h1>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t(`reason.${reason}`)}</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{reason === 'pro' && account?.billing?.available ? t('reason.proLive') : t(`reason.${reason}`)}</p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t('kept')}</p>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Link

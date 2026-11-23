@@ -29,6 +29,7 @@ export default function SignInCard({
   emailPassword = false,
   usernamePassword = false,
   freeHasAllTools = true,
+  proOpen = false,
 }: {
   callbackPath: string;
   /** False until this server's Google OAuth client is configured. */
@@ -42,6 +43,8 @@ export default function SignInCard({
   usernamePassword?: boolean;
   /** Whether the published Free plan has all five tools ("All five tools, free" only then). */
   freeHasAllTools?: boolean;
+  /** Whether Pro can be bought on this server now (then it is not "coming soon"). */
+  proOpen?: boolean;
 }) {
   const t = useTranslations('auth');
   const locale = useLocale();
@@ -177,7 +180,7 @@ export default function SignInCard({
         {emailPassword || usernamePassword ? t('googleDataNoteWithEmail') : t('googleDataNote')} {t('noMarketing')}
       </p>
       <p className="mt-3 text-xs text-muted-foreground">
-        {t.rich('plansLink', {
+        {t.rich(proOpen ? 'plansLinkLive' : 'plansLink', {
           link: (chunks) => (
             <Link href={localizedPath('/pricing', locale)} className="font-medium text-primary underline-offset-2 hover:underline">
               {chunks}

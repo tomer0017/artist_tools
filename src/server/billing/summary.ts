@@ -58,3 +58,12 @@ export async function billingSummary(db: Db, userId: ObjectId, currency: Currenc
     refundRequest: refund ? { status: refund.status, requestedAt: refund.requestedAt.toISOString() } : null,
   };
 }
+
+/** Whether Pro can be bought on this server now (PayPal set up and a monthly price published): public pages then stop saying "coming soon". */
+export async function subscriptionsOpen(db: Db): Promise<boolean> {
+  try {
+    return paypalConfig() !== null && (await basePrice(db)) !== null;
+  } catch {
+    return false;
+  }
+}

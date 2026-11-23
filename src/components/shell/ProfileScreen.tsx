@@ -211,7 +211,7 @@ export default function ProfileScreen() {
             {plan === 'pro' ? <Crown className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" /> : <Sparkles className="h-6 w-6 shrink-0 text-muted-foreground" aria-hidden="true" />}
           </div>
           <dl className="mt-3 text-sm">
-            <Detail label={t('plan.subscription')} value={subscription === 'none' ? t('plan.subscriptionNone') : t(`plan.status.${subscription}`)} />
+            <Detail label={t('plan.subscription')} value={subscription === 'none' ? (account.billing?.available ? t('plan.subscriptionNoneLive') : t('plan.subscriptionNone')) : t(`plan.status.${subscription}`)} />
           </dl>
           {account.quotas.length > 0 && (
             <ul aria-label={t('plan.usageLimits')} className="mt-3 space-y-1 text-sm">
@@ -254,7 +254,7 @@ export default function ProfileScreen() {
           {!isAdmin && plan === 'free' && (
             <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
               <p className="font-semibold text-foreground">{t('plan.upgradeTitle')}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{isDefaultSplit(account.offer) ? t('plan.upgradeLead') : t('plan.upgradeLeadPartial')}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{account.billing?.available ? (isDefaultSplit(account.offer) ? t('plan.upgradeLeadLive') : t('plan.upgradeLeadPartialLive')) : isDefaultSplit(account.offer) ? t('plan.upgradeLead') : t('plan.upgradeLeadPartial')}</p>
               {account.billing?.available ? (
                 <Link
                   href="/subscribe"

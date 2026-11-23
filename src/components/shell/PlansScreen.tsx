@@ -42,7 +42,7 @@ export default function PlansScreen() {
           {t('plans.title')}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground md:text-base">
-          {state && !hasAllTools(state.account.offer.free) ? t('studio.plansLeadPartial') : t('studio.plansLead')}
+          {state?.account.billing?.available ? t('studio.plansLeadLive') : state && !hasAllTools(state.account.offer.free) ? t('studio.plansLeadPartial') : t('studio.plansLead')}
         </p>
         {state && (
           <div className="mt-5">

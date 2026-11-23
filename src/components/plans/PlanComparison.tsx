@@ -8,8 +8,9 @@ import { featureRows, hasAllTools, isDefaultSplit, type FeatureRow, type PlanId,
 // ─── Plans ────────────────────────────────────────────────────────────────────
 // Free and Pro side by side, from the published plans the server enforces
 // (`offer`, read from the database: src/server/entitlements.ts), so what this
-// page says is what the studio opens. There are no prices and nothing to buy:
-// Free is available now, Pro is "coming soon", and the page says so plainly.
+// page says is what the studio opens. Until Pro can be bought (`proAction`),
+// Pro is "coming soon" and the page says so plainly; then it shows the price
+// and leads to checkout, and the questions say how subscribing works.
 // Used by the public /pricing page and by the studio's /app/plans view.
 
 export function PlanComparison({
@@ -48,8 +49,10 @@ export function PlanComparison({
       : registration === 'open'
         ? [{ q: t('faq.accountQ'), a: t('faq.accountOpenA') }]
         : []),
-    { q: t('faq.proQ'), a: defaults ? t('faq.proA') : t('faq.proAPartial') },
-    { q: t('faq.buyQ'), a: t('faq.buyA') },
+    proAction
+      ? { q: t('faq.proQLive'), a: defaults ? t('faq.proA') : t('faq.proAPartialLive') }
+      : { q: t('faq.proQ'), a: defaults ? t('faq.proA') : t('faq.proAPartial') },
+    { q: t('faq.buyQ'), a: proAction ? t('faq.buyALive') : t('faq.buyA') },
     { q: t('faq.uploadQ'), a: t('faq.uploadA') },
   ];
 

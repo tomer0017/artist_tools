@@ -9,6 +9,7 @@ import { emailPasswordAvailable, googleSignInAvailable, registrationMode, userna
 import { getDb } from '@/server/db/client';
 import { describablePlanOffer } from '@/server/entitlements';
 import { getSession } from '@/server/session';
+import { subscriptionsOpen } from '@/server/billing/summary';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT('meta');
@@ -33,6 +34,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   return (
     <SignInCard
       freeHasAllTools={offer !== null && hasAllTools(offer.free)}
+      proOpen={await subscriptionsOpen(getDb())}
       callbackPath={callbackPath}
       available={googleSignInAvailable()}
       registration={registration}

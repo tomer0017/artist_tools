@@ -9,6 +9,7 @@ import { localizedPath } from '@/i18n/config';
 import { hasAllTools, isDefaultSplit } from '@/lib/plans';
 import { registrationMode } from '@/server/auth';
 import { getDb } from '@/server/db/client';
+import { subscriptionsOpen } from '@/server/billing/summary';
 import { describablePlanOffer } from '@/server/entitlements';
 import { getSession } from '@/server/session';
 
@@ -37,6 +38,8 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
   const tt = await getT('tools');
   // What each plan includes as published: "every tool is free" only while it is true.
   const offer = await describablePlanOffer(getDb);
+  // Once Pro can be bought, nothing here says "coming soon" any more.
+  const proOpen = await subscriptionsOpen(getDb());
   return (
     <main className="min-h-[100dvh] bg-background" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <LegacyHashRedirect />
@@ -159,8 +162,8 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
       <section aria-labelledby="landing-plans" className="mx-auto w-full max-w-6xl px-4 pb-12 md:px-6 lg:px-8">
         <div className="flex flex-col gap-4 rounded-2xl border border-primary/30 bg-primary/5 p-5 md:flex-row md:items-center md:justify-between md:p-6">
           <div>
-            <h2 id="landing-plans" className="text-base font-semibold text-foreground md:text-lg">{t('plansHeading')}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{offer && isDefaultSplit(offer) ? t('plansLead') : t('plansLeadPartial')}</p>
+            <h2 id="landing-plans" className="text-base font-semibold text-foreground md:text-lg">{proOpen ? t('plansHeadingLive') : t('plansHeading')}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{proOpen ? t('plansLeadLive') : offer && isDefaultSplit(offer) ? t('plansLead') : t('plansLeadPartial')}</p>
           </div>
           <Link href={localizedPath('/pricing', locale)} className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card px-5 text-sm font-semibold text-foreground hover:bg-secondary">
             {tc('comparePlans')}
