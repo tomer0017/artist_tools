@@ -10,7 +10,9 @@ import { BrandMark } from './BrandMark';
 import { pathForView } from './tools';
 
 // ─── Account page (/app/profile) ──────────────────────────────────────────────
-// Who is signed in, which plan they are on and what it includes, and the
+// Who is signed in, which plan they are on and what it includes (for an
+// administrator: full access, no plan lists or upgrade offers, and their
+// second factor at a glance), and the
 // person's own controls: name and photo, language, currency and marketing
 // email, sign-in methods, signed-in devices, downloading their data and
 // deleting the account (src/components/account/). Everything shown comes from
@@ -142,10 +144,18 @@ export default function ProfileScreen() {
                 </p>
               )}
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${plan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border bg-secondary/60 text-foreground'}`}>
-                  {plan === 'pro' && <Crown className="h-3 w-3" aria-hidden="true" />}
-                  {planName}
-                </span>
+                {/* An administrator's plan decides nothing, so it is not shown as who they are. */}
+                {!isAdmin && (
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${plan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border bg-secondary/60 text-foreground'}`}>
+                    {plan === 'pro' && <Crown className="h-3 w-3" aria-hidden="true" />}
+                    {planName}
+                  </span>
+                )}
+                {account.admin?.owner && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground">
+                    <Crown className="h-3 w-3" aria-hidden="true" /> {t('owner')}
+                  </span>
+                )}
                 {isAdmin && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
                     <ShieldCheck className="h-3 w-3" aria-hidden="true" /> {t('admin')}
@@ -162,12 +172,33 @@ export default function ProfileScreen() {
               <Detail label={t('email')} value={account.emailVerified ? (account.methods.google ? t('verifiedByGoogle') : t('verified')) : t('notVerified')} />
             )}
             <Detail label={t('memberSince')} value={longDate(account.createdAt)} />
-            <Detail label={t('role')} value={isAdmin ? t('administrator') : t('member')} />
+            <Detail label={t('role')} value={isAdmin ? (account.admin?.owner ? t('ownerRole') : t('administrator')) : t('member')} />
           </dl>
           <NameEditor account={account} onChanged={state.refresh} />
         </section>
 
+        {/* Access: an administrator has everything, so no plan, limits or upgrade offers. */}
+        {isAdmin && (
+          <section aria-label={t('adminAccess.section')} className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t('adminAccess.section')}</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">{t('adminAccess.title')}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{t('adminAccess.lead')}</p>
+              </div>
+              <ShieldCheck className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
+            </div>
+            {/* A real subscription is still shown: billing is separate from the admin role. */}
+            {subscription !== 'none' && (
+              <dl className="mt-3 text-sm">
+                <Detail label={t('plan.subscription')} value={t(`plan.status.${subscription}`)} />
+              </dl>
+            )}
+          </section>
+        )}
+
         {/* Plan */}
+        {!isAdmin && (
         <section aria-label={t('plan.section')} className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -238,6 +269,7 @@ export default function ProfileScreen() {
             {tg('common.comparePlans')}
           </Link>
         </section>
+        )}
 
         <PreferencesCard account={account} onChanged={state.refresh} />
         <SignInMethodsCard account={account} onChanged={state.refresh} />
@@ -265,12 +297,26 @@ export default function ProfileScreen() {
           <section aria-label={t('adminSection.title')} className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
             <p className="font-semibold text-foreground">{t('adminSection.title')}</p>
             <p className="mt-1 text-sm text-muted-foreground">{t('adminSection.lead')}</p>
-            <Link
-              href="/admin"
-              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary/60 text-sm font-semibold text-foreground hover:bg-secondary sm:w-auto sm:px-6"
-            >
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" /> {t('adminSection.open')}
-            </Link>
+            {account.admin && (
+              <dl className="mt-3 grid grid-cols-1 gap-y-2 text-sm sm:grid-cols-2">
+                <Detail label={t('adminSection.mfa')} value={account.admin.mfaEnrolled ? t('adminSection.mfaOn') : t('adminSection.mfaOff')} />
+                <Detail label={t('adminSection.trusted')} value={String(account.admin.trustedDevices)} />
+              </dl>
+            )}
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Link
+                href="/admin"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary/60 text-sm font-semibold text-foreground hover:bg-secondary sm:w-auto sm:px-6"
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" /> {t('adminSection.open')}
+              </Link>
+              <Link
+                href="/admin/security"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-secondary sm:w-auto sm:px-6"
+              >
+                {t('adminSection.security')}
+              </Link>
+            </div>
           </section>
         )}
 

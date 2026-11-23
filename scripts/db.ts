@@ -51,7 +51,7 @@
 import { existsSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { EXPORT_FEATURE_IDS, FEATURES, TOOL_FEATURE_IDS, isPlanId, type FeatureId, type PlanId, type PlanOffer } from '@/lib/plans';
-import { findUserByEmail, getUserDetail, listUsers, setUserPlan, setUserRole, setUserStatus } from '@/server/admin';
+import { findUserByEmail, getUserDetail, listUsers, setOwner, setUserPlan, setUserRole, setUserStatus } from '@/server/admin';
 import { authFromEnvironment } from '@/server/auth';
 import { catalogReadNotes, catalogSpec, defaultCatalog, mergeKnown, planDocMatches, planDocsFor, readCatalog, type Catalog } from '@/server/config/catalog';
 import { getDraft, getPublished, publishIfUnchanged } from '@/server/config/versions';
@@ -81,7 +81,7 @@ import {
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove | learn-import <folder> | learn-status | learn-publish | learn-discard';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-owner <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove | learn-import <folder> | learn-status | learn-publish | learn-discard';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -130,7 +130,7 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
             u.username ? `username:${u.username}` : mask(u.email),
             `verified:${u.emailVerified ? 'yes' : 'no'}`,
             `google:${u.google.linked ? u.google.idHint : 'none'}`,
-            `role:${u.role}`,
+            `role:${u.role}${u.owner ? ' (owner)' : ''}`,
             `plan:${u.plan}`,
             `status:${u.status}`,
             `created:${when(u.createdAt)}`,
@@ -175,11 +175,29 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       console.log(result === 'unchanged' ? 'Not an admin; nothing changed.' : 'Revoked: the account is now a regular user (recorded in the audit log).');
       return;
     }
+    case 'set-owner': {
+      // The owner (only ever set here): only they change admin roles from the
+      // dashboard, and no other admin can change their account. Moving it to
+      // another admin removes it from the previous owner.
+      const userId = userIdFrom(arg);
+      const result = await setOwner(db, userId, 'cli');
+      if (result.status === 'not_found') throw new Error('No user with that id.');
+      if (result.status === 'username_account') throw new Error('Refused: a username account can never be the owner.');
+      if (result.status === 'not_admin') throw new Error('Refused: the owner must be an active admin. Grant admin first (grant-admin).');
+      console.log(
+        result.status === 'unchanged'
+          ? 'Already the owner; nothing changed.'
+          : `Owner set${result.previous ? ` (the previous owner, ${result.previous.toHexString()}, no longer is)` : ''} (recorded in the audit log).`,
+      );
+      return;
+    }
     case 'set-plan': {
       const userId = userIdFrom(arg);
       if (!isPlanId(arg2)) throw new Error(USAGE);
       const result = await setUserPlan(db, { userId, plan: arg2, actor: 'cli' });
       if (result.status === 'not_found') throw new Error('No user with that id.');
+      // 'self' applies to the dashboard only (an admin's own account); the command line acts as nobody's account.
+      if (result.status === 'self') throw new Error('Refused.');
       console.log(result.status === 'unchanged' ? `Already on ${arg2}; nothing changed.` : `Plan changed: ${result.from} → ${result.to} (recorded in the audit log).`);
       return;
     }

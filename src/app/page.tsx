@@ -10,11 +10,13 @@ import { hasAllTools, isDefaultSplit } from '@/lib/plans';
 import { registrationMode } from '@/server/auth';
 import { getDb } from '@/server/db/client';
 import { describablePlanOffer } from '@/server/entitlements';
+import { getSession } from '@/server/session';
 
 // Public landing page: what Studio Companion is, the five tools, and how to
 // start (a free account with Google, or invite-only while testing). It reuses
 // the studio's hero and tool artwork so the brand looks the same before and
-// after entry.
+// after entry. Someone already signed in is offered the studio itself, not
+// "Sign in" (which looked like being signed out).
 
 const HERO_FADE = 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 30%, #000 62%, #000 88%, transparent 100%)';
 
@@ -27,6 +29,7 @@ export async function generateMetadata() {
 
 export default async function LandingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const open = registrationMode() === 'open';
+  const signedIn = Boolean(await getSession());
   const deleted = (await searchParams).account === 'deleted';
   const locale = await getRequestLocale();
   const t = await getT('landing');
@@ -47,7 +50,11 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
         <nav aria-label={tc('site')} className="flex items-center gap-1 text-sm">
           <LanguageSwitch className="me-1 hidden sm:inline-flex" />
           <Link href={localizedPath('/pricing', locale)} className="rounded-lg px-3 py-2 font-medium text-foreground hover:bg-secondary">{tc('plans')}</Link>
-          <Link href={`${localizedPath('/sign-in', locale)}?callbackURL=%2Fapp`} className="rounded-lg px-3 py-2 font-medium text-foreground hover:bg-secondary">{tc('signIn')}</Link>
+          {signedIn ? (
+            <Link href="/app" className="rounded-lg px-3 py-2 font-medium text-foreground hover:bg-secondary">{tc('openStudio')}</Link>
+          ) : (
+            <Link href={`${localizedPath('/sign-in', locale)}?callbackURL=%2Fapp`} className="rounded-lg px-3 py-2 font-medium text-foreground hover:bg-secondary">{tc('signIn')}</Link>
+          )}
         </nav>
       </header>
 
@@ -86,10 +93,10 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
-              href={open ? `${localizedPath('/sign-in', locale)}?callbackURL=%2Fapp` : '/app'}
+              href={open && !signedIn ? `${localizedPath('/sign-in', locale)}?callbackURL=%2Fapp` : '/app'}
               className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-6 text-[15px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {open ? t('startFree') : tc('openStudio')}
+              {open && !signedIn ? t('startFree') : tc('openStudio')}
             </Link>
             <Link href={localizedPath('/pricing', locale)} className="inline-flex h-12 items-center justify-center rounded-xl border border-border bg-card/70 px-5 text-[15px] font-semibold text-foreground hover:bg-secondary">
               {t('seePlans')}

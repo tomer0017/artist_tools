@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { FRESH_SESSION_SECONDS, getAuth } from '@/server/auth';
 import { adminGate, type AdminGate } from '@/server/admin-mfa';
+import { readDeviceToken } from '@/server/admin-device-cookie';
 import { getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { authConfig } from '@/server/env';
@@ -22,15 +23,21 @@ import { signInPath } from '@/lib/redirects';
 export const getSession = cache(async () => {
   // Reading the request first also marks the page as per-request for Next.js.
   const requestHeaders = await headers();
-  // Inside a server action (a POST with the Next-Action header), read the
-  // session without renewing its cookies: any cookie written there makes
-  // Next.js re-render the whole page into the action's reply, which is slow
-  // and, while prefetches are in flight, sometimes left the action's promise
-  // unresolved. Page loads still renew the session as people use the site.
+  // Read here, a session is never renewed. Inside a server action (a POST
+  // with the Next-Action header) any cookie written makes Next.js re-render
+  // the whole page into the action's reply, which is slow and, while
+  // prefetches are in flight, sometimes left the action's promise unresolved.
+  // On a page a renewal moved the session's end in the database while the
+  // cookie could not be written (a server-rendered page cannot set cookies;
+  // Better Auth's Next.js plugin skips it silently): the browser kept the
+  // old cookie, which then ran out 30 days after sign-in however often the
+  // site was used (diagnosed 2026-11-23). Renewal happens in the browser's
+  // own call to /api/auth/get-session instead (SessionKeepAlive), which moves
+  // both together.
   const inAction = requestHeaders.has('next-action');
   const session = await getAuth().api.getSession({
     headers: requestHeaders,
-    query: inAction ? { disableCookieCache: true, disableRefresh: true } : undefined,
+    query: inAction ? { disableCookieCache: true, disableRefresh: true } : { disableRefresh: true },
   });
   if (!session || session.user.status !== 'active') return null;
   const live = await collections(getDb()).sessions.countDocuments({ token: session.session.token, expiresAt: { $gt: new Date() } }, { limit: 1 });
@@ -65,9 +72,14 @@ export async function currentAdminRole() {
   };
 }
 
-/** What this administrator's session still needs before admin access (src/server/admin-mfa.ts). */
+/**
+ * What this administrator's session still needs before admin access
+ * (src/server/admin-mfa.ts). On a device this account trusts, a session that
+ * has not passed yet passes without a code.
+ */
 export async function adminAccessGate(admin: NonNullable<Awaited<ReturnType<typeof currentAdminRole>>>): Promise<AdminGate> {
-  return adminGate(getDb(), admin.id, admin.session.id, authConfig().adminMfaRequired);
+  const device = { token: await readDeviceToken(), sessionExpiresAt: admin.session.expiresAt };
+  return adminGate(getDb(), admin.id, admin.session.id, authConfig().adminMfaRequired, new Date(), device);
 }
 
 /**

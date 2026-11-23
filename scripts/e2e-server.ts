@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
+import { setOwner } from '@/server/admin';
 import { createAuth } from '@/server/auth';
 import { catalogSpec, type Catalog } from '@/server/config/catalog';
 import { publishDraft, saveDraft } from '@/server/config/versions';
@@ -147,7 +148,9 @@ await seedLearn(db);
 mkdirSync('e2e/.auth', { recursive: true });
 await seedSignedInUser(db, 'user', 'user'); // Free: what specs are signed in as by default
 await seedSignedInUser(db, 'pro', 'user', 'pro');
-await seedSignedInUser(db, 'admin', 'admin');
+// The default admin is the owner, made so the way the operator does it (server command line).
+const ownerId = await seedSignedInUser(db, 'admin', 'admin');
+await setOwner(db, ownerId, 'cli');
 // Learn's screens (e2e/learn-screens.spec.ts, ADR-0018): admins, the only
 // accounts Learn opens for until a plan includes it; one per test that keeps
 // a history or class mode, since tests run in parallel.
@@ -165,15 +168,40 @@ await seedSignedInUser(db, 'newbie-iphone-webkit', 'user', 'free', false, []);
 // Account-page specs: one that edits its profile, one signed in an hour ago (sensitive changes ask to confirm).
 await seedSignedInUser(db, 'editor', 'user');
 await seedSignedInUser(db, 'settled', 'user', 'free', false, ALL_TOOLS, 60);
-// Admin-dashboard specs: an admin signed in an hour ago (sensitive changes ask to confirm), and the accounts it changes.
-await seedSignedInUser(db, 'admin-settled', 'admin', 'free', false, ALL_TOOLS, 60);
+// Admin-dashboard specs: the owner in a session signed in an hour ago (sensitive changes ask to confirm;
+// only the owner changes roles), and the accounts it changes.
+await seedSession(db, ownerId, 'admin-settled', false, new Date(Date.now() - 60 * 60_000));
 await seedSignedInUser(db, 'grantee', 'user');
+// A paying account: its subscription and payment as the server writes them from
+// verified provider events (no provider is connected in tests). A test account,
+// so revenue figures leave it out. The admin specs give and end manual Pro next
+// to it and check billing stays exactly as it was.
+{
+  const subscriber = await seedSignedInUser(db, 'subscriber', 'user');
+  const now = new Date();
+  const day = 24 * 60 * 60 * 1000;
+  await db.collection('users').updateOne({ _id: subscriber }, { $set: { testAccount: true } });
+  await db.collection('subscriptions').insertOne({
+    userId: subscriber, planId: 'pro', provider: 'e2e', providerCustomerId: 'cus_e2e', providerSubscriptionId: 'sub_e2e', status: 'active',
+    currentPeriodStart: new Date(now.getTime() - 10 * day), currentPeriodEnd: new Date(now.getTime() + 20 * day), cancelAtPeriodEnd: false, canceledAt: null,
+    createdAt: now, updatedAt: now, interval: 'month', currency: 'USD', amountMinor: 990,
+  });
+  await db.collection('payments').insertOne({
+    provider: 'e2e', providerPaymentId: 'pay_e2e', userId: subscriber, providerSubscriptionId: 'sub_e2e', kind: 'charge', status: 'succeeded',
+    amountMinor: 990, currency: 'USD', occurredAt: new Date(now.getTime() - 10 * day), receiptUrl: null, createdAt: now,
+  });
+}
 await seedSignedInUser(db, 'suspendee', 'user');
 await seedSignedInUser(db, 'candidate', 'user');
+// Manage access back to Free in one step; an admin who is not the owner (owner protection).
+await seedSignedInUser(db, 'freeback', 'user');
+await seedSignedInUser(db, 'deputy', 'admin');
+// A sign-in that must survive closing and reopening the browser (one per browser project).
+for (const name of ['persistent-chromium', 'persistent-iphone-webkit']) await seedSignedInUser(db, name, 'user');
 // An admin who sets up two-factor verification, with three more sessions of the same account.
 {
   const mfaAdmin = await seedSignedInUser(db, 'admin-mfa', 'admin');
-  for (const name of ['admin-mfa-2', 'admin-mfa-3', 'admin-mfa-4']) await seedSession(db, mfaAdmin, name);
+  for (const name of ['admin-mfa-2', 'admin-mfa-3', 'admin-mfa-4', 'admin-mfa-5', 'admin-mfa-6', 'admin-mfa-7']) await seedSession(db, mfaAdmin, name);
 }
 // Accounts set to Hebrew that have not seen the tool introductions yet (one per browser project, and one
 // whose language the i18n spec switches).

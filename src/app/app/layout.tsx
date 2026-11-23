@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { SessionKeepAlive } from '@/components/shell/SessionKeepAlive';
 import StudioClient from '@/components/shell/StudioClient';
 import { AccountProvider } from '@/components/shell/account';
 import { I18nProvider } from '@/i18n/client';
@@ -32,6 +33,7 @@ export default async function StudioLayout({ children }: { children: React.React
     <I18nProvider locale={locale} messages={messagesFor(locale)}>
       <div lang={locale} dir={dirOf(locale)} style={{ display: 'contents' }}>
         <AccountProvider initial={account}>
+          <SessionKeepAlive />
           <StudioClient />
           {children}
         </AccountProvider>

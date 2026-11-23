@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Download, KeyRound, ShieldCheck, Smartphone } from 'lucide-react';
 import { ReauthPanel } from '@/components/account/parts';
 import { confirmAdminMfa, disableAdminMfa, regenerateAdminRecoveryCodes, startAdminMfa, type MfaResult } from './actions';
+import { TrustCheckbox } from './TrustCheckbox';
 import { QrCode } from './QrCode';
 
 // Set up, manage and turn off two-factor verification for this administrator.
@@ -35,6 +36,7 @@ export function MfaSettings({ enrolled, since, recoveryCodesLeft, fresh, viewer 
   const [mode, setMode] = useState<Mode>({ kind: 'idle' });
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [trust, setTrust] = useState(true);
 
   const fail = (result: Extract<MfaResult, { ok: false }>, then: 'start' | 'disable') => {
     if (result.reason === 'reauth') setMode({ kind: 'reauth', then });
@@ -97,13 +99,14 @@ export function MfaSettings({ enrolled, since, recoveryCodesLeft, fresh, viewer 
           onSubmit={(code) =>
             startTransition(async () => {
               setMessage(null);
-              const result = await confirmAdminMfa({ code });
+              const result = await confirmAdminMfa({ code, trust });
               if (result.ok === false) return setMessage({ tone: 'error', text: result.message });
               setMode({ kind: 'codes', codes: result.recoveryCodes ?? [] });
             })
           }
           onCancel={() => setMode({ kind: 'idle' })}
         />
+        <TrustCheckbox checked={trust} onChange={setTrust} />
         <Status message={message} />
       </div>
     );

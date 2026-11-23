@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { verifyAdminMfa } from '../security/actions';
+import { TrustCheckbox } from '../security/TrustCheckbox';
 
 const INPUT =
   'mt-1.5 block h-12 w-full rounded-xl border border-border bg-background px-3 font-mono text-lg tracking-[0.25em] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -11,6 +12,7 @@ export function VerifyForm({ returnTo }: { returnTo: string }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [left, setLeft] = useState<number | null>(null);
+  const [trust, setTrust] = useState(true);
   const [pending, startTransition] = useTransition();
 
   return (
@@ -20,7 +22,7 @@ export function VerifyForm({ returnTo }: { returnTo: string }) {
         event.preventDefault();
         startTransition(async () => {
           setError(null);
-          const result = await verifyAdminMfa({ code });
+          const result = await verifyAdminMfa({ code, trust });
           if (result.ok === false) {
             setError(result.message);
             return;
@@ -46,6 +48,7 @@ export function VerifyForm({ returnTo }: { returnTo: string }) {
           className={INPUT}
         />
       </label>
+      <TrustCheckbox checked={trust} onChange={setTrust} />
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

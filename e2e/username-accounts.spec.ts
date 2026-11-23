@@ -185,7 +185,7 @@ test.describe('the admin', () => {
   test('finds testers by username and sees their role, plan, status, creation date and last login', async ({ page }) => {
     await page.goto('/admin?q=qa_');
     const table = page.getByRole('table');
-    for (const heading of ['User', 'Signs in with', 'Registered', 'Last login', 'Role', 'Plan']) {
+    for (const heading of ['User', 'Signs in with', 'Registered', 'Last active', 'Role', 'Access', 'Billing']) {
       await expect(table.getByRole('columnheader', { name: heading, exact: true })).toBeVisible();
     }
     await expect(table).toContainText('Username: QA_Free');
@@ -211,17 +211,18 @@ test.describe('the admin', () => {
     expect((await me(tester.page)).user.plan.effective).toBe('free');
 
     await openAccount(page, username);
-    const plan = page.getByRole('region', { name: 'Plan and access', exact: true });
-    await plan.getByRole('button', { name: 'Pro' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Change plan' }).click();
-    await expect(plan.getByRole('status')).toHaveText('Plan changed to Pro.');
+    const manual = page.getByRole('region', { name: 'Manage access', exact: true });
+    await manual.getByLabel('Change to').selectOption('none');
+    await manual.getByRole('button', { name: 'Give Pro with no end date' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Give Pro' }).click();
+    await expect(manual.getByRole('status')).toHaveText('Pro given with no end date.');
     const pro = (await me(tester.page)).user;
     expect(pro).toMatchObject({ role: 'user', plan: { effective: 'pro' } });
     expect(pro.features).toContain('export.gif_large');
 
-    await plan.getByRole('button', { name: 'Free' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Change plan' }).click();
-    await expect(plan.getByRole('status')).toHaveText('Plan changed to Free.');
+    await manual.getByRole('button', { name: 'End…', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'End', exact: true }).click();
+    await expect(manual.getByRole('status')).toContainText('Pro with no end date ended.');
     const free = (await me(tester.page)).user;
     expect(free.plan.effective).toBe('free');
     expect(free.features).not.toContain('export.gif_large');

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useTranslations } from 'use-intl';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AccountSummary, ToolId } from '@/lib/account';
+import { forgetThisDeviceTrust } from '@/app/app/profile/actions';
 import { clearDeviceWork } from '@/lib/device-data';
 import { TOOL_FEATURES, type FeatureId } from '@/lib/plans';
 import { signInPath } from '@/lib/redirects';
@@ -217,6 +218,8 @@ export function useSignOut() {
   const [signingOut, setSigningOut] = useState(false);
   const signOut = useCallback(async (options?: { clearDevice?: boolean }) => {
     setSigningOut(true);
+    // A shared device also gives up the admin trust it holds, while still signed in.
+    if (options?.clearDevice) await forgetThisDeviceTrust().catch(() => undefined);
     // Loaded on demand: the auth client is only needed for this one click.
     const { authClient } = await import('@/lib/auth-client');
     const { error } = await authClient.signOut();

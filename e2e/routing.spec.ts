@@ -6,7 +6,8 @@ import { test, expect } from '@playwright/test';
 test('the public landing page opens the studio', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Your All-in-One/ })).toBeVisible();
-  await page.getByRole('link', { name: 'Open the studio' }).click();
+  // Signed in, the header offers the studio too (instead of "Sign in").
+  await page.getByRole('navigation', { name: 'Site' }).getByRole('link', { name: 'Open the studio' }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole('link', { name: /^Compare & Correct/ })).toBeVisible();
 });

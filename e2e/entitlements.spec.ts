@@ -127,20 +127,28 @@ async function expectLocked(page: Page, tool: Tool, reason: RegExp = /It is part
 
 const toolsNav = (page: Page) => page.getByRole('navigation', { name: 'Tools' });
 
-/** Change an account's plan in the admin dashboard. */
+/** Change an account's plan in the admin dashboard: Pro with no end date (its assigned plan), or Free by ending it. */
 async function setPlan(page: Page, username: string, plan: 'Free' | 'Pro') {
   await page.goto(`/admin?q=${encodeURIComponent(username)}`);
   await page.getByRole('table').getByRole('link', { name: new RegExp(`Username: ${username}$`) }).click();
-  const card = page.getByRole('region', { name: 'Plan and access', exact: true });
-  const button = card.getByRole('button', { name: plan, exact: true });
-  await expect(button).toBeVisible();
-  if ((await button.getAttribute('aria-pressed')) === 'true') return;
-  await button.click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Change plan' }).click();
-  await expect(card.getByRole('status')).toHaveText(`Plan changed to ${plan}.`);
+  const manual = page.getByRole('region', { name: 'Manage access', exact: true });
+  await expect(manual).toBeVisible();
+  const hasPro = (await manual.getByRole('list', { name: 'Manual Pro in force' }).filter({ hasText: 'Pro, no end date' }).count()) > 0;
+  if (hasPro === (plan === 'Pro')) return;
+  if (plan === 'Pro') {
+    await manual.getByLabel('Change to').selectOption('none');
+    await manual.getByRole('button', { name: 'Give Pro with no end date' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Give Pro' }).click();
+    await expect(manual.getByRole('status')).toHaveText('Pro given with no end date.');
+  } else {
+    await manual.getByRole('button', { name: 'End…', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'End', exact: true }).click();
+    await expect(manual.getByRole('status')).toContainText('Pro with no end date ended.');
+  }
   // The admin page says what the account can use now (under staging's catalog, Measure & Plan is Pro only).
-  if (plan === 'Pro') await expect(card).toContainText('Measure & Plan');
-  else await expect(card).not.toContainText('Measure & Plan');
+  const access = page.getByRole('region', { name: 'Access', exact: true });
+  if (plan === 'Pro') await expect(access).toContainText('Measure & Plan');
+  else await expect(access).not.toContainText('Measure & Plan');
 }
 
 /**

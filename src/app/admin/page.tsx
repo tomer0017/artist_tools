@@ -9,10 +9,12 @@ import { getDb } from '@/server/db/client';
 import { requireAdmin } from '@/server/session';
 import { AdminShell } from './AdminShell';
 import { EventList } from './EventList';
-import { dateOnly, dateTime } from './format';
+import { SUBSCRIPTION_STATUS_LABELS, dateOnly, dateTime, sourceShort } from './format';
 
-// Application administration: who uses Studio Companion, on which plan, and
-// what happened to their accounts. Server rendered for admins only (everyone
+// Application administration: who uses Studio Companion, what access each
+// account has and where it comes from (paid, given for a time, given with no
+// end date, admin), billing as the payment provider reported it (kept
+// separate), and what happened to their accounts. Server rendered for admins only (everyone
 // else gets a 404); there is no API that exposes these lists.
 
 export const metadata: Metadata = { title: 'Users · Studio Companion admin', robots: { index: false, follow: false } };
@@ -29,7 +31,7 @@ const day = (value: string, offsetDays = 0) => {
   return Number.isNaN(date.getTime()) ? undefined : new Date(date.getTime() + offsetDays * 86_400_000);
 };
 
-const FILTERS = ['role', 'plan', 'status', 'verified', 'method', 'test', 'from', 'to'] as const;
+const FILTERS = ['role', 'plan', 'given', 'status', 'verified', 'method', 'test', 'from', 'to'] as const;
 
 /** The list query from the URL; anything unexpected is ignored. */
 function queryFrom(params: Record<string, string | string[] | undefined>): { query: UserListQuery; active: Record<string, string> } {
@@ -42,6 +44,7 @@ function queryFrom(params: Record<string, string | string[] | undefined>): { que
   if (v('verified') === 'yes' || v('verified') === 'no') query.verified = v('verified') === 'yes';
   if (v('method') === 'google' || v('method') === 'password') query.method = v('method') as 'google' | 'password';
   if (v('test') === 'yes' || v('test') === 'no') query.test = v('test') === 'yes';
+  if (v('given') === 'yes' || v('given') === 'no') query.given = v('given') === 'yes';
   query.createdFrom = day(v('from'));
   query.createdBefore = day(v('to'), 1);
   for (const name of FILTERS) if (v(name)) active[name] = v(name);
@@ -66,7 +69,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Users</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Registration is {invite ? 'invite-only' : 'open'}. Plans and promotional access can be changed here; billing is not live.
+            Registration is {invite ? 'invite-only' : 'open'}. Give Pro without payment on an account&rsquo;s page; billing is shown read-only, and no payment provider is connected yet.
             {usernames && ' Testers can also sign in with a username and password you give them.'}
           </p>
           {usernames && (
@@ -81,8 +84,8 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
         <dl className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
           <Stat label="Accounts" value={stats.total} />
           <Stat label="Admins" value={stats.admins} />
-          <Stat label="Pro" value={stats.pro} />
-          <Stat label="Pro given" value={stats.granted} />
+          <Stat label="Pro, no end date" value={stats.pro} />
+          <Stat label="Pro for a time" value={stats.granted} />
           <Stat label="Suspended" value={stats.suspended} />
           <Stat label="Test" value={stats.test} />
         </dl>
@@ -115,7 +118,8 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
         <form method="get" action="/admin" aria-label="Filter accounts" className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {search && <input type="hidden" name="q" value={search} />}
           <Choice name="role" label="Role" value={active.role} options={[['admin', 'Admins'], ['user', 'Members']]} />
-          <Choice name="plan" label="Assigned plan" value={active.plan} options={[['free', 'Free'], ['pro', 'Pro']]} />
+          <Choice name="plan" label="Pro, no end date" value={active.plan} options={[['pro', 'Yes'], ['free', 'No']]} />
+          <Choice name="given" label="Pro for a time" value={active.given} options={[['yes', 'Yes'], ['no', 'No']]} />
           <Choice name="status" label="Status" value={active.status} options={[['active', 'Active'], ['suspended', 'Suspended']]} />
           <Choice name="verified" label="Email" value={active.verified} options={[['yes', 'Verified'], ['no', 'Not verified']]} />
           <Choice name="method" label="Signs in with" value={active.method} options={[['google', 'Google'], ['password', 'Password']]} />
@@ -165,7 +169,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <Badges user={u} />
                       <span className="text-[11px] text-muted-foreground">
-                        Registered {dateOnly(u.createdAt)} · Last login {dateOnly(u.lastLoginAt)}
+                        Registered {dateOnly(u.createdAt)} · Last active {dateOnly(u.lastActiveAt)}
                       </span>
                     </div>
                   </div>
@@ -183,10 +187,10 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                   <th className="px-4 py-3 font-medium">User</th>
                   <th className="px-4 py-3 font-medium">Signs in with</th>
                   <th className="px-4 py-3 font-medium">Registered</th>
-                  <th className="px-4 py-3 font-medium">Last login</th>
+                  <th className="px-4 py-3 font-medium">Last active</th>
                   <th className="px-4 py-3 font-medium">Role</th>
-                  <th className="px-4 py-3 font-medium">Plan</th>
-                  <th className="px-4 py-3 font-medium">Subscription</th>
+                  <th className="px-4 py-3 font-medium">Access</th>
+                  <th className="px-4 py-3 font-medium">Billing</th>
                   <th className="px-4 py-3 text-right font-medium">Sign-ins</th>
                   <th className="px-4 py-3 text-right font-medium">GIFs this month</th>
                 </tr>
@@ -207,14 +211,18 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                       {[u.google.linked ? `Google · ${u.google.idHint}` : null, u.password ? (u.username ? 'Username' : 'Password') : null].filter(Boolean).join(' + ') || '—'}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{dateOnly(u.createdAt)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{dateTime(u.lastLoginAt)}</td>
-                    <td className="px-4 py-3">{u.role === 'admin' ? 'Admin' : 'User'}{u.status !== 'active' && <span className="ml-1 text-destructive">({u.status})</span>}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{dateTime(u.lastActiveAt)}</td>
+                    <td className="px-4 py-3">{u.role === 'admin' ? (u.owner ? 'Admin · owner' : 'Admin') : 'User'}{u.status !== 'active' && <span className="ml-1 text-destructive">({u.status})</span>}</td>
                     <td className="px-4 py-3">
-                      {PLAN_NAMES[u.effectivePlan]}
-                      {u.grant && <span className="ml-1 text-xs text-primary">(given)</span>}
-                      {u.testAccount && <span className="ml-1 text-xs text-muted-foreground">· test</span>}
+                      <Access user={u} />
+                      {u.testAccount && (
+                        <>
+                          {' '}
+                          <span className="text-xs text-muted-foreground">· test</span>
+                        </>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{u.subscriptionStatus ?? 'none'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{u.subscriptionStatus ? SUBSCRIPTION_STATUS_LABELS[u.subscriptionStatus] : 'None'}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{u.logins}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{u.gifsThisMonth}</td>
                   </tr>
@@ -252,14 +260,42 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
+/** Where an account's access comes from, in words: billing and manual Pro are named separately. */
+const proSources = (user: AdminUserRow) => user.sources.filter((s) => s.kind !== 'admin').map(sourceShort).join(' + ');
+
+function Access({ user }: { user: AdminUserRow }) {
+  if (user.status !== 'active') return <span className="text-muted-foreground">None (suspended)</span>;
+  if (user.role === 'admin') return <span>Every feature <span className="text-xs text-muted-foreground">· admin</span></span>;
+  const from = proSources(user);
+  return (
+    <span>
+      {PLAN_NAMES[user.effectivePlan]}
+      {from && (
+        <>
+          {' '}
+          <span className="text-xs text-primary">· {from}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
 function Badges({ user }: { user: AdminUserRow }) {
+  const from = proSources(user);
   return (
     <>
-      {user.role === 'admin' && <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Admin</span>}
-      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${user.effectivePlan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border text-foreground'}`}>
-        {PLAN_NAMES[user.effectivePlan]}
-        {user.grant ? ' (given)' : ''}
-      </span>
+      {user.role === 'admin' && (
+        <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">{user.owner ? 'Owner' : 'Admin'} · every feature</span>
+      )}
+      {user.role !== 'admin' && user.status === 'active' && (
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${user.effectivePlan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border text-foreground'}`}>
+          {PLAN_NAMES[user.effectivePlan]}
+          {from && <span className="font-normal"> · {from}</span>}
+        </span>
+      )}
+      {user.subscriptionStatus && (
+        <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">Billing: {SUBSCRIPTION_STATUS_LABELS[user.subscriptionStatus]}</span>
+      )}
       {user.status !== 'active' && <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-[11px] text-destructive">{user.status}</span>}
       {user.testAccount && <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">test</span>}
     </>

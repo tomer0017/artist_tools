@@ -1,9 +1,25 @@
 'use server';
 
+import { headers } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { encode } from 'uqr';
-import { confirmEnrollment, disableMfa, regenerateRecoveryCodes, startEnrollment, verifySession, type CodeResult } from '@/server/admin-mfa';
+import { parseUserAgent } from '@/lib/user-agent';
+import { clearDeviceToken, readDeviceToken, writeDeviceToken } from '@/server/admin-device-cookie';
+import {
+  confirmEnrollment,
+  disableMfa,
+  forgetAllTrustedDevices,
+  forgetTrustedDevice,
+  listTrustedDevices,
+  regenerateRecoveryCodes,
+  startEnrollment,
+  trustDevice,
+  verifySession,
+  type CodeResult,
+} from '@/server/admin-mfa';
 import { getDb } from '@/server/db/client';
+import { toObjectId } from '@/server/db/collections';
 import { log } from '@/server/log';
 import { adminAccessGate, currentAdmin, currentAdminRole, signedInRecently } from '@/server/session';
 
@@ -13,6 +29,8 @@ import { adminAccessGate, currentAdmin, currentAdminRole, signedInRecently } fro
 // minutes, like the other sensitive admin changes.
 
 const Code = z.object({ code: z.string().trim().min(6).max(20) }).strict();
+/** A code that may also trust this device (only after it is accepted). */
+const CodeAndTrust = z.object({ code: z.string().trim().min(6).max(20), trust: z.boolean().optional() }).strict();
 
 export type MfaResult =
   | { ok: true; recoveryCodes?: string[]; recoveryCodesLeft?: number }
@@ -49,24 +67,74 @@ export async function startAdminMfa(): Promise<StartMfaResult> {
   }
 }
 
+/** "Chrome on macOS": what the trusted-devices list calls this device (never part of any decision). */
+async function deviceLabel(): Promise<string> {
+  const { browser, system } = parseUserAgent((await headers()).get('user-agent'));
+  return browser && system ? `${browser} on ${system}` : (browser ?? system ?? 'Unknown device');
+}
+
+/** After an accepted code: trust this device (a new token in its cookie, or its own renewed). */
+async function trustThisDevice(userId: NonNullable<Awaited<ReturnType<typeof currentAdminRole>>>['id']): Promise<void> {
+  try {
+    const token = await trustDevice(getDb(), userId, { currentToken: await readDeviceToken(), label: await deviceLabel() });
+    await writeDeviceToken(token);
+  } catch (error) {
+    // The code was right and the session has passed; only the trust failed.
+    log.error('admin.mfa_trust_failed', { error });
+  }
+}
+
 /** Finish enrolment with a first code; returns the recovery codes, shown once. */
 export async function confirmAdminMfa(input: unknown): Promise<MfaResult> {
   const admin = await currentAdminRole();
   if (!admin) return DENIED;
-  const parsed = Code.safeParse(input);
+  const parsed = CodeAndTrust.safeParse(input);
   if (!parsed.success) return INVALID_INPUT;
   const result = await confirmEnrollment(getDb(), admin.id, admin.session, parsed.data.code);
-  return fromCode(result) ?? { ok: true, recoveryCodes: result.status === 'ok' ? result.recoveryCodes : [] };
+  const refused = fromCode(result);
+  if (refused) return refused;
+  if (parsed.data.trust) await trustThisDevice(admin.id);
+  return { ok: true, recoveryCodes: result.status === 'ok' ? result.recoveryCodes : [] };
 }
 
-/** Pass the second factor for this session. */
+/** Pass the second factor for this session, and trust this device if asked. */
 export async function verifyAdminMfa(input: unknown): Promise<MfaResult> {
   const admin = await currentAdminRole();
   if (!admin) return DENIED;
-  const parsed = Code.safeParse(input);
+  const parsed = CodeAndTrust.safeParse(input);
   if (!parsed.success) return INVALID_INPUT;
   const result = await verifySession(getDb(), admin.id, admin.session, parsed.data.code);
-  return fromCode(result) ?? { ok: true, recoveryCodesLeft: result.status === 'ok' ? result.recoveryCodesLeft : 0 };
+  const refused = fromCode(result);
+  if (refused) return refused;
+  if (parsed.data.trust) await trustThisDevice(admin.id);
+  return { ok: true, recoveryCodesLeft: result.status === 'ok' ? result.recoveryCodesLeft : 0 };
+}
+
+export type DeviceResult = { ok: boolean; message: string };
+
+/** Forget one trusted device: its next session asks for a code. */
+export async function forgetAdminDevice(input: unknown): Promise<DeviceResult> {
+  const admin = await currentAdmin();
+  if (!admin) return DENIED;
+  const parsed = z.object({ id: z.string().regex(/^[0-9a-f]{24}$/i) }).strict().safeParse(input);
+  if (!parsed.success) return { ok: false, message: 'That request was not valid.' };
+  const db = getDb();
+  const token = await readDeviceToken();
+  const current = (await listTrustedDevices(db, admin.id, token)).find((d) => d.id === parsed.data.id)?.current ?? false;
+  if (!(await forgetTrustedDevice(db, admin.id, toObjectId(parsed.data.id)!))) return { ok: false, message: 'That device was already forgotten.' };
+  if (current) await clearDeviceToken();
+  revalidatePath('/admin/security');
+  return { ok: true, message: current ? 'This device is forgotten: its next session asks for a code.' : 'Device forgotten: its next session asks for a code.' };
+}
+
+/** Forget every trusted device, this one included. */
+export async function forgetAllAdminDevices(): Promise<DeviceResult> {
+  const admin = await currentAdmin();
+  if (!admin) return DENIED;
+  const count = await forgetAllTrustedDevices(getDb(), admin.id);
+  await clearDeviceToken();
+  revalidatePath('/admin/security');
+  return { ok: true, message: count === 0 ? 'No device was trusted.' : `${count} ${count === 1 ? 'device' : 'devices'} forgotten: each asks for a code in its next session.` };
 }
 
 /** New recovery codes; the old ones stop working. */

@@ -17,7 +17,39 @@ be asked for. Instead, the check sits on **admin access itself**:
 - It does not matter how they signed in.
 - A verified session stays verified for 12 hours (or until it ends,
   whichever comes first).
+- After a correct code the admin may **trust the device** (on by default,
+  off on a shared computer): see "Trusted devices" below.
 - The rest of the app (the studio, the account page) is not affected.
+
+## Trusted devices (2026-11-23)
+
+So the owner is not asked for a code every 12 hours on their own Mac and
+iPhone, a device can be trusted after a correct code:
+
+- **The token:** 32 random bytes in an HttpOnly, SameSite=Lax cookie that
+  page scripts cannot read; over HTTPS it is `__Host-sc.admin_device`
+  (Secure, path `/`, no domain: this exact host only). Only its SHA-256 is
+  stored, in `admin_trusted_devices`, with the account, dates and a label
+  ("Chrome on macOS", from the user agent, for the list only).
+- **What it does:** an enrolled admin's session that has not passed yet
+  passes without a code when the request carries a live token **for the
+  same account**. It never replaces the session: a Google sign-in is still
+  needed, and a stolen, expired or revoked session gets nothing. IP address
+  and browser details never decide anything.
+- **How long:** 30 days after the device was last used, and at most 90 days
+  after the last code entered on it (a code on it again starts a new 90
+  days, with the same token). The cookie lives 90 days; the server's record
+  decides.
+- **Ending it:** Admin → Security lists the trusted devices ("This device"
+  marked), each with Forget, and Forget all. Turning 2FA off, the server
+  reset (`reset-admin-mfa`) and losing the admin role forget every device.
+  "Shared device? Sign out…" on the account page gives up this device's
+  trust; a plain sign-out keeps it (the next sign-in there needs Google, not
+  a code).
+- **Audit log:** device trusted (or renewed with a code), passed on a trusted
+  device (once per verified session), devices forgotten.
+- `ADMIN_MFA_REQUIRED` is unchanged: it still only makes unenrolled admins
+  enrol, and it is still off.
 
 ## How it works
 
@@ -28,7 +60,7 @@ be asked for. Instead, the check sits on **admin access itself**:
 | Enrolment, verification, recovery codes, lockout, turning off, reset | `src/server/admin-mfa.ts` |
 | Where it is enforced: `requireAdmin()` for pages, which sends the admin to `/admin/verify`; `currentAdmin()` for server actions and admin routes, which refuse | `src/server/session.ts` |
 | Pages | `/admin/security` (set up, manage) and `/admin/verify` (enter a code) |
-| Data | `admin_mfa` (one per admin), `admin_mfa_sessions` (verified sessions; expire on their own) |
+| Data | `admin_mfa` (one per admin), `admin_mfa_sessions` (verified sessions; expire on their own), `admin_trusted_devices` (token hashes; expire on their own) |
 
 - **Recovery codes:**
   - ten random codes (50 bits each), stored as SHA-256 hashes and shown once;
@@ -87,11 +119,17 @@ Every enrolled admin then needs this reset.
   - the lockout and its expiry;
   - replacing codes and turning off;
   - the operator's reset.
-- **`e2e/admin-mfa.spec.ts`, with four sessions of one admin:**
+- **`src/server/admin-mfa.test.ts`, trusted devices:** the token for its own
+  account only, never stored; 30 days unused and the 90-day cap; renewal
+  with a code; a session's own end; forgetting one, all, by token, with 2FA
+  off and with the admin role gone.
+- **`e2e/admin-mfa.spec.ts`, with seven sessions of one admin:**
   - set up with a wrong code first, then a right one; ten codes;
   - another session sent to verify before analytics;
   - the export route refused (404) until it verifies;
   - a recovery code works once;
+  - a trusted device: a new session there needs no code, one elsewhere does,
+    and a forgotten device's old cookie no longer counts;
   - turning it off.
   - Repeated five times in a row: 20/20.
 

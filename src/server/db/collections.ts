@@ -25,6 +25,12 @@ export interface UserDoc {
   updatedAt: Date;
   /** What the account may administer. Independent of the plan: Pro never makes anyone an admin. */
   role: UserRole;
+  /**
+   * The owner: one administrator, set and moved only from the server command
+   * line (`set-owner`), never through any web request. Only the owner changes
+   * admin roles, and no other administrator can change the owner's account.
+   */
+  owner?: boolean;
   status: AccountStatus;
   /**
    * The plan an administrator assigned ('free' for every new account). Written
@@ -82,6 +88,9 @@ export interface AccessGrantDoc {
   createdAt: Date;
   revokedAt: Date | null;
   revokedBy: string | null;
+  /** The last time an administrator moved `endsAt` later ('admin:<id>'); the audit log keeps every extension. */
+  extendedAt?: Date | null;
+  extendedBy?: string | null;
 }
 
 /**
@@ -332,8 +341,29 @@ export interface AdminMfaSessionDoc {
   /** The Better Auth session id. */
   _id: string;
   userId: ObjectId;
-  method: 'totp' | 'recovery';
+  /** 'device': passed on a trusted device (AdminTrustedDeviceDoc) without a code. */
+  method: 'totp' | 'recovery' | 'device';
   verifiedAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * A device an administrator trusted after entering a correct code
+ * (src/server/admin-mfa.ts): its sessions pass the second factor without a
+ * code until the trust ends, 30 days after it was last used and at most 90
+ * days after the last code entered on it. Removed then (TTL).
+ */
+export interface AdminTrustedDeviceDoc {
+  _id: ObjectId;
+  userId: ObjectId;
+  /** SHA-256 (hex) of the random token kept in the device's cookie; the token itself is never stored. */
+  tokenHash: string;
+  /** Browser and system from the user agent when it was trusted: shown in the list, never part of the decision. */
+  label: string;
+  createdAt: Date;
+  /** The last time a code was entered on this device. */
+  verifiedAt: Date;
+  lastUsedAt: Date;
   expiresAt: Date;
 }
 
@@ -421,6 +451,7 @@ export type AuditEventType =
   | 'admin.sessions_revoked'
   | 'admin.initial_password_revealed'
   | 'admin.grant_created'
+  | 'admin.grant_extended'
   | 'admin.grant_revoked'
   | 'admin.audit_exported'
   | 'admin.mfa_enrolled'
@@ -429,6 +460,10 @@ export type AuditEventType =
   | 'admin.mfa_codes_regenerated'
   | 'admin.mfa_disabled'
   | 'admin.mfa_reset'
+  | 'admin.mfa_device_trusted'
+  | 'admin.mfa_device_used'
+  | 'admin.mfa_device_revoked'
+  | 'admin.owner_set'
   | 'admin.config_saved'
   | 'admin.config_discarded'
   | 'admin.config_published'
@@ -573,6 +608,7 @@ export function collections(db: Db) {
     reconciliationRuns: db.collection<ReconciliationRunDoc>('reconciliation_runs'),
     adminMfa: db.collection<AdminMfaDoc>('admin_mfa'),
     adminMfaSessions: db.collection<AdminMfaSessionDoc>('admin_mfa_sessions'),
+    adminTrustedDevices: db.collection<AdminTrustedDeviceDoc>('admin_trusted_devices'),
     errorReports: db.collection<ErrorReportDoc>('error_reports'),
     couponRedemptions: db.collection<CouponRedemptionDoc>('coupon_redemptions'),
     passwordHandoffs: db.collection<PasswordHandoffDoc>('password_handoffs'),

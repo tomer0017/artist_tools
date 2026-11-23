@@ -29,7 +29,8 @@ advice.
 | Which tool introductions and tours were seen | `localStorage` | So they are not shown again | As above |
 | A colour handed from one tool to another | `sessionStorage` | Moving between tools | The browser tab |
 | Language choice | Cookie `sc_locale` | Show pages in the chosen language | 1 year |
-| Sign-in | Cookies `sc.session_token`, `sc.session_data` (a 5-minute cache), plus short-lived cookies during Google sign-in | Keep the person signed in | Session: 30 days, renewed at most daily while in use; ends on sign-out |
+| Sign-in | Cookies `sc.session_token`, `sc.session_data` (a 5-minute cache), plus short-lived cookies during Google sign-in | Keep the person signed in | Session: 30 days, renewed at most daily while in use (by the studio and admin pages calling `/api/auth/get-session`); ends on sign-out |
+| Trusted admin device (administrators only, when they choose it after a 2FA code) | Cookie `__Host-sc.admin_device` (`sc.admin_device` on local http): a random token, HttpOnly | Skip the 2FA code on this device | 90 days at most; the server ends the trust after 30 days unused, at 90 days, or when the admin forgets the device |
 
 There are no advertising, analytics or third-party cookies.
 
@@ -37,9 +38,10 @@ There are no advertising, analytics or third-party cookies.
 
 | Collection | Personal data | Purpose | Retention (mechanism) | Proposed lawful basis |
 |---|---|---|---|---|
-| `users` | Name, email, email verified, profile picture URL (from Google), language, currency, plan, role, status, suspension reason, marketing consent (with time and source), introductions seen, created and last-login times, test flag. Accounts an admin creates for testers (ADR-0012): a username, and a placeholder address under `.invalid` instead of an email (no email is collected) | The account | Until the account is deleted. Unconfirmed password sign-ups are removed after 24 hours (nightly job); username accounts never are. | Contract |
+| `users` | Name, email, email verified, profile picture URL (from Google), language, currency, plan, role, status, suspension reason, marketing consent (with time and source), introductions seen, created and last-login times, test flag, and (one administrator) the owner flag, set from the server command line. Accounts an admin creates for testers (ADR-0012): a username, and a placeholder address under `.invalid` instead of an email (no email is collected) | The account | Until the account is deleted. Unconfirmed password sign-ups are removed after 24 hours (nightly job); username accounts never are. | Contract |
 | `accounts` | Sign-in methods: Google account id, or a password hash (scrypt) | Signing in | With the account | Contract |
 | `password_handoffs` | An initial password made on the server command line for a username account, sealed (AES-256-GCM) until an admin reveals it once | Handing the password to the owner or tester without printing it | Removed when revealed, when the password is reset or changed, or after 72 hours (TTL index) | Contract; security |
+| `admin_mfa`, `admin_mfa_sessions`, `admin_trusted_devices` | Administrators only: the encrypted authenticator secret and hashed recovery codes; which sessions passed the second factor; SHA-256 hashes of trusted-device tokens with a browser-and-system label and dates | Two-factor verification for admin access (docs/security/admin-2fa.md) | Verified sessions expire after 12 hours at most and trusted devices after 30 days unused or 90 days (TTL indexes); all of it is removed when 2FA is turned off, reset, or the admin role ends | Legitimate interest (security) |
 | `sessions` | Session token, IP address, browser user agent, times | Signing in, and the "Signed-in devices" list (shown with the IP partly hidden) | Removed when expired (TTL index; 30 days), on sign-out, and with the account | Contract; security |
 | `verifications` | Hashed tokens for email confirmation (24 h) and password reset (30 min, single use) | Confirming addresses, resetting passwords | Removed when expired (TTL index) | Contract; security |
 | `rateLimits` | IP address with request counts (Better Auth) | Stopping abuse of sign-in | Removed after 1 day idle (nightly job) | Legitimate interest (security) |
@@ -48,7 +50,7 @@ There are no advertising, analytics or third-party cookies.
 | `usage` | Counts of feature use per day or month (each saved image and GIF, since ADR-0013) | Plan limits; the admin's usage figures | With the account | Contract |
 | `analytics_events` | Account id with allow-listed event names (`active_day`, `tool_open`, registration, sign-in…) and small fixed properties. No IP, user agent, free text or image data. | Product analytics (ADR-0011) | **13 months** (*proposed*; nightly job, from 2026-11-11), and with the account | Legitimate interest (*to confirm*) |
 | `audit_events` | Account id, actor, event type and small fixed metadata (e.g. what changed). No passwords or tokens. | Security and admin accountability | **24 months** (*proposed*; nightly job, from 2026-11-11). They outlive account deletion as a bare id that no longer resolves to anyone (ADR-0010). | Legitimate interest (security) |
-| `access_grants` | Promotional plan given to an account, with dates and reason | Promotions | With the account | Contract |
+| `access_grants` | Promotional plan given to an account, with dates and reason, and which admin gave, extended or ended it | Promotions | With the account | Contract |
 | `mail_outbox` | Emails the app would have sent (address, text, links) | **Staging only**: testing without a mail provider. Refused in production. | 24 hours (TTL index) | — |
 | `subscriptions`, `payments`, `billing_customers`, `checkout_sessions`, `payment_events` | *Empty: billing is not live.* Later: the provider's ids, plan, status, amounts, receipt links. Never card data. | Billing | Proposed: as long as tax law requires invoices and payment records (*counsel/accountant to set*). Checkout sessions: 7 days after expiry (TTL index). | Contract; legal obligation |
 | `coupon_redemptions` | Account id and coupon used | Coupon limits | With the account (*to confirm*) | Contract |

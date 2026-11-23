@@ -26,6 +26,12 @@ Legend: **E** exists today · **P1…P6** phase that adds it.
 | `suspendedAt`, `suspendedBy`, `suspendReason` | P2 | reason is an enum, never free text from users |
 | `testAccount` | P2 boolean | excluded from analytics and revenue |
 
+- `owner` (optional, 2026-11-23): `true` on one administrator at most (unique
+  partial index `users_one_owner`), set and moved only from the server command
+  line (`npm run db -- set-owner <userId>`). From the dashboard only the owner
+  changes admin roles, and no other admin can change the owner's account;
+  losing the admin role (command line) clears it.
+
 ### `accounts` (Better Auth) — sign-in methods
 | `providerId` | `accountId` | Secret material |
 |---|---|---|
@@ -39,6 +45,15 @@ Unique `(providerId, accountId)` (E). Linking only from a signed-in session
 Token, `expiresAt` (TTL index), `ipAddress`, `userAgent`. The browser never
 receives another session's token: device lists and revocation go through
 server code by session id (P1).
+
+### `admin_trusted_devices` (2026-11-23) — administrators' trusted devices
+
+- `userId`, `tokenHash` (SHA-256 of the random token in the device's
+  HttpOnly cookie, unique; the token itself is never stored), `label` (browser
+  and system, display only), `createdAt`, `verifiedAt` (last code entered on
+  the device), `lastUsedAt`, `expiresAt` = min(`lastUsedAt` + 30 days,
+  `verifiedAt` + 90 days), removed then by a TTL index. See
+  docs/security/admin-2fa.md.
 
 ### `verifications` (Better Auth) — E, hashed from P1
 Reset/deletion tokens and OAuth state. P1 stores identifiers as SHA-256
@@ -104,11 +119,16 @@ prices: { id: string; planId: 'pro'; interval: 'month' | 'year';
 ```
 At most one active price per plan, interval and currency.
 
-### `access_grants` (P2) — promotional and trial access
-`userId`, `planId`, `startsAt`, `endsAt`, `reason` (`promotion`, `trial`,
-`support`, `test`), `grantedBy`, `revokedAt`, `revokedBy`. Entitlements take the
-best of: assigned plan, active subscription, active grant. Expiry needs no job
-(checked at read time).
+### `access_grants` (P2) — promotional and trial access ("manual Pro for a time")
+`userId`, `planId` (only `pro` is given), `startsAt`, `endsAt`, `reason`
+(`promotion`, `trial`, `support`, `test`), `grantedBy`, `revokedAt`,
+`revokedBy`, and since 2026-11-22 `extendedAt`, `extendedBy` (the last
+extension; the audit log keeps each one with its old and new end).
+Entitlements take the best of: assigned plan, active subscription, active
+grant. Expiry needs no job (checked at read time). The dashboard offers 7, 30
+or 90 days; an extension moves `endsAt` from its current value, never past 366
+days from today. Pro with no end date is the assigned plan, not a grant.
+Neither ever writes to `subscriptions` or `payments`.
 
 ### `coupons` / `coupon_redemptions` (P2 definitions, P4 redemption at checkout)
 Coupon: `code` (unique, uppercase), `kind` (`percent` | `fixed`),
@@ -150,7 +170,7 @@ counts only). New types: `user.email_verified`,
 `account.linked` (Google connected or a password added, by `provider`),
 `account.unlinked`, `account.data_exported`,
 `account.deleted`, `auth.login_failed`, `auth.throttled`, and in P2
-`admin.account_suspended`, `admin.account_reactivated`, `admin.grant_*`,
+`admin.account_suspended`, `admin.account_reactivated`, `admin.grant_*` (created, extended, revoked),
 `admin.config_*`, `admin.coupon_*`.
 
 Retention (P5 policy): audit events kept 24 months; after an account is

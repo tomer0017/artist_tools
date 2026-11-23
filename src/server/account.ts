@@ -2,6 +2,7 @@ import 'server-only';
 import type { Db, ObjectId } from 'mongodb';
 import { TOOL_IDS, type AccountSummary, type ToolId } from '@/lib/account';
 import { DEFAULT_CURRENCY, DEFAULT_LOCALE, isCurrency, isLocale } from '@/lib/locale';
+import { mfaStatus } from '@/server/admin-mfa';
 import { collections } from '@/server/db/collections';
 import { getEntitlements, type Entitlements } from '@/server/entitlements';
 import { learnSummaryOf } from '@/server/learn/live';
@@ -21,12 +22,21 @@ export async function getAccountSummary(
   const [user, entitlements, accounts] = await Promise.all([
     collections(db).users.findOne(
       { _id: userId },
-      { projection: { name: 1, email: 1, username: 1, displayUsername: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, introsSeen: 1, locale: 1, currency: 1, marketingConsent: 1 } },
+      { projection: { name: 1, email: 1, username: 1, displayUsername: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, introsSeen: 1, locale: 1, currency: 1, marketingConsent: 1, owner: 1 } },
     ),
     getEntitlements(db, userId, now),
     collections(db).accounts.find({ userId }, { projection: { providerId: 1 } }).toArray(),
   ]);
   if (!user) return null;
+  // Administrators see their own standing on the account page: owner or not, second factor on or not, devices trusted.
+  const admin =
+    entitlements.role === 'admin'
+      ? {
+          owner: user.owner === true,
+          mfaEnrolled: (await mfaStatus(db, userId)).enrolled,
+          trustedDevices: await collections(db).adminTrustedDevices.countDocuments({ userId, expiresAt: { $gt: now } }),
+        }
+      : undefined;
   return {
     entitlements,
     account: {
@@ -55,6 +65,7 @@ export async function getAccountSummary(
       methods: { google: accounts.some((a) => a.providerId === 'google'), password: accounts.some((a) => a.providerId === 'credential') },
       emailPasswordEnabled: options.emailPasswordEnabled === true,
       usernamePasswordEnabled: options.usernamePasswordEnabled === true,
+      ...(admin ? { admin } : {}),
     },
   };
 }

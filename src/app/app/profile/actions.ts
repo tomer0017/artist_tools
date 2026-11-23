@@ -14,6 +14,8 @@ import {
   updateProfile,
   type DeviceSession,
 } from '@/server/account-management';
+import { clearDeviceToken, readDeviceToken } from '@/server/admin-device-cookie';
+import { forgetDeviceToken } from '@/server/admin-mfa';
 import { COOKIE_PREFIX, FRESH_SESSION_SECONDS, emailPasswordAvailable, getAuth } from '@/server/auth';
 import { runInBackground } from '@/server/background';
 import { getDb } from '@/server/db/client';
@@ -221,4 +223,20 @@ export async function deleteMyAccount(input: unknown): Promise<ActionResult> {
     log.error('account.delete_failed', { error });
     return m.failed;
   }
+}
+
+/**
+ * "Shared device? Sign out…": before signing out, give up the admin trust
+ * this device holds (src/server/admin-mfa.ts), so the next administrator to
+ * sign in here is asked for a code. Holding the token is what proves the right
+ * to give it up; a device without one has nothing to forget. A plain sign-out
+ * keeps the trust (only the session ends).
+ */
+export async function forgetThisDeviceTrust(): Promise<{ ok: true }> {
+  const token = await readDeviceToken();
+  if (token) {
+    await forgetDeviceToken(getDb(), token).catch((error) => log.error('admin.mfa_forget_failed', { error }));
+    await clearDeviceToken();
+  }
+  return { ok: true };
 }

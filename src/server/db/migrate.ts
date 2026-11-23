@@ -99,6 +99,12 @@ export const INDEXES: IndexPlan[] = [
   // Learn completions (ADR-0018): a person's history, newest first, and per item (ticks and counts).
   { collection: 'learn_completions', key: { userId: 1, completedAt: -1 }, options: { name: 'learn_completions_by_user' } },
   { collection: 'learn_completions', key: { userId: 1, itemId: 1, completedAt: -1 }, options: { name: 'learn_completions_by_item' } },
+  // The owner (set only from the server command line): at most one account, whatever races.
+  { collection: 'users', key: { owner: 1 }, options: { name: 'users_one_owner', unique: true, partialFilterExpression: { owner: true } } },
+  // Trusted admin devices: found by their token's hash, listed per admin, removed when the trust ends.
+  { collection: 'admin_trusted_devices', key: { tokenHash: 1 }, options: { name: 'admin_trusted_device_token_unique', unique: true } },
+  { collection: 'admin_trusted_devices', key: { userId: 1 }, options: { name: 'admin_trusted_devices_by_user' } },
+  { collection: 'admin_trusted_devices', key: { expiresAt: 1 }, options: { name: 'admin_trusted_device_ttl', expireAfterSeconds: 0 } },
 ];
 
 export interface MigrationReport {

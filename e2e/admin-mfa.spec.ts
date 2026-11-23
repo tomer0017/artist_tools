@@ -1,11 +1,13 @@
 import { createHmac } from 'node:crypto';
 import { test, expect, type Browser } from '@playwright/test';
 
-// Two-factor verification for administrators, end to end, with four
+// Two-factor verification for administrators, end to end, with seven
 // sessions of one admin account (scripts/e2e-server.ts): set it up with an
 // authenticator code, see another session sent to verify first, get in with
 // an authenticator code and with a one-time recovery code, admin API routes
-// refused until verified, then turn it off. Desktop Chrome only.
+// refused until verified, trust a device (a new session on it needs no code;
+// one elsewhere does; a forgotten device needs one again), then turn it off.
+// Desktop Chrome only.
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
@@ -107,10 +109,62 @@ test.describe.serial('admin two-factor verification', () => {
     await other.context.close();
   });
 
+  test('a trusted device opens admin pages in a new session without a code, until it is forgotten', async ({ browser }) => {
+    // Verify with a recovery code (this step's codes are used), trusting the device (on by default).
+    const device = await session(browser, 'admin-mfa-5');
+    await device.page.goto('/admin');
+    await expect(device.page).toHaveURL(/\/admin\/verify/);
+    await expect(device.page.getByRole('checkbox', { name: /Trust this device for 30 days/ })).toBeChecked();
+    await device.page.getByRole('button', { name: 'Lost your phone? Use a recovery code' }).click();
+    await device.page.getByLabel('Recovery code').fill(recoveryCodes[2]);
+    await device.page.getByRole('button', { name: 'Continue' }).click();
+    await expect(device.page.getByRole('heading', { name: 'Users' })).toBeVisible();
+    const trust = (await device.context.cookies()).find((c) => c.name === 'sc.admin_device');
+    expect(trust).toMatchObject({ httpOnly: true, sameSite: 'Lax', path: '/' });
+    expect(trust!.expires).toBeGreaterThan(Date.now() / 1000 + 89 * 86_400);
+
+    // A new session in that browser (signed in again): no code.
+    const sameDevice = await session(browser, 'admin-mfa-6');
+    await sameDevice.context.addCookies([trust!]);
+    await sameDevice.page.goto('/admin/analytics');
+    await expect(sameDevice.page.getByRole('heading', { name: 'Analytics', level: 1 })).toBeVisible();
+    // The same account in a browser without the trust: a code, as before.
+    const elsewhere = await session(browser, 'admin-mfa-7');
+    await elsewhere.page.goto('/admin');
+    await expect(elsewhere.page).toHaveURL(/\/admin\/verify/);
+    await elsewhere.context.close();
+
+    // The Security page lists the devices (the earlier sessions trusted theirs too, by default);
+    // forgetting this one ends its trust, and "Forget all" ends every one.
+    await device.page.goto('/admin/security');
+    const list = device.page.getByRole('list', { name: 'Trusted devices' });
+    const mine = list.getByRole('listitem').filter({ hasText: 'This device' });
+    await expect(mine).toHaveCount(1);
+    await mine.getByRole('button', { name: /^Forget / }).click();
+    await expect(device.page.getByRole('status')).toContainText('This device is forgotten');
+    await expect(list.getByRole('listitem').filter({ hasText: 'This device' })).toHaveCount(0);
+    if ((await list.getByRole('listitem').count()) > 1) {
+      await device.page.getByRole('button', { name: 'Forget all devices' }).click();
+      await expect(device.page.getByRole('status')).toContainText('forgotten: each asks for a code in its next session');
+    } else if ((await list.getByRole('listitem').count()) === 1) {
+      await list.getByRole('button', { name: /^Forget / }).click();
+    }
+    await expect(device.page.getByText('No trusted devices: every new session asks for a code.')).toBeVisible();
+    await device.context.close();
+    await sameDevice.context.close();
+
+    // The old cookie, kept by someone, no longer counts.
+    const stale = await session(browser, 'admin-mfa-7');
+    await stale.context.addCookies([trust!]);
+    await stale.page.goto('/admin');
+    await expect(stale.page).toHaveURL(/\/admin\/verify/);
+    await stale.context.close();
+  });
+
   test('is turned off with a code, after which admin pages open without one', async ({ browser }) => {
     const { context, page } = await session(browser, 'admin-mfa');
     await page.goto('/admin/security');
-    await expect(page.getByText('9 of 10 recovery codes left.')).toBeVisible();
+    await expect(page.getByText('8 of 10 recovery codes left.')).toBeVisible();
     await page.getByRole('button', { name: 'Turn off…' }).click();
     await page.getByLabel(/to turn two-factor verification off/).fill(recoveryCodes[1]);
     await page.getByRole('button', { name: 'Turn off', exact: true }).click();

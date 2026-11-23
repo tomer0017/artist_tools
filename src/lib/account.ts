@@ -69,4 +69,6 @@ export interface AccountSummary {
   emailPasswordEnabled: boolean;
   /** Whether this server offers username sign-in (a username account can then change its password). */
   usernamePasswordEnabled: boolean;
+  /** Administrators only: the owner flag (set from the server command line) and their second factor, for the account page. */
+  admin?: { owner: boolean; mfaEnrolled: boolean; trustedDevices: number };
 }

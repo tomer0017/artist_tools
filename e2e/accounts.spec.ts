@@ -150,17 +150,61 @@ test.describe('Pro account', () => {
   });
 });
 
+// Only the account the server marks as the owner (set from the server command
+// line) is ever called the owner: a regular admin is an administrator, on
+// their own account page, in the users list and on their account in Admin.
+test.describe('an admin who is not the owner', () => {
+  test.use(as('deputy'));
+
+  test('is shown as an administrator, never as the owner', async ({ page }) => {
+    await page.goto('/app/profile');
+    const profile = page.getByRole('region', { name: 'Profile', exact: true });
+    await expect(profile).toContainText('Administrator');
+    await expect(profile).not.toContainText('Owner');
+    await expect(page.getByRole('region', { name: 'Your access', exact: true })).toContainText('Full access');
+
+    await page.goto('/admin?q=deputy%40e2e.test');
+    const row = page.getByRole('table').getByRole('row').filter({ hasText: 'deputy@e2e.test' });
+    await expect(row).toContainText('Admin');
+    await expect(row).not.toContainText('owner');
+    await row.getByRole('link').first().click();
+    await page.waitForURL(/\/admin\/users\/[0-9a-f]{24}$/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByText('Owner', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Role', exact: true })).toContainText('Administrator: opens this dashboard and manages accounts.');
+
+    // The one account the server marks as the owner is.
+    await page.goto('/admin?q=admin%40e2e.test');
+    await expect(page.getByRole('table').getByRole('row').filter({ hasText: 'Admin · owner' })).toHaveCount(1);
+  });
+});
+
 test.describe('admin', () => {
   test.use(as('admin'));
 
-  test('the account page shows the admin role and leads to the dashboard', async ({ page }) => {
+  test('the account page shows the owner and admin role with full access, no plan lists, and leads to the dashboard', async ({ page }) => {
     await page.goto('/app/profile');
-    await expect(page.getByRole('region', { name: 'Profile', exact: true })).toContainText('Administrator');
-    await expect(page.getByRole('region', { name: 'Plan', exact: true })).toContainText('As an administrator you have every feature, whatever your plan.');
+    const profile = page.getByRole('region', { name: 'Profile', exact: true });
+    await expect(profile).toContainText('Owner and administrator');
+    await expect(profile.getByText('Owner', { exact: true })).toBeVisible();
+    // Not presented as a Free customer: full access instead of a plan, its feature list and upgrade offers.
+    await expect(profile.getByText('Free', { exact: true })).toHaveCount(0);
+    const access = page.getByRole('region', { name: 'Your access', exact: true });
+    await expect(access).toContainText('Full access');
+    await expect(access).toContainText('Every tool and all content are open to this account. No subscription is needed.');
+    await expect(page.getByRole('region', { name: 'Plan', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Upgrade/ })).toHaveCount(0);
-    await page.getByRole('link', { name: 'Compare plans' }).click();
+    await expect(page.getByRole('link', { name: 'Compare plans' })).toHaveCount(0);
+    // Their second factor at a glance, and where to change it.
+    const administration = page.getByRole('region', { name: 'Administration', exact: true });
+    await expect(administration).toContainText('Two-factor verification');
+    await expect(administration).toContainText('Not set up');
+    await expect(administration).toContainText('Trusted devices');
+    await expect(administration.getByRole('link', { name: 'Security settings' })).toHaveAttribute('href', '/admin/security');
+    // The plans page still tells an admin why everything is open.
+    await page.goto('/app/plans');
     await expect(page.getByText('You are an administrator, so every feature is already open to you')).toBeVisible();
-    await page.goBack();
+    await page.goto('/app/profile');
     await page.getByRole('link', { name: 'Open the admin dashboard' }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
@@ -192,14 +236,15 @@ test.describe('admin', () => {
 
     await page.goto('/admin?q=target%40e2e.test');
     await page.getByRole('table').getByRole('link', { name: /E2E target/ }).click();
-    const planCard = page.getByRole('region', { name: 'Plan and access', exact: true });
-    await planCard.getByRole('button', { name: 'Pro', exact: true }).click();
+    const manual = page.getByRole('region', { name: 'Manage access', exact: true });
+    await manual.getByLabel('Change to').selectOption('none');
+    await manual.getByRole('button', { name: 'Give Pro with no end date' }).click();
     const dialog = page.getByRole('alertdialog');
-    await expect(dialog).toContainText('no payment is taken');
-    await dialog.getByRole('button', { name: 'Change plan' }).click();
-    await expect(planCard.getByRole('status')).toHaveText('Plan changed to Pro.');
-    await expect(planCard.getByRole('button', { name: 'Pro', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('region', { name: 'Activity', exact: true }).getByRole('listitem').filter({ hasText: 'Plan changed: Free → Pro' }).first()).toContainText('by You');
+    await expect(dialog).toContainText('No payment is involved');
+    await dialog.getByRole('button', { name: 'Give Pro' }).click();
+    await expect(manual.getByRole('status')).toHaveText('Pro given with no end date.');
+    await expect(manual.getByRole('list', { name: 'Manual Pro in force' })).toContainText('Pro, no end date');
+    await expect(page.getByRole('region', { name: 'Activity', exact: true }).getByRole('listitem').filter({ hasText: 'Pro given with no end date' }).first()).toContainText('by You');
 
     const pro = await me();
     expect(pro).toMatchObject({ role: 'user', plan: { assigned: 'pro', effective: 'pro' }, access: 'pro' });
@@ -207,10 +252,10 @@ test.describe('admin', () => {
     await targetPage.reload();
     await expect(targetPage.getByRole('region', { name: 'Plan', exact: true })).toContainText('Pro was given to this account by an administrator.');
 
-    // Downgrade again: the test Pro access is revoked as quickly.
-    await planCard.getByRole('button', { name: 'Free', exact: true }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Change plan' }).click();
-    await expect(planCard.getByRole('status')).toHaveText('Plan changed to Free.');
+    // Ended again: the test Pro access is revoked as quickly.
+    await manual.getByRole('button', { name: 'End…', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'End', exact: true }).click();
+    await expect(manual.getByRole('status')).toContainText('Pro with no end date ended.');
     const free = await me();
     expect(free).toMatchObject({ role: 'user', plan: { assigned: 'free', effective: 'free' }, access: 'free' });
     expect(free.features).not.toContain('export.gif_large');
@@ -346,7 +391,7 @@ test.describe('mobile', () => {
       expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
       await shot(page, 'admin-users');
       await cards.getByRole('link', { name: /E2E user\b/ }).click();
-      await expect(page.getByRole('group', { name: 'Assigned plan' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Manage access', exact: true })).toBeVisible();
       expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
       await shot(page, 'admin-user-detail');
     });

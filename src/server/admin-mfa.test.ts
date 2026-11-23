@@ -6,15 +6,25 @@ import { collections } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { open, seal } from '@/server/security/secret-box';
 import { base32Decode, base32Encode, otpauthUri, timeStep, totpAt, verifyTotp } from '@/server/security/totp';
+import { TRUST_IDLE_DAYS as PAGE_IDLE_DAYS, TRUST_MAX_DAYS as PAGE_MAX_DAYS } from '@/app/admin/security/trust';
 import {
   MAX_FAILURES,
+  TRUST_IDLE_DAYS,
+  TRUST_MAX_DAYS,
   adminGate,
   confirmEnrollment,
   disableMfa,
+  forgetAdminVerification,
+  forgetAllTrustedDevices,
+  forgetDeviceToken,
+  forgetTrustedDevice,
+  listTrustedDevices,
   mfaStatus,
   regenerateRecoveryCodes,
   resetMfa,
   startEnrollment,
+  trustDevice,
+  trustEnds,
   verifySession,
 } from './admin-mfa';
 
@@ -185,3 +195,130 @@ describe('admin two-factor verification', () => {
     expect(await collections(db).auditEvents.findOne({ userId: admin, type: 'admin.mfa_reset' })).toMatchObject({ actor: 'cli' });
   });
 });
+
+describe('trusted admin devices', () => {
+  let mongo: TestMongo;
+  const previousSecret = process.env.BETTER_AUTH_SECRET;
+  const previousUrl = process.env.BETTER_AUTH_URL;
+  const DAY = 86_400_000;
+  const T0 = new Date('2026-12-01T09:00:00Z');
+  const at = (days: number) => new Date(T0.getTime() + days * DAY);
+  const device = (token: string | null, sessionDays = 30, from = T0) => ({ token, sessionExpiresAt: new Date(from.getTime() + sessionDays * DAY) });
+
+  beforeAll(async () => {
+    process.env.BETTER_AUTH_SECRET = SECRET;
+    process.env.BETTER_AUTH_URL = 'http://localhost:8080';
+    mongo = await startTestMongo();
+    await migrate(mongo.db);
+  }, MONGO_STARTUP_TIMEOUT);
+  afterAll(async () => {
+    process.env.BETTER_AUTH_SECRET = previousSecret;
+    process.env.BETTER_AUTH_URL = previousUrl;
+    await mongo?.stop();
+  });
+
+  /** An enrolled administrator (the first code verified session `enrol`). */
+  async function enrolledAdmin() {
+    const db = mongo.db;
+    const admin = new ObjectId();
+    const started = await startEnrollment(db, admin, 'admin@example.com', T0);
+    if (started.status !== 'started') throw new Error(started.status);
+    const confirmed = await confirmEnrollment(db, admin, { id: `enrol-${admin}`, expiresAt: at(30) }, totpAt(started.secret, timeStep(T0.getTime())), T0);
+    if (confirmed.status !== 'ok') throw new Error(confirmed.status);
+    return admin;
+  }
+
+  it('lets a trusted device pass new sessions without a code, for its own account only', async () => {
+    const db = mongo.db;
+    const admin = await enrolledAdmin();
+    const other = await enrolledAdmin();
+    const token = await trustDevice(db, admin, { currentToken: null, label: 'Chrome on macOS' }, T0);
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    // Only the token's hash is stored, never the token.
+    const stored = await collections(db).adminTrustedDevices.findOne({ userId: admin });
+    expect(stored).toMatchObject({ label: 'Chrome on macOS', tokenHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(JSON.stringify(stored)).not.toContain(token);
+
+    // A new session (a browser reopened, a new Google sign-in) passes on this device…
+    expect(await adminGate(db, admin, 'next-day', false, at(1), device(token, 30, at(1)))).toBe('ok');
+    expect(await collections(db).adminMfaSessions.findOne({ _id: 'next-day' })).toMatchObject({ method: 'device' });
+    expect(await collections(db).auditEvents.countDocuments({ userId: admin, type: 'admin.mfa_device_used' })).toBe(1);
+    // …but the token does nothing for another administrator, and nothing without a token.
+    expect(await adminGate(db, other, 'other-session', false, at(1), device(token))).toBe('verify');
+    expect(await adminGate(db, admin, 'no-token', false, at(1), device(null))).toBe('verify');
+    expect(await adminGate(db, admin, 'wrong-token', false, at(1), device('x'.repeat(43)))).toBe('verify');
+  });
+
+  it('ends 30 days after its last use, and at most 90 days after its last code', async () => {
+    const db = mongo.db;
+    const admin = await enrolledAdmin();
+    const token = await trustDevice(db, admin, { currentToken: null, label: 'Safari on iOS' }, T0);
+    expect(trustEnds(T0, T0)).toEqual(at(TRUST_IDLE_DAYS));
+
+    // Unused for 31 days: a code again.
+    expect(await adminGate(db, admin, 'idle', false, at(31), device(token, 30, at(31)))).toBe('verify');
+
+    // Used every 20 days, it slides, but never past 90 days after its code.
+    const busy = await trustDevice(db, admin, { currentToken: null, label: 'Safari on iOS' }, T0);
+    for (const day of [20, 40, 60, 80]) expect(await adminGate(db, admin, `busy-${day}`, false, at(day), device(busy, 30, at(day))), `day ${day}`).toBe('ok');
+    expect((await collections(db).adminTrustedDevices.findOne({ userId: admin, lastUsedAt: at(80) }))?.expiresAt).toEqual(at(TRUST_MAX_DAYS));
+    expect(await adminGate(db, admin, 'busy-91', false, at(91), device(busy, 30, at(91)))).toBe('verify');
+
+    // A code on the device trusts it again with the same token: another 90 days from then.
+    const renewed = await trustDevice(db, admin, { currentToken: busy, label: 'Safari on iOS' }, at(85));
+    expect(renewed).toBe(busy);
+    expect(await adminGate(db, admin, 'busy-100', false, at(100), device(busy, 30, at(100)))).toBe('ok');
+    expect(await collections(db).auditEvents.countDocuments({ userId: admin, type: 'admin.mfa_device_trusted', 'metadata.renewed': true })).toBe(1);
+  });
+
+  it('verifies a session only until the session itself ends, or 12 hours', async () => {
+    const db = mongo.db;
+    const admin = await enrolledAdmin();
+    const token = await trustDevice(db, admin, { currentToken: null, label: 'Chrome on macOS' }, T0);
+    expect(await adminGate(db, admin, 'short', false, T0, { token, sessionExpiresAt: new Date(T0.getTime() + 60_000) })).toBe('ok');
+    expect((await collections(db).adminMfaSessions.findOne({ _id: 'short' }))?.expiresAt).toEqual(new Date(T0.getTime() + 60_000));
+    expect(await adminGate(db, admin, 'long', false, T0, device(token))).toBe('ok');
+    expect((await collections(db).adminMfaSessions.findOne({ _id: 'long' }))?.expiresAt).toEqual(new Date(T0.getTime() + 12 * 3_600_000));
+  });
+
+  it('forgets devices one by one, all at once, by their own token, and with the second factor or the admin role', async () => {
+    const db = mongo.db;
+    const admin = await enrolledAdmin();
+    const mac = await trustDevice(db, admin, { currentToken: null, label: 'Chrome on macOS' }, T0);
+    const phone = await trustDevice(db, admin, { currentToken: null, label: 'Safari on iOS' }, T0);
+    const list = await listTrustedDevices(db, admin, phone, at(1));
+    expect(list.map((d) => [d.label, d.current])).toEqual(expect.arrayContaining([['Chrome on macOS', false], ['Safari on iOS', true]]));
+
+    const macId = list.find((d) => d.label === 'Chrome on macOS')!.id;
+    expect(await forgetTrustedDevice(db, new ObjectId(), new ObjectId(macId))).toBe(false); // someone else's
+    expect(await forgetTrustedDevice(db, admin, new ObjectId(macId))).toBe(true);
+    expect(await adminGate(db, admin, 'mac-after', false, at(1), device(mac))).toBe('verify');
+    expect(await adminGate(db, admin, 'phone-after', false, at(1), device(phone))).toBe('ok');
+
+    // "Shared device? Sign out…": the token itself is given up.
+    expect(await forgetDeviceToken(db, phone)).toBe(true);
+    expect(await forgetDeviceToken(db, phone)).toBe(false);
+    expect(await adminGate(db, admin, 'phone-gone', false, at(1), device(phone))).toBe('verify');
+
+    await trustDevice(db, admin, { currentToken: null, label: 'A' }, T0);
+    await trustDevice(db, admin, { currentToken: null, label: 'B' }, T0);
+    expect(await forgetAllTrustedDevices(db, admin)).toBe(2);
+    expect(await collections(db).auditEvents.findOne({ userId: admin, type: 'admin.mfa_device_revoked', 'metadata.count': 2 })).toBeTruthy();
+
+    // Turning 2FA off, the server reset, and losing the admin role forget every device.
+    await trustDevice(db, admin, { currentToken: null, label: 'C' }, T0);
+    expect(await resetMfa(db, admin)).toBe(true);
+    expect(await collections(db).adminTrustedDevices.countDocuments({ userId: admin })).toBe(0);
+    const second = await enrolledAdmin();
+    await trustDevice(db, second, { currentToken: null, label: 'D' }, T0);
+    await forgetAdminVerification(db, second);
+    expect(await collections(db).adminTrustedDevices.countDocuments({ userId: second })).toBe(0);
+    expect(await collections(db).adminMfaSessions.countDocuments({ userId: second })).toBe(0);
+  });
+
+  it('keeps the pages and the server on the same lengths', () => {
+    expect([PAGE_IDLE_DAYS, PAGE_MAX_DAYS]).toEqual([TRUST_IDLE_DAYS, TRUST_MAX_DAYS]);
+  });
+});
+

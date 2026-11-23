@@ -1,6 +1,8 @@
 import { formatMoney } from '@/lib/money';
 import { PLAN_NAMES, isPlanId } from '@/lib/plans';
-import type { AdminAuditEvent } from '@/server/admin';
+import type { AccessSource, AdminAuditEvent } from '@/server/admin';
+import type { GrantReason, SubscriptionStatus } from '@/server/db/collections';
+import { GRANT_REASON_LABELS } from '@/server/grants';
 
 // Presentation helpers for the admin pages (server-rendered). Times are shown
 // in UTC, labelled as such, so every admin reads the same clock.
@@ -12,6 +14,50 @@ export const dateTime = (value: Date | null) => (value ? `${DATE_TIME.format(val
 export const dateOnly = (value: Date | null) => (value ? DATE.format(value) : '—');
 
 const plan = (value: unknown) => (isPlanId(value) ? PLAN_NAMES[value] : String(value ?? '?'));
+
+/** A grant or plan-change reason in words ('trial' → 'Trial'); anything unknown as it is. */
+export const reasonLabel = (value: unknown) => GRANT_REASON_LABELS[value as GrantReason] ?? String(value ?? '');
+
+/** A subscription status as the payment provider reported it, in words. */
+export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
+  trialing: 'Trial',
+  active: 'Active',
+  past_due: 'Past due',
+  canceled: 'Canceled',
+  incomplete: 'Incomplete',
+  expired: 'Expired',
+};
+
+/** Where access comes from, in a few words for the users list ("paid", "given until 3 Dec 2026", "no end date"). */
+export function sourceShort(source: AccessSource): string {
+  switch (source.kind) {
+    case 'admin':
+      return 'admin';
+    case 'paid':
+      if (source.status === 'past_due') return 'paid, past due';
+      return source.cancelAtPeriodEnd || source.status === 'canceled' ? `paid until ${dateOnly(source.periodEnd)}` : 'paid';
+    case 'given':
+      return `given until ${dateOnly(source.until)}`;
+    case 'assigned':
+      return 'no end date';
+  }
+}
+
+/** Where access comes from, in a sentence for the account page. */
+export function sourceLong(source: AccessSource): { label: string; detail: string } {
+  switch (source.kind) {
+    case 'admin':
+      return { label: 'Admin', detail: 'The admin role: every feature, whatever the plan.' };
+    case 'paid': {
+      const end = source.periodEnd ? (source.cancelAtPeriodEnd || source.status === 'canceled' ? `, ends ${dateOnly(source.periodEnd)}` : `, renews ${dateOnly(source.periodEnd)}`) : '';
+      return { label: 'Paid', detail: `A subscription: ${SUBSCRIPTION_STATUS_LABELS[source.status].toLowerCase()}${end}.` };
+    }
+    case 'given':
+      return { label: 'For a time', detail: `Pro given until ${dateOnly(source.until)}${source.reason ? ` (${reasonLabel(source.reason)})` : ''}. No payment.` };
+    case 'assigned':
+      return { label: 'No end date', detail: 'Pro given by an admin, with no end date. No payment.' };
+  }
+}
 
 /** What happened, in words. */
 export function describeEvent(event: AdminAuditEvent): string {
@@ -56,6 +102,9 @@ export function describeEvent(event: AdminAuditEvent): string {
     case 'admin.role_revoked':
       return 'Admin access removed';
     case 'admin.plan_changed':
+      // The assigned plan: Pro there is Pro with no end date.
+      if (m.to === 'pro') return `Pro given with no end date${m.reason ? ` (${reasonLabel(m.reason)})` : ''}`;
+      if (m.from === 'pro') return 'Pro with no end date ended';
       return `Plan changed: ${plan(m.from)} → ${plan(m.to)}`;
     case 'admin.account_suspended':
       return `Account suspended (${String(m.reason ?? 'no reason')})`;
@@ -74,7 +123,9 @@ export function describeEvent(event: AdminAuditEvent): string {
     case 'admin.initial_password_revealed':
       return 'Initial password revealed to an admin (then removed from the server)';
     case 'admin.grant_created':
-      return `${plan(m.planId)} given for ${Number(m.days ?? 0)} days (${String(m.reason ?? '')})`;
+      return `${plan(m.planId)} given for ${Number(m.days ?? 0)} days (${reasonLabel(m.reason)})`;
+    case 'admin.grant_extended':
+      return `${plan(m.planId)} extended by ${Number(m.days ?? 0)} days, until ${typeof m.to === 'string' ? dateOnly(new Date(m.to)) : '?'}`;
     case 'admin.grant_revoked':
       return 'Given access ended early';
     case 'admin.audit_exported':
@@ -91,6 +142,14 @@ export function describeEvent(event: AdminAuditEvent): string {
       return 'Turned off two-factor verification';
     case 'admin.mfa_reset':
       return 'Two-factor verification removed from the server command line';
+    case 'admin.mfa_device_trusted':
+      return m.renewed ? 'Entered a code on a trusted device (trusted for another 90 days at most)' : 'Trusted a device for two-factor verification';
+    case 'admin.mfa_device_used':
+      return 'Passed two-factor verification on a trusted device';
+    case 'admin.mfa_device_revoked':
+      return `Forgot ${Number(m.count ?? 0)} trusted ${Number(m.count) === 1 ? 'device' : 'devices'}`;
+    case 'admin.owner_set':
+      return 'Made the owner, from the server command line';
     case 'account.status_changed':
       return `Account ${String(m.status ?? 'status changed')}`;
     case 'subscription.changed':
@@ -142,6 +201,9 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
       'admin.mfa_codes_regenerated',
       'admin.mfa_disabled',
       'admin.mfa_reset',
+      'admin.mfa_device_trusted',
+      'admin.mfa_device_used',
+      'admin.mfa_device_revoked',
     ],
   },
   { id: 'profile', label: 'Profile, consent and data', types: ['user.profile_updated', 'user.consent_changed', 'account.data_exported'] },
@@ -151,6 +213,7 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
     types: [
       'admin.role_granted',
       'admin.role_revoked',
+      'admin.owner_set',
       'admin.plan_changed',
       'admin.account_suspended',
       'admin.account_reactivated',
@@ -158,6 +221,7 @@ export const EVENT_GROUPS: { id: string; label: string; types: AdminAuditEvent['
       'admin.account_created',
       'admin.account_removed',
       'admin.grant_created',
+      'admin.grant_extended',
       'admin.grant_revoked',
       'admin.audit_exported',
       'account.status_changed',

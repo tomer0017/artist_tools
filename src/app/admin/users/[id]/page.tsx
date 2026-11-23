@@ -3,21 +3,26 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, BadgeCheck } from 'lucide-react';
 import { AccountAvatar } from '@/components/shell/account';
+import { formatMoney } from '@/lib/money';
 import { FEATURE_LABELS, FEATURES, PLAN_NAMES } from '@/lib/plans';
-import { getUserDetail } from '@/server/admin';
+import { getUserDetail, mayChangeRoles, type AdminUserDetail } from '@/server/admin';
 import { signInMethods } from '@/server/account-management';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { requireAdmin } from '@/server/session';
-import { GrantControl, PasswordControl, PlanControl, RoleControl, SessionsControl, StatusControl, TestAccountControl, type Viewer } from '../../AdminControls';
+import { ManualProControl, PasswordControl, RoleControl, SessionsControl, StatusControl, TestAccountControl, type Viewer } from '../../AdminControls';
 import { AdminShell } from '../../AdminShell';
 import { EventList } from '../../EventList';
-import { dateOnly, dateTime } from '../../format';
+import { SUBSCRIPTION_STATUS_LABELS, dateOnly, dateTime, sourceLong, sourceShort } from '../../format';
 
 // One account, as an admin supports it: identity and sign-in methods, access
-// (role, plan, subscription, time-limited grants, what is included), status,
-// activity, and what an admin can change. Never shows tokens, session secrets,
-// password hashes or Google's full account id.
+// (what is in force and why), managing access (Pro for a time or with no end
+// date, or back to Free),
+// billing (read-only, as the payment provider reported it), role, status,
+// activity, and what an admin can change. Access and billing are separate:
+// nothing an admin does here changes billing. Never shows tokens, session
+// secrets, password hashes or Google's full account id. The owner's account
+// shows no controls to any other admin (the server refuses them anyway).
 
 export const metadata: Metadata = { title: 'Account · Studio Companion admin', robots: { index: false, follow: false } };
 
@@ -30,19 +35,21 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
   const userId = toObjectId(id);
   if (!userId) notFound();
   const db = getDb();
-  const [user, viewerMethods] = await Promise.all([getUserDetail(db, userId), signInMethods(db, admin.id)]);
+  const [user, viewerMethods, canChangeRoles] = await Promise.all([getUserDetail(db, userId), signInMethods(db, admin.id), mayChangeRoles(db, admin.id)]);
   if (!user) notFound();
   const viewer: Viewer = { email: admin.user.email, hasPassword: viewerMethods.password !== null, returnTo: `/admin/users/${user.id}` };
-  const liveGrant = user.grants.find((g) => g.live) ?? null;
 
   const isSelf = admin.id.equals(userId);
+  // The owner's account, seen by another admin: nothing here can change it.
+  const ownerLocked = user.owner && !isSelf;
   const { entitlements } = user;
   const access =
     entitlements.access === 'admin'
       ? 'Every feature (admin)'
       : entitlements.access === 'none'
         ? 'Nothing (account not active)'
-        : `${PLAN_NAMES[entitlements.planId]} features${liveGrant ? ` (given until ${dateOnly(liveGrant.endsAt)})` : ''}`;
+        : PLAN_NAMES[entitlements.planId];
+  const proSources = user.sources.filter((s) => s.kind !== 'admin');
   const usage = FEATURES.filter((f) => (user.usageThisMonth[f] ?? 0) > 0);
 
   return (
@@ -68,11 +75,14 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
           )}
           <div className="mt-2 flex flex-wrap gap-1.5">
             {user.role === 'admin' && <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Admin</span>}
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${user.plan === 'pro' ? 'bg-primary text-primary-foreground' : 'border border-border text-foreground'}`}>{PLAN_NAMES[user.plan]}</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${entitlements.planId === 'pro' || entitlements.access === 'admin' ? 'bg-primary text-primary-foreground' : 'border border-border text-foreground'}`}>
+              {entitlements.access === 'admin' ? 'Every feature' : PLAN_NAMES[entitlements.planId]}
+              {proSources.length > 0 && <span className="font-normal"> · {proSources.map(sourceShort).join(' + ')}</span>}
+            </span>
             {user.status !== 'active' && <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-xs text-destructive">{user.status}</span>}
-            {liveGrant && <span className="rounded-full border border-primary/40 px-2 py-0.5 text-xs text-primary">Pro given</span>}
             {user.testAccount && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Test</span>}
             {user.username && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">Username sign-in</span>}
+            {user.owner && <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Owner</span>}
             {isSelf && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">You</span>}
           </div>
         </div>
@@ -99,23 +109,76 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
           </dl>
         </Card>
 
-        <Card title="Plan and access">
-          <p className="mb-2 text-sm text-muted-foreground">Assigned plan</p>
-          <PlanControl userId={user.id} plan={user.plan} name={user.name} />
-          <dl className="mt-4 space-y-2.5 text-sm">
+        <Card title="Access">
+          <dl className="space-y-2.5 text-sm">
             <Row label="In force">{access}</Row>
+          </dl>
+          {user.status !== 'active' && <p className="mt-2 text-sm text-destructive">Suspended: nothing below applies until the account is reactivated.</p>}
+          <p className="mb-1.5 mt-4 text-sm text-muted-foreground">Why</p>
+          {user.sources.length === 0 ? (
+            <p className="text-sm text-foreground">Nothing given and no paid subscription, so Free.</p>
+          ) : (
+            <ul aria-label="Where access comes from" className="space-y-2 text-sm">
+              {user.sources.map((source, i) => {
+                const { label, detail } = sourceLong(source);
+                return (
+                  <li key={i} className="flex items-baseline gap-2">
+                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-foreground">{label}</span>
+                    <span className="min-w-0 text-foreground">{detail}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <dl className="mt-4 space-y-2.5 border-t border-border pt-4 text-sm">
             {/* What the studio opens for this account right now (the published plans; the same answer the studio and the server follow). */}
             <Row label="Can use">{entitlements.features.length > 0 ? entitlements.features.map((f) => FEATURE_LABELS[f]).join(', ') : 'Nothing'}</Row>
-            <Row label="Subscription">{user.subscription ? `${user.subscription.status} (${PLAN_NAMES[user.subscription.planId]})` : 'None (billing is not live)'}</Row>
-            <Row label="Plan last changed">{dateTime(user.planUpdatedAt)}</Row>
           </dl>
+        </Card>
+
+        <Card title="Manage access">
+          <p className="mb-3 text-sm text-muted-foreground">
+            Give Pro without payment for 7, 30 or 90 days or with no end date, or end it (back to Free). It never changes their billing, and a paid
+            subscription keeps working on its own.
+          </p>
+          {ownerLocked ? (
+            <OwnerNote />
+          ) : (
+          <ManualProControl
+            userId={user.id}
+            name={user.name}
+            isSelf={isSelf}
+            admin={user.role === 'admin'}
+            paid={user.sources.some((s) => s.kind === 'paid')}
+            noEndDate={user.plan === 'pro' ? { since: user.planUpdatedAt?.toISOString() ?? null } : null}
+            grants={user.grants.map((g) => ({
+              id: g.id,
+              planId: g.planId,
+              endsAt: g.endsAt.toISOString(),
+              reason: g.reason,
+              live: g.live,
+              revoked: g.revokedAt !== null,
+              extended: g.extendedAt !== null,
+            }))}
+          />
+          )}
+        </Card>
+
+        <Card title="Billing">
+          <Billing subscription={user.subscription} payments={user.payments} />
         </Card>
 
         <Card title="Role">
           <p className="mb-3 text-sm text-muted-foreground">
-            {user.role === 'admin' ? 'Administrator: can open this dashboard and change plans and roles.' : 'Member: uses the studio; no admin access.'} The role is separate from the plan: Pro never grants admin access.
+            {user.role === 'admin' ? (user.owner ? 'Owner and administrator: opens this dashboard, manages accounts, and is the only one who changes roles.' : 'Administrator: opens this dashboard and manages accounts.') : 'Member: uses the studio; no admin access.'} The role is separate from the plan: Pro never grants admin access.
           </p>
-          <RoleControl userId={user.id} role={user.role} name={user.name} isSelf={isSelf} viewer={viewer} usernameAccount={user.username !== null} />
+          {ownerLocked ? (
+            <OwnerNote />
+          ) : canChangeRoles ? (
+            <RoleControl userId={user.id} role={user.role} name={user.name} isSelf={isSelf} viewer={viewer} usernameAccount={user.username !== null} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Only the owner can change who is an admin.</p>
+          )}
         </Card>
 
         <Card title="Password and sessions">
@@ -136,7 +199,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
             <p className="mb-3 text-muted-foreground">
               {user.sessions.active === 0 ? 'Not signed in anywhere right now.' : `Signed in on ${user.sessions.active} ${user.sessions.active === 1 ? 'device' : 'devices'}.`}
             </p>
-            <SessionsControl userId={user.id} name={user.name} isSelf={isSelf} active={user.sessions.active} />
+            {ownerLocked ? <OwnerNote /> : <SessionsControl userId={user.id} name={user.name} isSelf={isSelf} active={user.sessions.active} />}
           </div>
         </Card>
 
@@ -146,21 +209,16 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
               ? `Suspended${user.suspension.at ? ` on ${dateOnly(user.suspension.at)}` : ''}${user.suspension.reason ? ` (${user.suspension.reason})` : ''}: cannot sign in.`
               : 'Active: can sign in and use the studio.'}
           </p>
-          <StatusControl userId={user.id} status={user.status} name={user.name} isSelf={isSelf} viewer={viewer} />
-          <div className="mt-4 border-t border-border pt-4">
-            <TestAccountControl userId={user.id} test={user.testAccount} />
-          </div>
-        </Card>
-
-        <Card title="Promotional access">
-          <p className="mb-3 text-sm text-muted-foreground">
-            Give Pro for a limited time (a promotion, a trial, support). It ends on its own and never changes the assigned plan.
-          </p>
-          <GrantControl
-            userId={user.id}
-            name={user.name}
-            grants={user.grants.map((g) => ({ id: g.id, planId: g.planId, endsAt: g.endsAt.toISOString(), reason: g.reason, live: g.live, revoked: g.revokedAt !== null }))}
-          />
+          {ownerLocked ? (
+            <OwnerNote />
+          ) : (
+            <>
+              <StatusControl userId={user.id} status={user.status} name={user.name} isSelf={isSelf} viewer={viewer} />
+              <div className="mt-4 border-t border-border pt-4">
+                <TestAccountControl userId={user.id} test={user.testAccount} />
+              </div>
+            </>
+          )}
         </Card>
 
         <Card title="Usage this month">
@@ -183,6 +241,74 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       </section>
     </AdminShell>
   );
+}
+
+const money = (amountMinor: number | null, currency: string | null) => (typeof amountMinor === 'number' && currency ? formatMoney(amountMinor, currency as 'USD') : '—');
+
+/** Billing exactly as the payment provider's verified events recorded it. Read-only: nothing here changes it. */
+function Billing({ subscription: sub, payments }: Pick<AdminUserDetail, 'subscription' | 'payments'>) {
+  return (
+    <>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Read-only, as the payment provider reported it. Nothing an admin does changes billing. No payment provider is connected yet.
+      </p>
+      <dl className="space-y-2.5 text-sm">
+        <Row label="Subscription">
+          {sub ? `${PLAN_NAMES[sub.planId]}${sub.interval ? ` · ${sub.interval === 'year' ? 'yearly' : 'monthly'}` : ''} · ${money(sub.amountMinor, sub.currency)}` : 'None'}
+        </Row>
+        {sub && (
+          <>
+            <Row label="Status">
+              {SUBSCRIPTION_STATUS_LABELS[sub.status]}
+              {sub.endedAt
+                ? ` · ended ${dateOnly(sub.endedAt)}`
+                : sub.currentPeriodEnd
+                  ? sub.cancelAtPeriodEnd || sub.status === 'canceled'
+                    ? ` · ends ${dateOnly(sub.currentPeriodEnd)}`
+                    : ` · renews ${dateOnly(sub.currentPeriodEnd)}`
+                  : ''}
+            </Row>
+            {sub.trialEndsAt && <Row label="Trial ends">{dateOnly(sub.trialEndsAt)}</Row>}
+            <Row label="Provider">{sub.provider}</Row>
+          </>
+        )}
+      </dl>
+      <p className="mb-1.5 mt-4 text-sm text-muted-foreground">Payments</p>
+      {payments.length === 0 ? (
+        <p className="text-sm text-foreground">None recorded.</p>
+      ) : (
+        <ul aria-label="Payments" className="divide-y divide-border text-sm">
+          {payments.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2">
+              <span className="tabular-nums text-foreground">
+                {p.kind === 'refund' ? 'Refund' : p.kind === 'chargeback' ? 'Dispute' : 'Charge'} {money(p.amountMinor, p.currency)}
+                {p.status === 'failed' && <span className="ms-1 font-semibold text-destructive">failed</span>}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {dateOnly(p.occurredAt)}
+                {p.receiptUrl?.startsWith('https://') && (
+                  <>
+                    {' · '}
+                    <a href={p.receiptUrl} rel="noreferrer" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                      receipt
+                    </a>
+                  </>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link href="/admin/billing" className="mt-3 inline-block text-sm text-primary underline-offset-2 hover:underline">
+        All billing
+      </Link>
+    </>
+  );
+}
+
+/** In place of the controls on the owner's account, for every other admin. */
+function OwnerNote() {
+  return <p className="text-sm text-muted-foreground">This is the owner&rsquo;s account: only the owner can change it.</p>;
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {

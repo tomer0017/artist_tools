@@ -104,7 +104,7 @@ describe('admin', () => {
     // Google's full account id never leaves the server.
     expect(JSON.stringify(row)).not.toContain('109876543210987654321');
     expect(Object.keys(row).sort()).toEqual(
-      ['createdAt', 'effectivePlan', 'email', 'emailVerified', 'gifsThisMonth', 'google', 'grant', 'id', 'image', 'lastLoginAt', 'logins', 'name', 'password', 'plan', 'role', 'status', 'subscriptionStatus', 'testAccount', 'username'],
+      ['createdAt', 'effectivePlan', 'email', 'emailVerified', 'gifsThisMonth', 'google', 'grant', 'id', 'image', 'lastActiveAt', 'lastLoginAt', 'logins', 'name', 'owner', 'password', 'plan', 'role', 'sources', 'status', 'subscriptionStatus', 'testAccount', 'username'],
     );
     expect(rows.find((r) => r.id === older.toHexString())).toMatchObject({ google: { linked: false, idHint: null }, logins: 0 });
   });

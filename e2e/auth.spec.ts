@@ -1,4 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { test, expect, type BrowserContext } from '@playwright/test';
 
 // Authentication and authorization, end to end, against the production build.
 // Signing in with Google itself is covered by src/server/auth.test.ts (the full
@@ -13,6 +16,7 @@ test.describe('signed out', () => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading', { name: /Your All-in-One/ })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Site' }).getByRole('link', { name: 'Sign in' })).toBeVisible();
   });
 
   test('the studio, every tool and admin require sign-in, and remember where you were going', async ({ page }) => {
@@ -100,6 +104,45 @@ test.describe('signed in', () => {
     await expect(page).toHaveURL(/\/app\/color$/);
   });
 
+  test('the landing page offers the studio, not "Sign in", to someone signed in', async ({ page }) => {
+    await page.goto('/');
+    const site = page.getByRole('navigation', { name: 'Site' });
+    await expect(site.getByRole('link', { name: 'Open the studio' })).toHaveAttribute('href', '/app');
+    await expect(site.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
+  });
+
+  // The browser keeps the sign-in when it is closed and opened again: its
+  // first page renews the session through Better Auth's own endpoint
+  // (SessionKeepAlive), which re-issues the cookie for 30 days. The seeded
+  // cookie lasts only until the browser closes, so without that renewal the
+  // reopened browser would be signed out. Chrome and Safari's engine, each
+  // with its own profile on disk.
+  test('stays signed in after the browser is closed and opened again (mobile)', async ({ playwright, browserName }, testInfo) => {
+    const baseURL = testInfo.project.use.baseURL!;
+    const seeded = JSON.parse(readFileSync(`e2e/.auth/persistent-${testInfo.project.name}.json`, 'utf8')) as { cookies: Parameters<BrowserContext['addCookies']>[0] };
+    const dir = mkdtempSync(path.join(tmpdir(), 'sc-profile-'));
+    const engine = playwright[browserName];
+    try {
+      let context = await engine.launchPersistentContext(dir, { baseURL });
+      await context.addCookies(seeded.cookies);
+      let page = context.pages()[0] ?? (await context.newPage());
+      const renewed = page.waitForResponse((r) => r.url().includes('/api/auth/get-session') && r.status() === 200);
+      await page.goto('/app');
+      await renewed;
+      await expect.poll(async () => (await context.cookies()).find((c) => c.name === 'sc.session_token')?.expires ?? -1).toBeGreaterThan(Date.now() / 1000 + 29 * 86_400);
+      await context.close();
+
+      context = await engine.launchPersistentContext(dir, { baseURL });
+      page = context.pages()[0] ?? (await context.newPage());
+      await page.goto('/app/profile');
+      await expect(page).toHaveURL(/\/app\/profile$/);
+      await expect(page.getByRole('heading', { name: 'Your account', level: 1 })).toBeVisible();
+      await context.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('the plan comes from the server, whatever the browser claims', async ({ page, context }) => {
     await context.addCookies([
       { name: 'plan', value: 'pro', domain: 'localhost', path: '/' },
@@ -144,7 +187,7 @@ test.describe('admin', () => {
     const table = page.getByRole('table');
     await expect(table).toContainText('user@e2e.test');
     await expect(table).toContainText('admin@e2e.test');
-    await expect(table.getByRole('columnheader', { name: 'Plan' })).toBeVisible();
+    await expect(table.getByRole('columnheader', { name: 'Access' })).toBeVisible();
   });
 });
 

@@ -235,6 +235,13 @@ export const en = {
     role: 'Role',
     administrator: 'Administrator',
     member: 'Member',
+    owner: 'Owner',
+    ownerRole: 'Owner and administrator',
+    adminAccess: {
+      section: 'Your access',
+      title: 'Full access',
+      lead: 'Every tool and all content are open to this account. No subscription is needed.',
+    },
     returned: {
       connectError: 'Google was not connected. It must be the Google account with the same email address as this account.',
       connected: 'Google is connected: you can now sign in with Google too.',
@@ -289,8 +296,13 @@ export const en = {
     },
     adminSection: {
       title: 'Administration',
-      lead: 'See registered accounts, their plans and activity, and change plans for testing.',
+      lead: 'Accounts, access, content and plans, in the admin dashboard.',
       open: 'Open the admin dashboard',
+      mfa: 'Two-factor verification',
+      mfaOn: 'On',
+      mfaOff: 'Not set up',
+      trusted: 'Trusted devices',
+      security: 'Security settings',
     },
     sharedDevice: 'Shared device? Sign out and remove the work stored here',
     privacy: 'Your images never leave this device. Studio Companion keeps only your account details: your name, email address, picture and settings.',

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { BrandMark } from '@/components/shell/BrandMark';
+import { SessionKeepAlive } from '@/components/shell/SessionKeepAlive';
 import { I18nProvider } from '@/i18n/client';
 import { en } from '@/i18n/messages/en';
 import { authConfig } from '@/server/env';
@@ -68,6 +69,7 @@ export function AdminShell({ active, bare = false, children }: { active: (typeof
 
           {children}
         </div>
+        <SessionKeepAlive />
       </main>
     </I18nProvider>
   );
