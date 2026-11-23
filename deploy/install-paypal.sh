@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Server side: put PayPal credentials into a Studio Companion environment file,
-# create the PayPal plans and register the webhook, and store its ID.
+# create the PayPal plans and register the webhook, and store its ID. Nothing
+# is saved unless PayPal accepts the credentials in the chosen mode.
 # Installed as /usr/local/sbin/studio-set-paypal; fed by deploy/set-paypal.sh.
 #
 #   printf '%s\n%s\n' "$CLIENT_ID" "$SECRET" | studio-set-paypal <env> sandbox|live
@@ -40,8 +41,8 @@ SECRET="${SECRET//[$'\r\t ']/}"
 [[ "$SECRET" =~ ^[A-Za-z0-9_.-]{20,200}$ ]] || { echo "The Secret does not look right. Nothing was changed." >&2; exit 1; }
 
 write_env() {
-  # $1: the webhook ID, or empty to leave it out.
-  local tmp
+  # $1: the target file, $2: the webhook ID or empty. Everything but the PayPal lines is kept.
+  local target="$1" tmp
   tmp="$(mktemp "${FILE}.new.XXXXXX")"
   grep -v -E '^(# PayPal|PAYPAL_ENV|PAYPAL_CLIENT_ID|PAYPAL_CLIENT_SECRET|PAYPAL_WEBHOOK_ID)' "$FILE" > "$tmp" || true
   {
@@ -49,30 +50,38 @@ write_env() {
     printf 'PAYPAL_ENV="%s"\n' "$MODE"
     printf 'PAYPAL_CLIENT_ID="%s"\n' "$CLIENT_ID"
     printf 'PAYPAL_CLIENT_SECRET="%s"\n' "$SECRET"
-    if [ -n "$1" ]; then printf 'PAYPAL_WEBHOOK_ID="%s"\n' "$1"; fi
+    if [ -n "$2" ]; then printf 'PAYPAL_WEBHOOK_ID="%s"\n' "$2"; fi
   } >> "$tmp"
   chown --reference="$FILE" "$tmp"
   chmod --reference="$FILE" "$tmp"
-  mv -f "$tmp" "$FILE"
+  mv -f "$tmp" "$target"
 }
 
-cp -p "$FILE" "${FILE}.previous"
-write_env ""
+# First a trial copy of the environment file with the new credentials: PayPal
+# must accept them in this mode (sandbox or live) before anything is saved, so
+# credentials from the wrong side of PayPal's Sandbox/Live switch change nothing.
+TRIAL="$(mktemp "${FILE}.trial.XXXXXX")"
+trap 'rm -f "$TRIAL"' EXIT
+write_env "$TRIAL" ""
 
-# With the credentials in place: the plans and the webhook, from the live release.
+# With the trial file: the plans and the webhook, from the live release.
 # shellcheck source=/dev/null
 source "$CONF"
 : "${APP_USER:?} ${APP_DIR:?} ${NODE_BIN:?}"
 OUT="$(cd "$APP_DIR/current" && runuser -u "$APP_USER" -- env PATH="$NODE_BIN:/usr/bin:/bin" HOME="/home/$APP_USER" \
-  bash -c "set -a; . '$FILE'; set +a; npm run --silent db -- paypal-setup" 2>&1)" || {
-  echo "Saved the credentials, but setting up PayPal failed (the app's paypal-setup):" >&2
-  printf '%s\n' "$OUT" | grep -v -i secret >&2
-  echo "Run it again later with: bash deploy/set-paypal.sh $MODE $ENV_NAME" >&2
+  bash -c "set -a; . '$TRIAL'; set +a; npm run --silent db -- paypal-setup" 2>&1)" || {
+  echo "PayPal did not accept these credentials for $MODE, or setting it up failed. Nothing was changed." >&2
+  if [ "$MODE" = live ]; then echo "Check that the switch at the top of developer.paypal.com says Live (not Sandbox) when you copy them." >&2; fi
+  printf '%s\n' "$OUT" | grep -v -i secret | tail -5 >&2
   exit 1
 }
 printf '%s\n' "$OUT" | grep -v '^PAYPAL_WEBHOOK_ID='
 WEBHOOK_ID="$(printf '%s\n' "$OUT" | sed -n 's/^PAYPAL_WEBHOOK_ID=\([A-Z0-9]\{8,40\}\)$/\1/p' | tail -1)"
-if [ -n "$WEBHOOK_ID" ]; then write_env "$WEBHOOK_ID"; fi
+
+cp -p "$FILE" "${FILE}.previous"
+write_env "$FILE" "$WEBHOOK_ID"
+rm -f "$TRIAL"
+trap - EXIT
 CLIENT_ID=''
 SECRET=''
 
