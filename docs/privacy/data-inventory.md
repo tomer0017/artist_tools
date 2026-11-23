@@ -52,7 +52,8 @@ There are no advertising, analytics or third-party cookies.
 | `audit_events` | Account id, actor, event type and small fixed metadata (e.g. what changed). No passwords or tokens. | Security and admin accountability | **24 months** (*proposed*; nightly job, from 2026-11-11). They outlive account deletion as a bare id that no longer resolves to anyone (ADR-0010). | Legitimate interest (security) |
 | `access_grants` | Promotional plan given to an account, with dates and reason, and which admin gave, extended or ended it | Promotions | With the account | Contract |
 | `mail_outbox` | Emails the app would have sent (address, text, links) | **Staging only**: testing without a mail provider. Refused in production. | 24 hours (TTL index) | — |
-| `subscriptions`, `payments`, `billing_customers`, `checkout_sessions`, `payment_events` | *Empty: billing is not live.* Later: the provider's ids, plan, status, amounts, receipt links. Never card data. | Billing | Proposed: as long as tax law requires invoices and payment records (*counsel/accountant to set*). Checkout sessions: 7 days after expiry (TTL index). | Contract; legal obligation |
+| `subscriptions`, `payments`, `billing_customers`, `checkout_sessions`, `payment_events`, `refund_requests` | PayPal (`docs/billing/03-paypal.md`): PayPal's subscription, plan, payer and payment ids; status; the agreed amount and currency, the Bank of Israel rate it was converted at, and the consent given at checkout (when, what amount); paid-through and next payment dates; payments, refunds and chargebacks (amount, currency, time); refund requests with the reason the customer typed. Never card data, and nothing PayPal sends about the payer (name, email, address) is stored. | Billing | Proposed: as long as tax law requires payment records, and at least 3 years for consent records (*counsel/accountant to set*). Checkout sessions: 7 days after expiry (TTL index). | Contract; legal obligation |
+| `fx_rates`, `billing_plans`, `billing_settings` | No personal data: Bank of Israel rates with their dates; PayPal plan ids; who may subscribe (tester email addresses typed by the owner). | Billing | Kept while in use. | Legitimate interest |
 | `coupon_redemptions` | Account id and coupon used | Coupon limits | With the account (*to confirm*) | Contract |
 
 ## Backups
@@ -70,7 +71,7 @@ storage provider).
 | Contabo (VPS hosting) | Everything on the server | Always | [Data-centre region: confirm in the Contabo account] | In use |
 | Google | Google returns the name, email, verified flag, profile picture and account id to us. Google itself sees that the person signs in to Studio Companion. | Only for people who choose "Continue with Google" | Google's infrastructure | In use |
 | Email provider | Name, email address, message content | Account emails, once a provider is chosen | [to be chosen] | Not chosen. Staging keeps emails in its outbox. |
-| Payment provider | Name, email, billing details entered on its pages | Once billing is live | [to be chosen: `docs/billing/01-provider-research.md`] | Not chosen |
+| PayPal (payment provider) | Name, email and payment details the customer gives on PayPal's own pages; our subscription id and agreed price | Once billing is live (sandbox for tests) | The PayPal company named in the merchant's PayPal user agreement for Israel (*to confirm*) | Chosen 2026-11-23 |
 | GitHub | Source code only, no personal data | — | — | In use |
 
 ## Rights, as implemented

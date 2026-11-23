@@ -85,6 +85,17 @@ export const INDEXES: IndexPlan[] = [
   { collection: 'subscriptions', key: { updatedAt: -1 }, options: { name: 'subscriptions_by_updated' } },
   { collection: 'checkout_sessions', key: { expiresAt: 1 }, options: { name: 'checkout_expiry_ttl', expireAfterSeconds: 7 * 24 * 60 * 60 } },
   { collection: 'reconciliation_runs', key: { startedAt: -1 }, options: { name: 'reconciliation_by_time' } },
+  // The newest exchange rate of a pair (src/server/billing/fx.ts).
+  { collection: 'fx_rates', key: { pair: 1, date: -1 }, options: { name: 'fx_rates_by_pair_date' } },
+  // PayPal (src/server/billing/paypal/): one checkout per PayPal subscription; what reconciliation re-reads; open refund requests.
+  {
+    collection: 'checkout_sessions',
+    key: { providerSubscriptionId: 1 },
+    options: { name: 'checkout_by_provider_subscription', unique: true, partialFilterExpression: { providerSubscriptionId: { $type: 'string' } } },
+  },
+  { collection: 'subscriptions', key: { provider: 1, status: 1, paidThrough: 1 }, options: { name: 'subscriptions_by_status' } },
+  { collection: 'refund_requests', key: { userId: 1, status: 1 }, options: { name: 'refund_requests_by_user' } },
+  { collection: 'refund_requests', key: { status: 1, requestedAt: -1 }, options: { name: 'refund_requests_by_status' } },
   { collection: 'admin_mfa_sessions', key: { expiresAt: 1 }, options: { name: 'admin_mfa_session_ttl', expireAfterSeconds: 0 } },
   { collection: 'admin_mfa_sessions', key: { userId: 1 }, options: { name: 'admin_mfa_sessions_by_user' } },
   { collection: 'error_reports', key: { lastSeen: 1 }, options: { name: 'error_reports_ttl', expireAfterSeconds: 30 * 24 * 60 * 60 } },

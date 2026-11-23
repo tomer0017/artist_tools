@@ -15,7 +15,8 @@ export interface BillingMetrics {
   /** Monthly recurring revenue per currency, in minor units. */
   mrrMinor: Record<string, number>;
   arrMinor: Record<string, number>;
-  subscriptions: { active: number; trialing: number; pastDue: number; cancelingAtPeriodEnd: number };
+  /** cancelingAtPeriodEnd: renewal stopped, paid time left (PayPal cancels at once and keeps Pro to the paid-through date). */
+  subscriptions: { active: number; trialing: number; pastDue: number; cancelingAtPeriodEnd: number; activeByCurrency: Record<string, number> };
   last30Days: {
     ended: number;
     /** Share of subscriptions that ended, of those live at any point in the window (0–1). */
@@ -43,6 +44,10 @@ export async function billingMetrics(db: Db, options: { now?: Date; includeTestA
     mrrMinor[s.currency] = (mrrMinor[s.currency] ?? 0) + monthly;
   }
   const arrMinor = Object.fromEntries(Object.entries(mrrMinor).map(([currency, amount]) => [currency, amount * 12]));
+  const activeByCurrency: Record<string, number> = {};
+  for (const s of live) if (s.status === 'active' && s.currency) activeByCurrency[s.currency] = (activeByCurrency[s.currency] ?? 0) + 1;
+  // Stopped renewals still paid up: cancelled, not ended, the paid period still running.
+  const stopped = await c.subscriptions.countDocuments({ userId: real, status: 'canceled', endedAt: null, currentPeriodEnd: { $gt: now } });
 
   const ended = await c.subscriptions.countDocuments({
     userId: real,
@@ -64,7 +69,8 @@ export async function billingMetrics(db: Db, options: { now?: Date; includeTestA
       active: live.filter((s) => s.status === 'active').length,
       trialing: live.filter((s) => s.status === 'trialing').length,
       pastDue: live.filter((s) => s.status === 'past_due').length,
-      cancelingAtPeriodEnd: live.filter((s) => s.cancelAtPeriodEnd).length,
+      cancelingAtPeriodEnd: live.filter((s) => s.cancelAtPeriodEnd).length + stopped,
+      activeByCurrency,
     },
     last30Days: {
       ended,

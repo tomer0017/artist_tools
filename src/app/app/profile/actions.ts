@@ -4,7 +4,7 @@ import { cookies, headers } from 'next/headers';
 import { z } from 'zod';
 import { CURRENCIES, LOCALES } from '@/lib/locale';
 import { LOCALE_COOKIE } from '@/i18n/config';
-import { getT, messagesFor } from '@/i18n/server';
+import { getRequestLocale, getT, messagesFor } from '@/i18n/server';
 import {
   deleteAccount,
   listDeviceSessions,
@@ -18,6 +18,9 @@ import { clearDeviceToken, readDeviceToken } from '@/server/admin-device-cookie'
 import { forgetDeviceToken } from '@/server/admin-mfa';
 import { COOKIE_PREFIX, FRESH_SESSION_SECONDS, emailPasswordAvailable, getAuth } from '@/server/auth';
 import { runInBackground } from '@/server/background';
+import { getPayPalClient } from '@/server/billing/paypal/client';
+import { stopRenewal } from '@/server/billing/paypal/subscriptions';
+import { requestRefund } from '@/server/billing/refunds';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
 import { authConfig } from '@/server/env';
@@ -25,6 +28,7 @@ import { log } from '@/server/log';
 import { createMailer } from '@/server/mail/mailer';
 import { mailTemplates } from '@/server/mail/templates';
 import { checkPassword, type PasswordProblem } from '@/server/security/password-policy';
+import { consumeThrottle } from '@/server/security/throttle';
 import { getSession } from '@/server/session';
 
 // The account page's own changes. Next.js accepts server actions only from
@@ -239,4 +243,49 @@ export async function forgetThisDeviceTrust(): Promise<{ ok: true }> {
     await clearDeviceToken();
   }
   return { ok: true };
+}
+
+// ─── Billing (docs/billing/03-paypal.md) ───
+// Stopping renewal cancels at PayPal at once and keeps Pro until the end of
+// the paid period; a refund request also stops renewal and goes to the owner,
+// who decides (nothing is refunded automatically).
+
+function paypalClient() {
+  try {
+    return getPayPalClient();
+  } catch {
+    return null;
+  }
+}
+
+async function billingAction<T>(purpose: string, run: (db: ReturnType<typeof getDb>, client: NonNullable<ReturnType<typeof getPayPalClient>>, userId: NonNullable<ReturnType<typeof toObjectId>>) => Promise<T>) {
+  const [who, t] = await Promise.all([caller(), getT('billing')]);
+  if (!who) return { ok: false as const, message: t('errors.signedOut') };
+  const db = getDb();
+  if (!(await consumeThrottle(db, purpose, who.userId.toHexString(), { limit: 10, windowSeconds: 60 * 60 })).allowed) return { ok: false as const, message: t('errors.throttled') };
+  const client = paypalClient();
+  if (!client) return { ok: false as const, message: t('account.error') };
+  return { ok: true as const, value: await run(db, client, who.userId), t };
+}
+
+export async function stopMyRenewal(): Promise<ActionResult> {
+  const done = await billingAction('billing.stop', (db, client, userId) => stopRenewal(db, client, userId, `user:${userId.toHexString()}`));
+  if (done.ok === false) return refusal('refused', done.message);
+  const { value: result, t } = done;
+  if (result.ok === false) return refusal('failed', result.reason === 'paypal_unavailable' ? t('account.paypalDown') : t('account.error'));
+  const locale = await getRequestLocale();
+  const date = result.paidThrough ? new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(result.paidThrough) : '';
+  return { ok: true, message: t('account.stopDone', { date }) };
+}
+
+const RefundInput = z.object({ reason: z.string().max(500).optional() }).strict();
+
+export async function requestMyRefund(input: unknown): Promise<ActionResult> {
+  const parsed = RefundInput.safeParse(input ?? {});
+  if (!parsed.success) return (await texts()).invalid;
+  const done = await billingAction('billing.refund', (db, client, userId) => requestRefund(db, client, userId, parsed.data.reason ?? null, `user:${userId.toHexString()}`));
+  if (done.ok === false) return refusal('refused', done.message);
+  const { value: result, t } = done;
+  if (result.ok === false) return refusal('failed', result.reason === 'paypal_unavailable' ? t('account.paypalDown') : t('account.error'));
+  return { ok: true, message: t('account.refundSent') };
 }

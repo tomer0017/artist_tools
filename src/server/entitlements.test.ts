@@ -6,7 +6,7 @@ import { FEATURES, collections, type PlanDoc, type PlanId, type SubscriptionDoc 
 import { migrate } from '@/server/db/migrate';
 import { recordUsage } from '@/server/usage';
 import { PLAN_FEATURES } from '@/lib/plans';
-import { authorizeFeatureUse, canUse, computeEntitlements, getEntitlements, remaining, subscriptionGrantsPlan, GRACE_DAYS } from './entitlements';
+import { authorizeFeatureUse, canUse, computeEntitlements, currentSubscription, getEntitlements, remaining, subscriptionGrantsPlan, GRACE_DAYS } from './entitlements';
 import { getUsage } from '@/server/usage';
 
 const NOW = new Date('2026-11-09T12:00:00Z');
@@ -31,6 +31,34 @@ describe('subscriptionGrantsPlan', () => {
     expect(subscriptionGrantsPlan(sub('canceled', day(-1)), NOW)).toBe(false);
     expect(subscriptionGrantsPlan(sub('incomplete', day(30)), NOW)).toBe(false);
     expect(subscriptionGrantsPlan(sub('expired', day(30)), NOW)).toBe(false);
+  });
+
+  it('grants nothing without a paid-through date, whatever the status', () => {
+    for (const status of ['active', 'trialing', 'past_due', 'canceled', 'incomplete', 'expired'] as const) {
+      expect(subscriptionGrantsPlan(sub(status, null), NOW)).toBe(false);
+    }
+  });
+});
+
+describe('currentSubscription', () => {
+  // Newest first, as read from the database.
+  it('picks the subscription that grants access over a newer one that does not', () => {
+    const paidUp = sub('canceled', day(5));
+    const newer = sub('incomplete', null);
+    expect(currentSubscription([newer, paidUp], NOW)).toBe(paidUp);
+  });
+
+  it('picks the one paid furthest ahead when several grant access', () => {
+    const shorter = sub('active', day(3));
+    const longer = sub('canceled', day(20));
+    expect(currentSubscription([shorter, longer], NOW)).toBe(longer);
+    expect(currentSubscription([longer, shorter], NOW)).toBe(longer);
+  });
+
+  it('falls back to the most recent one when none grants access, so its status can be shown', () => {
+    const latest = sub('past_due', day(-GRACE_DAYS - 2));
+    expect(currentSubscription([latest, sub('expired', day(-40))], NOW)).toBe(latest);
+    expect(currentSubscription([], NOW)).toBeNull();
   });
 });
 
@@ -148,6 +176,20 @@ describe('getEntitlements (from the database only)', () => {
 
     await subscriptions.updateOne({ userId }, { $set: { status: 'expired', updatedAt: day(1) } });
     expect((await getEntitlements(mongo.db, userId, NOW)).planId).toBe('free');
+  });
+
+  it('keeps paid access when a newer subscription of the same account grants nothing', async () => {
+    // A cancelled subscription still paid up, then a new checkout that was never approved:
+    // the newest record must not hide the paid one.
+    const userId = await newUser();
+    const { subscriptions } = collections(mongo.db);
+    const base = { userId, provider: 'test', providerCustomerId: 'c', currentPeriodStart: NOW, cancelAtPeriodEnd: false, canceledAt: null, createdAt: NOW };
+    await subscriptions.insertOne({ ...base, providerSubscriptionId: `paid_${userId}`, planId: 'pro', status: 'canceled', currentPeriodEnd: day(10), updatedAt: day(-1) });
+    await subscriptions.insertOne({ ...base, providerSubscriptionId: `new_${userId}`, planId: 'pro', status: 'incomplete', currentPeriodEnd: null, updatedAt: NOW });
+    const e = await getEntitlements(mongo.db, userId, NOW);
+    expect(e).toMatchObject({ planId: 'pro', subscriptionActive: true, subscriptionStatus: 'canceled' });
+    // Once the paid time is over, the newest record is the one shown, and access is Free.
+    expect(await getEntitlements(mongo.db, userId, day(11))).toMatchObject({ planId: 'free', subscriptionActive: false, subscriptionStatus: 'incomplete' });
   });
 
   it('counts real usage against limits', async () => {

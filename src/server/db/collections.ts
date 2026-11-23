@@ -276,6 +276,32 @@ export interface SubscriptionDoc {
   endedAt?: Date | null;
   /** Provider time of the newest event applied, so older events arriving late are not applied over it. */
   lastEventAt?: Date | null;
+  // PayPal (src/server/billing/paypal/): all optional, added 2026-11-23. `currentPeriodEnd` always
+  // mirrors `paidThrough`, so a release that predates these fields still honours paid access.
+  /** sandbox or live: a subscription is only ever looked up in the environment it was made in. */
+  environment?: 'sandbox' | 'live' | null;
+  /** PayPal's own status (ACTIVE, SUSPENDED, CANCELLED…), as last read from PayPal. */
+  providerStatus?: string | null;
+  providerPlanId?: string | null;
+  /** End of the period verified payments cover. Never shortened, except by a refund or chargeback. */
+  paidThrough?: Date | null;
+  /** When a refund or chargeback ended the paid time (only a later payment extends it again). */
+  accessEndedAt?: Date | null;
+  /** When PayPal will charge next (null once renewal has stopped). */
+  nextBillingAt?: Date | null;
+  lastPaymentAt?: Date | null;
+  /** Consecutive failed payments, as PayPal counts them. */
+  failedPayments?: number | null;
+  /** The USD price (cents) this subscription's amount was derived from, and the published pricing version. */
+  basePriceMinor?: number | null;
+  priceVersion?: number | null;
+  /** For ILS: the Bank of Israel rate the amount was locked with. */
+  fx?: { rateMicros: number; rateDate: string; source: 'boi' } | null;
+  /** What the customer agreed to before going to PayPal. */
+  consent?: { at: Date; amountMinor: number; currency: string; interval: 'month'; terms: string } | null;
+  checkoutSessionId?: string | null;
+  /** Something an administrator must look at (a duplicate, a price PayPal did not keep, a chargeback…). */
+  flag?: string | null;
 }
 
 /** The provider's customer record for an account (one per provider). */
@@ -302,6 +328,8 @@ export interface PaymentDoc {
   /** Receipt or invoice page at the provider, when it has one. */
   receiptUrl: string | null;
   createdAt: Date;
+  /** A refund or chargeback: the provider's id of the payment it returns. */
+  refundOf?: string | null;
 }
 
 /** A checkout the server started for an account (the browser never says what it paid for). */
@@ -311,10 +339,81 @@ export interface CheckoutSessionDoc {
   provider: string;
   priceId: string;
   couponCode: string | null;
-  status: 'open' | 'completed' | 'expired';
+  status: 'open' | 'completed' | 'expired' | 'cancelled';
   createdAt: Date;
   expiresAt: Date;
   completedAt: Date | null;
+  // PayPal: the subscription created for this checkout and the exact offer the customer agreed to.
+  providerSubscriptionId?: string | null;
+  approveUrl?: string | null;
+  environment?: 'sandbox' | 'live' | null;
+  providerPlanId?: string | null;
+  currency?: string | null;
+  amountMinor?: number | null;
+  basePriceMinor?: number | null;
+  priceVersion?: number | null;
+  fx?: { rateMicros: number; rateDate: string; source: 'boi' } | null;
+  consentAt?: Date | null;
+}
+
+/** One PayPal billing plan per environment and currency; each subscription carries its own agreed price. */
+export interface BillingPlanDoc {
+  /** `${environment}:${currency}` */
+  _id: string;
+  provider: 'paypal';
+  environment: 'sandbox' | 'live';
+  currency: string;
+  productId: string;
+  planId: string;
+  status: string;
+  createdAt: Date;
+  checkedAt: Date;
+}
+
+/** A customer's request to cancel and be refunded, decided by the owner (never refunded automatically). */
+export interface RefundRequestDoc {
+  _id?: ObjectId;
+  userId: ObjectId;
+  provider: string;
+  providerSubscriptionId: string;
+  reason: string | null;
+  status: 'open' | 'refunded' | 'declined';
+  requestedAt: Date;
+  /** The policy's suggestion when it was made: a full refund within 7 days of the first payment, else the unused part. */
+  suggested: { kind: 'full' | 'prorated'; amountMinor: number; currency: string; providerPaymentId: string | null };
+  decidedAt: Date | null;
+  decidedBy: string | null;
+  note: string | null;
+}
+
+/** Who may subscribe: until it is opened, only administrators and the testers listed. */
+export interface BillingSettingsDoc {
+  _id: 'access';
+  openToEveryone: boolean;
+  testerEmails: string[];
+  updatedAt: Date;
+  updatedBy: string;
+}
+
+/**
+ * A Bank of Israel representative rate (src/server/billing/fx.ts), one per
+ * currency pair and publication date, stored exactly as published.
+ */
+export interface FxRateDoc {
+  /** `${pair}:${date}` */
+  _id: string;
+  pair: 'USD_ILS';
+  /** Publication date in Israel, YYYY-MM-DD. */
+  date: string;
+  /** Shekels per dollar in millionths (3.343 → 3_343_000): no floats in money. */
+  rateMicros: number;
+  source: 'boi';
+  fetchedAt: Date;
+  /** The last time the Bank of Israel was reached and this was still its newest rate. */
+  checkedAt?: Date | null;
+  /** Set when the Bank of Israel later reported another value for the same date. */
+  revisedAt?: Date | null;
+  previousRateMicros?: number | null;
 }
 
 /** One comparison of our subscriptions with the provider's (src/server/billing/reconcile.ts). */
@@ -473,7 +572,12 @@ export type AuditEventType =
   | 'billing.checkout_started'
   | 'billing.payment'
   | 'billing.cancel_requested'
+  | 'billing.cancelled'
+  | 'billing.refund_requested'
+  | 'billing.refund_closed'
+  | 'billing.flagged'
   | 'billing.reconciled'
+  | 'admin.billing_access_changed'
   | 'account.status_changed'
   | 'subscription.changed';
 
@@ -606,6 +710,10 @@ export function collections(db: Db) {
     payments: db.collection<PaymentDoc>('payments'),
     checkoutSessions: db.collection<CheckoutSessionDoc>('checkout_sessions'),
     reconciliationRuns: db.collection<ReconciliationRunDoc>('reconciliation_runs'),
+    fxRates: db.collection<FxRateDoc>('fx_rates'),
+    billingPlans: db.collection<BillingPlanDoc>('billing_plans'),
+    refundRequests: db.collection<RefundRequestDoc>('refund_requests'),
+    billingSettings: db.collection<BillingSettingsDoc>('billing_settings'),
     adminMfa: db.collection<AdminMfaDoc>('admin_mfa'),
     adminMfaSessions: db.collection<AdminMfaSessionDoc>('admin_mfa_sessions'),
     adminTrustedDevices: db.collection<AdminTrustedDeviceDoc>('admin_trusted_devices'),

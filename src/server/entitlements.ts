@@ -35,8 +35,14 @@ import { countUsage, getUsage, giveBackUsage, takeUsage, usageDay, usagePeriod }
 // it to `plans` (src/server/config/catalog.ts). It is read on every request:
 // a publication applies to everyone's next request, in every process.
 
-/** Days a subscription keeps its plan after its period ends while renewal or a failed payment resolves. */
-export const GRACE_DAYS = 3;
+/**
+ * Days a subscription keeps its plan after its paid period ends while a
+ * renewal or a failed payment resolves. PayPal retries a failed renewal after
+ * 5 days (and again after 10): a week covers the first retry, so a card that
+ * is fixed in time never loses Pro, and a network or webhook delay never does.
+ * A stopped (cancelled) subscription gets no grace.
+ */
+export const GRACE_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface Entitlements {
@@ -76,7 +82,11 @@ export function offerOf(plans: Partial<Record<PlanId, PlanState>>): PlanOffer {
 }
 type UserState = { status: AccountStatus; role?: unknown; plan?: unknown };
 
-/** Whether a subscription currently grants its plan. */
+/**
+ * Whether a subscription currently grants its plan. Paid access always has an
+ * end: a subscription without a period end (paid-through date) grants nothing,
+ * whatever its status, so a missing date can never mean "Pro for ever".
+ */
 export function subscriptionGrantsPlan(subscription: SubscriptionState | null, now: Date): boolean {
   if (!subscription) return false;
   const end = subscription.currentPeriodEnd?.getTime() ?? null;
@@ -84,7 +94,6 @@ export function subscriptionGrantsPlan(subscription: SubscriptionState | null, n
   switch (subscription.status) {
     case 'active':
     case 'trialing':
-      return graceEnd === null || now.getTime() < graceEnd;
     case 'past_due':
       return graceEnd !== null && now.getTime() < graceEnd;
     case 'canceled':
@@ -93,6 +102,32 @@ export function subscriptionGrantsPlan(subscription: SubscriptionState | null, n
     default:
       return false;
   }
+}
+
+/** How many of an account's subscriptions are read (newest first) to decide which one counts. */
+export const SUBSCRIPTIONS_READ = 20;
+
+/**
+ * The subscription that decides an account's paid access. An account can have
+ * several: a cancelled one still paid up next to a new one, or a duplicate a
+ * provider let through. Of those granting their plan now, the best plan wins,
+ * then the one paid furthest ahead; when none grants anything, the most
+ * recently updated one is returned so its status can still be shown.
+ * `subscriptions` must be sorted newest first (by `updatedAt`).
+ */
+export function currentSubscription<T extends SubscriptionState>(subscriptions: readonly T[], now: Date): T | null {
+  let best: T | null = null;
+  for (const candidate of subscriptions) {
+    if (!subscriptionGrantsPlan(candidate, now)) continue;
+    if (!best) {
+      best = candidate;
+      continue;
+    }
+    const betterPlanId = betterPlan(best.planId, candidate.planId) !== best.planId;
+    const samePlanLaterEnd = candidate.planId === best.planId && candidate.currentPeriodEnd!.getTime() > best.currentPeriodEnd!.getTime();
+    if (betterPlanId || samePlanLaterEnd) best = candidate;
+  }
+  return best ?? subscriptions[0] ?? null;
 }
 
 /** The plan an administrator assigned; anything unexpected in the document counts as Free. */
@@ -270,9 +305,9 @@ export async function describablePlanOffer(db: () => Db): Promise<PlanOffer | nu
 /** Entitlements of an account, read entirely from the database. */
 export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()): Promise<Entitlements> {
   const { users, subscriptions } = collections(db);
-  const [user, subscription, plans, usage, dailyUsage, grant] = await Promise.all([
+  const [user, subscriptionDocs, plans, usage, dailyUsage, grant] = await Promise.all([
     users.findOne({ _id: userId }, { projection: { status: 1, role: 1, plan: 1 } }),
-    subscriptions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { planId: 1, status: 1, currentPeriodEnd: 1 } }),
+    subscriptions.find({ userId }, { sort: { updatedAt: -1 }, limit: SUBSCRIPTIONS_READ, projection: { planId: 1, status: 1, currentPeriodEnd: 1 } }).toArray(),
     loadPlans(db),
     getUsage(db, userId, usagePeriod(now)),
     getUsage(db, userId, usageDay(now)),
@@ -280,7 +315,7 @@ export async function getEntitlements(db: Db, userId: ObjectId, now = new Date()
   ]);
   return computeEntitlements({
     user: user ? { status: user.status ?? 'active', role: user.role, plan: user.plan } : null,
-    subscription,
+    subscription: currentSubscription(subscriptionDocs, now),
     plans,
     usage,
     dailyUsage,

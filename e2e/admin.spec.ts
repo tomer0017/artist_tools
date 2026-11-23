@@ -226,18 +226,18 @@ test.describe('configuration, coupons and analytics', () => {
     await expect(page.getByLabel('Free quota for Saved images', { exact: true })).toHaveValue('');
   });
 
-  test('keeps prices as exact amounts, never shown on the public plans page', async ({ page }) => {
+  test('keeps the Pro price as an exact amount, never offered on the public plans page without PayPal', async ({ page }) => {
     await page.goto('/admin/pricing');
     await page.getByRole('button', { name: 'Start a draft' }).click();
-    await page.getByRole('button', { name: 'Add a price' }).click();
-    await page.getByLabel('Amount').last().fill('9.90');
-    await page.getByLabel('Offered').last().check();
+    await page.getByLabel('USD per month').fill('9.90');
     await page.getByRole('button', { name: 'Save draft' }).click();
-    await expect(page.getByRole('list', { name: 'Changes in this draft' })).toContainText('Adds Monthly USD $9.90');
+    await expect(page.getByRole('list', { name: 'Changes in this draft' })).toContainText('Monthly Pro price: no price → $9.90 a month');
     await page.getByRole('button', { name: /^Publish version \d+$/ }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Publish' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'is live.' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'PayPal and the shekel price' })).toContainText('Not set up on this server');
 
+    // This server has no PayPal: Pro is still "coming soon", with no price.
     await page.goto('/pricing');
     expect(await page.locator('main').innerText()).not.toContain('9.90');
   });

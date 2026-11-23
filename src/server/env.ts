@@ -163,6 +163,57 @@ export function authConfig() {
   };
 }
 
+// PayPal (docs/billing/): unset, nobody can subscribe and nothing calls PayPal.
+// The credentials come as a set; the webhook ID may follow once the webhook is
+// registered (until then no notification can be verified, so none is applied,
+// and reconciliation keeps subscriptions right). Live credentials, which move
+// real money, are refused anywhere but APP_ENV=production: staging and local
+// machines can only ever use the sandbox.
+const PAYPAL_API = { sandbox: 'https://api-m.sandbox.paypal.com', live: 'https://api-m.paypal.com' } as const;
+const credential = (name: string) =>
+  z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_.-]{20,200}$/, `${name} does not look like a PayPal credential (copy it again from the PayPal developer dashboard)`);
+
+const paypalSchema = z
+  .object({
+    APP_ENV: z.string().optional(),
+    PAYPAL_ENV: z.enum(['sandbox', 'live'], { message: 'PAYPAL_ENV must be "sandbox" or "live"' }).optional(),
+    PAYPAL_CLIENT_ID: credential('PAYPAL_CLIENT_ID').optional(),
+    PAYPAL_CLIENT_SECRET: credential('PAYPAL_CLIENT_SECRET').optional(),
+    PAYPAL_WEBHOOK_ID: z.string().trim().regex(/^[A-Z0-9]{8,40}$/, 'PAYPAL_WEBHOOK_ID does not look like a PayPal webhook ID').optional(),
+  })
+  .refine((env) => [env.PAYPAL_ENV, env.PAYPAL_CLIENT_ID, env.PAYPAL_CLIENT_SECRET].every(Boolean) || ![env.PAYPAL_ENV, env.PAYPAL_CLIENT_ID, env.PAYPAL_CLIENT_SECRET, env.PAYPAL_WEBHOOK_ID].some(Boolean), {
+    message: 'PAYPAL_ENV, PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET must be set together',
+  })
+  .refine((env) => env.PAYPAL_ENV !== 'live' || env.APP_ENV === 'production', {
+    message: 'PAYPAL_ENV=live (real money) is allowed only with APP_ENV=production; use the sandbox anywhere else',
+  });
+
+export interface PayPalSettings {
+  environment: 'sandbox' | 'live';
+  /** PayPal's REST API for that environment. */
+  apiBase: string;
+  clientId: string;
+  clientSecret: string;
+  /** The ID PayPal gave our webhook; null until it is registered (nothing can be verified before). */
+  webhookId: string | null;
+}
+
+/** PayPal's settings, or null when this server has no PayPal (subscribing is then unavailable). */
+export function paypalConfig(): PayPalSettings | null {
+  const env = read(paypalSchema, 'PayPal');
+  if (!env.PAYPAL_ENV || !env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET) return null;
+  return {
+    environment: env.PAYPAL_ENV,
+    apiBase: PAYPAL_API[env.PAYPAL_ENV],
+    clientId: env.PAYPAL_CLIENT_ID,
+    clientSecret: env.PAYPAL_CLIENT_SECRET,
+    webhookId: env.PAYPAL_WEBHOOK_ID ?? null,
+  };
+}
+
 /**
  * Where Learn's reference images and static worksheets are kept
  * (LEARN_ASSETS_DIR, an absolute path; ADR-0017): outside every release and

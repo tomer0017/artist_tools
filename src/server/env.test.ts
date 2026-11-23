@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from 'vitest';
-import { authConfig } from './env';
+import { authConfig, paypalConfig } from './env';
 
 const BASE = { BETTER_AUTH_URL: 'https://staging.example.com', BETTER_AUTH_SECRET: 's'.repeat(40) };
 const saved = { ...process.env };
@@ -177,5 +177,62 @@ describe('authConfig', () => {
     }
     expect(message).toContain('SMTP_PORT');
     expect(message).not.toContain('provider-secret');
+  });
+});
+
+describe('paypalConfig', () => {
+  const ID = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_';
+  const SECRET = 'EFghIJklMNopQRstUVwxYZ0123456789abcdef-_';
+  const clean = () => {
+    for (const key of ['APP_ENV', 'PAYPAL_ENV', 'PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_WEBHOOK_ID']) delete process.env[key];
+  };
+  const set = (env: Record<string, string>) => {
+    clean();
+    Object.assign(process.env, env);
+  };
+  const failure = () => {
+    try {
+      paypalConfig();
+    } catch (error) {
+      return (error as Error).message;
+    }
+    return null;
+  };
+
+  it('is off until PayPal is configured', () => {
+    set({});
+    expect(paypalConfig()).toBeNull();
+  });
+
+  it('uses the sandbox anywhere, with or without its webhook ID yet', () => {
+    set({ APP_ENV: 'staging', PAYPAL_ENV: 'sandbox', PAYPAL_CLIENT_ID: ID, PAYPAL_CLIENT_SECRET: SECRET });
+    expect(paypalConfig()).toEqual({ environment: 'sandbox', apiBase: 'https://api-m.sandbox.paypal.com', clientId: ID, clientSecret: SECRET, webhookId: null });
+    set({ PAYPAL_ENV: 'sandbox', PAYPAL_CLIENT_ID: ID, PAYPAL_CLIENT_SECRET: SECRET, PAYPAL_WEBHOOK_ID: '1JE4291016473214C' });
+    expect(paypalConfig()?.webhookId).toBe('1JE4291016473214C');
+  });
+
+  it('allows live credentials (real money) only in production', () => {
+    for (const appEnv of ['staging', 'development', 'test']) {
+      set({ APP_ENV: appEnv, PAYPAL_ENV: 'live', PAYPAL_CLIENT_ID: ID, PAYPAL_CLIENT_SECRET: SECRET });
+      expect(failure()).toContain('PAYPAL_ENV=live (real money) is allowed only with APP_ENV=production');
+    }
+    // An unnamed environment is not production either.
+    set({ PAYPAL_ENV: 'live', PAYPAL_CLIENT_ID: ID, PAYPAL_CLIENT_SECRET: SECRET });
+    expect(failure()).toContain('allowed only with APP_ENV=production');
+    set({ APP_ENV: 'production', PAYPAL_ENV: 'live', PAYPAL_CLIENT_ID: ID, PAYPAL_CLIENT_SECRET: SECRET });
+    expect(paypalConfig()).toMatchObject({ environment: 'live', apiBase: 'https://api-m.paypal.com' });
+  });
+
+  it('refuses half a configuration, and names the problem without echoing a secret', () => {
+    set({ PAYPAL_ENV: 'sandbox', PAYPAL_CLIENT_ID: ID });
+    expect(failure()).toContain('must be set together');
+    set({ PAYPAL_WEBHOOK_ID: '1JE4291016473214C' });
+    expect(failure()).toContain('must be set together');
+    set({ PAYPAL_ENV: 'sandbox', PAYPAL_CLIENT_ID: ID, PAYPAL_CLIENT_SECRET: 'not a secret with spaces' });
+    const message = failure();
+    expect(message).toContain('PAYPAL_CLIENT_SECRET does not look like a PayPal credential');
+    expect(message).not.toContain('not a secret with spaces');
+    set({ PAYPAL_ENV: 'production', PAYPAL_CLIENT_ID: ID, PAYPAL_CLIENT_SECRET: SECRET });
+    expect(failure()).toContain('PAYPAL_ENV must be "sandbox" or "live"');
   });
 });

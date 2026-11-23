@@ -3,12 +3,18 @@ import Link from 'next/link';
 import { PlugZap } from 'lucide-react';
 import { formatMoney } from '@/lib/money';
 import { PLAN_NAMES, isPlanId } from '@/lib/plans';
+import { mayChangeRoles } from '@/server/admin';
+import { formatRate } from '@/server/billing/fx';
 import { billingOverview, type BillingAccount } from '@/server/billing/overview';
+import { billingAccess } from '@/server/billing/paypal/subscriptions';
+import { collections } from '@/server/db/collections';
+import { paypalConfig } from '@/server/env';
 import { getDb } from '@/server/db/client';
 import { requireAdmin } from '@/server/session';
 import { AdminShell } from '../AdminShell';
 import { Tile, moneyList } from '../figures';
 import { dateOnly, dateTime } from '../format';
+import { BillingAccessForm, CheckWithPayPal, RefundDecision } from './BillingControls';
 
 // Billing, read-only (docs/billing/02-architecture.md): revenue figures and
 // the latest subscriptions, payments, provider events and reconciliation
@@ -45,32 +51,97 @@ function Section({ id, title, empty, count, children }: { id: string; title: str
 
 export default async function AdminBillingPage() {
   const admin = await requireAdmin('/admin/billing');
-  const { metrics: m, subscriptions, payments, events, runs } = await billingOverview(getDb());
+  const db = getDb();
+  const { metrics: m, subscriptions, payments, events, runs } = await billingOverview(db);
   const viewer = `admin:${admin.id.toHexString()}`;
+  const paypal = (() => {
+    try {
+      return paypalConfig();
+    } catch {
+      return null;
+    }
+  })();
+  const [access, ownerOk, refundDocs] = await Promise.all([billingAccess(db), mayChangeRoles(db, admin.id), collections(db).refundRequests.find({}).sort({ requestedAt: -1 }).limit(20).toArray()]);
+  const refundPeople = refundDocs.length ? await collections(db).users.find({ _id: { $in: refundDocs.map((r) => r.userId) } }, { projection: { email: 1 } }).toArray() : [];
+  const emailOf = new Map(refundPeople.map((u) => [u._id.toHexString(), u.email]));
+  const paypalHost = paypal?.environment === 'sandbox' ? 'https://www.sandbox.paypal.com' : 'https://www.paypal.com';
 
   return (
     <AdminShell active="billing">
       <h1 className="mt-6 text-2xl font-bold tracking-tight text-foreground">Billing</h1>
-      <div className="mt-3 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground">
-        <PlugZap className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-        <p>
-          <strong>No payment provider is connected yet</strong>, so nobody can pay and nothing here changes anyone&apos;s plan. Once a provider is chosen
-          and connected, this page shows what its verified notifications recorded: subscriptions, payments and refunds. Amounts stay in the currency
-          they were paid in.
-        </p>
-      </div>
+      {paypal ? (
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground">
+          <p className="flex items-start gap-3">
+            <PlugZap className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+            <span>
+              <strong>PayPal {paypal.environment === 'live' ? 'Live: real payments' : 'Sandbox: test payments, no real money'}</strong>. Webhook{' '}
+              {paypal.webhookId ? 'registered' : 'not registered yet (nothing PayPal notifies can be verified; the hourly check keeps subscriptions right)'}.{' '}
+              Subscriptions are open to {access.openToEveryone ? 'everyone' : `administrators and ${access.testerEmails.length} tester${access.testerEmails.length === 1 ? '' : 's'}`}.
+            </span>
+          </p>
+          <CheckWithPayPal />
+        </div>
+      ) : (
+        <div className="mt-3 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground">
+          <PlugZap className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+          <p>
+            <strong>No payment provider is connected yet</strong>, so nobody can pay and nothing here changes anyone&apos;s plan. Once PayPal is set up on this
+            server (docs/billing/03-paypal.md), this page shows what PayPal reported: subscriptions, payments and refunds. Amounts stay in the currency they
+            were paid in.
+          </p>
+        </div>
+      )}
 
       <section aria-label="Headline figures" className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
         <Tile label="MRR" value={moneyList(m.mrrMinor)} detail="Monthly recurring revenue" />
         <Tile label="ARR" value={moneyList(m.arrMinor)} />
-        <Tile label="Active" value={m.subscriptions.active} detail={`${m.subscriptions.trialing} on trial · ${m.subscriptions.pastDue} past due`} />
-        <Tile label="Cancelling" value={m.subscriptions.cancelingAtPeriodEnd} detail="At the end of the period" />
+        <Tile label="Active" value={m.subscriptions.active} detail={[Object.entries(m.subscriptions.activeByCurrency).map(([c, n]) => `${n} ${c}`).join(' · '), `${m.subscriptions.pastDue} payment issue`].filter(Boolean).join(' · ')} />
+        <Tile label="Renewal stopped" value={m.subscriptions.cancelingAtPeriodEnd} detail="Pro paid, not renewing" />
         <Tile label="Ended (30 d)" value={m.last30Days.ended} detail={m.last30Days.churnRate === null ? undefined : `churn ${(m.last30Days.churnRate * 100).toFixed(1)}%`} />
         <Tile label="Refunds (30 d)" value={m.last30Days.refunds.count} detail={m.last30Days.refunds.count ? moneyList(m.last30Days.refunds.amountMinor) : undefined} />
         <Tile label="Failed payments (30 d)" value={m.last30Days.failedPayments} />
         <Tile label="Disputes (30 d)" value={m.last30Days.chargebacks} />
       </section>
       <p className="mt-2 text-xs text-muted-foreground">Test accounts are left out of these figures; they are marked in the lists below.</p>
+
+      {paypal && (
+        <section aria-labelledby="access-heading" className="mt-6 rounded-2xl border border-border bg-card p-4 md:p-5">
+          <h2 id="access-heading" className="text-base font-semibold text-foreground">
+            Who can subscribe
+          </h2>
+          <BillingAccessForm openToEveryone={access.openToEveryone} testerEmails={access.testerEmails} editable={ownerOk} />
+          {!ownerOk && <p className="mt-2 text-xs text-muted-foreground">Only the owner can change this.</p>}
+        </section>
+      )}
+
+      {refundDocs.length > 0 && (
+        <Section id="refunds-heading" title="Refund requests" empty="No refund requests." count={refundDocs.length}>
+          <ul aria-labelledby="refunds-heading" className="mt-3 divide-y divide-border">
+            {refundDocs.map((r) => (
+              <li key={r._id!.toHexString()} className="py-2.5 text-sm">
+                <p className="flex flex-wrap justify-between gap-x-4">
+                  <Link href={`/admin/users/${r.userId.toHexString()}`} className="font-medium text-foreground underline-offset-2 hover:underline">
+                    {emailOf.get(r.userId.toHexString()) ?? 'Deleted account'}
+                  </Link>
+                  <span className={r.status === 'open' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>{r.status}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {dateTime(r.requestedAt)} · suggested {r.suggested.kind === 'full' ? 'full refund' : 'unused part'} {money(r.suggested.amountMinor, r.suggested.currency)}
+                  {r.suggested.providerPaymentId ? ` of payment ${r.suggested.providerPaymentId}` : ''}
+                  {r.reason ? ` · “${r.reason}”` : ''}
+                  {r.note ? ` · note: ${r.note}` : ''}
+                </p>
+                {r.status === 'open' && (
+                  <>
+                    <p className="mt-1 text-xs text-muted-foreground">Refund it in PayPal (Activity → the payment → Refund): PayPal reports it back and this request closes by itself. Decline or close it here otherwise.</p>
+                    <RefundDecision requestId={r._id!.toHexString()} editable={ownerOk} />
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Section id="subscriptions-heading" title="Subscriptions" empty="No subscriptions yet." count={subscriptions.length}>
         <ul aria-labelledby="subscriptions-heading" className="mt-3 divide-y divide-border">
@@ -84,7 +155,18 @@ export default async function AdminBillingPage() {
               <span className="w-full text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{s.status.replace('_', ' ')}</span>
                 {s.cancelAtPeriodEnd ? ` · ends ${dateOnly(s.currentPeriodEnd)}` : s.currentPeriodEnd ? ` · renews ${dateOnly(s.currentPeriodEnd)}` : ''}
-                {` · ${s.provider} ${s.providerSubscriptionId ?? ''} · updated ${dateTime(s.updatedAt)}`}
+                {s.providerStatus ? ` · PayPal ${s.providerStatus.toLowerCase()}` : ''}
+                {s.fx ? ` · at ${formatRate(s.fx.rateMicros)} (${s.fx.rateDate})` : ''}
+                {` · ${s.provider} `}
+                {s.provider === 'paypal' && s.providerSubscriptionId ? (
+                  <a href={`${paypalHost}/billing/subscriptions/${encodeURIComponent(s.providerSubscriptionId)}`} rel="noreferrer" target="_blank" className="underline underline-offset-2 hover:text-foreground">
+                    {s.providerSubscriptionId}
+                  </a>
+                ) : (
+                  (s.providerSubscriptionId ?? '')
+                )}
+                {` · updated ${dateTime(s.updatedAt)}`}
+                {s.flag && <span className="ms-1 font-semibold text-destructive">· {s.flag.replace('_', ' ')}</span>}
               </span>
             </li>
           ))}

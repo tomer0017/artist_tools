@@ -295,7 +295,7 @@ describe('billing metrics', () => {
     expect(await billingMetrics(db, { now: NOW })).toEqual({
       mrrMinor: { USD: 2700, ILS: 3000 },
       arrMinor: { USD: 32_400, ILS: 36_000 },
-      subscriptions: { active: 3, trialing: 1, pastDue: 1, cancelingAtPeriodEnd: 1 },
+      subscriptions: { active: 3, trialing: 1, pastDue: 1, cancelingAtPeriodEnd: 1, activeByCurrency: { USD: 2, ILS: 1 } },
       last30Days: { ended: 1, churnRate: 1 / 6, refunds: { count: 1, amountMinor: { USD: 300 } }, failedPayments: 1, chargebacks: 1 },
     });
     expect((await billingMetrics(db, { now: NOW, includeTestAccounts: true })).mrrMinor.USD).toBe(7700);

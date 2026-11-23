@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { GRACE_DAYS } from '@/server/entitlements';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ObjectId, type Db } from 'mongodb';
 import { MONGO_STARTUP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
@@ -301,7 +302,7 @@ describe('where access comes from', () => {
     expect(accessSourcesOf({ subscription: sub('canceled', soon, true), grants: [] }, now)).toEqual([{ kind: 'paid', status: 'canceled', periodEnd: soon, cancelAtPeriodEnd: true }]);
     expect(accessSourcesOf({ subscription: sub('canceled', new Date(now.getTime() - 1)), grants: [] }, now)).toEqual([]);
     expect(accessSourcesOf({ subscription: sub('past_due', new Date(now.getTime() - DAY)), grants: [] }, now).map((s) => s.kind)).toEqual(['paid']);
-    expect(accessSourcesOf({ subscription: sub('past_due', new Date(now.getTime() - 4 * DAY)), grants: [] }, now)).toEqual([]);
+    expect(accessSourcesOf({ subscription: sub('past_due', new Date(now.getTime() - (GRACE_DAYS + 1) * DAY)), grants: [] }, now)).toEqual([]);
     expect(accessSourcesOf({ subscription: sub('expired', soon), grants: [] }, now)).toEqual([]);
     // Ended grants and anything that is not Pro are not sources; an unknown plan counts as Free.
     expect(accessSourcesOf({ plan: 'gold', subscription: { ...sub('active', soon), planId: 'free' }, grants: [{ planId: 'pro', endsAt: now }, { planId: 'free', endsAt: soon }] }, now)).toEqual([]);

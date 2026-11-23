@@ -18,6 +18,7 @@ export function PlanComparison({
   isAdmin = false,
   freeAction,
   registration,
+  proAction = null,
 }: {
   /** What each plan includes as published. */
   offer: PlanOffer;
@@ -28,6 +29,8 @@ export function PlanComparison({
   freeAction?: { href: string; label: string } | null;
   /** Shown in the questions when known: whether anyone can sign up yet. */
   registration?: 'open' | 'invite' | null;
+  /** Once Pro can be bought: its monthly price and where subscribing starts (otherwise Pro reads "coming soon"). */
+  proAction?: { href: string; label: string; price: string; note: string } | null;
 }) {
   const t = useTranslations('plans');
   const tg = useTranslations();
@@ -96,9 +99,13 @@ export function PlanComparison({
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">{t('proLead')}</p>
             </div>
-            <span className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-xs font-semibold text-foreground">
-              <Clock className="h-3 w-3" aria-hidden="true" /> {t('comingSoon')}
-            </span>
+            {proAction ? (
+              <span className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{proAction.price}</span>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-xs font-semibold text-foreground">
+                <Clock className="h-3 w-3" aria-hidden="true" /> {t('comingSoon')}
+              </span>
+            )}
           </div>
           <p className="mt-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('everythingPlus')}</p>
           <ul className="mt-3 space-y-3" aria-label={t('addedInPro')}>
@@ -115,6 +122,13 @@ export function PlanComparison({
           <div className="mt-auto pt-6">
             {current === 'pro' && !isAdmin ? (
               <p className="flex h-11 items-center justify-center rounded-xl border border-primary/40 bg-primary/10 text-sm font-semibold text-primary">{t('currentPlan')}</p>
+            ) : proAction ? (
+              <Link
+                href={proAction.href}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <Crown className="h-4 w-4" aria-hidden="true" /> {proAction.label}
+              </Link>
             ) : (
               <button
                 type="button"
@@ -124,7 +138,7 @@ export function PlanComparison({
                 <Clock className="h-4 w-4" aria-hidden="true" /> {t('comingSoon')}
               </button>
             )}
-            <p className="mt-2 text-center text-xs text-muted-foreground">{t('cannotBuy')}</p>
+            <p className="mt-2 text-center text-xs text-muted-foreground">{proAction ? proAction.note : t('cannotBuy')}</p>
           </div>
         </section>
       </div>

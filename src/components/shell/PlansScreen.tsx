@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { useTranslations } from 'use-intl';
+import { useLocale, useTranslations } from 'use-intl';
+import { formatMoney } from '@/lib/money';
 import { PlanComparison } from '@/components/plans/PlanComparison';
 import { hasAllTools } from '@/lib/plans';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -15,6 +16,7 @@ export default function PlansScreen() {
   const state = useAccount();
   const isMobile = useIsMobile();
   const t = useTranslations();
+  const locale = useLocale();
   const refresh = state?.refresh;
 
   // Show the plan as it is now (an admin may have just changed it).
@@ -44,7 +46,21 @@ export default function PlansScreen() {
         </p>
         {state && (
           <div className="mt-5">
-            <PlanComparison offer={state.account.offer} current={state.account.plan.effective} isAdmin={state.account.role === 'admin'} />
+            <PlanComparison
+              offer={state.account.offer}
+              current={state.account.plan.effective}
+              isAdmin={state.account.role === 'admin'}
+              proAction={
+                state.account.billing?.available && !state.account.billing.subscription?.renewing
+                  ? {
+                      href: '/subscribe',
+                      label: t('billing.subscribe'),
+                      price: state.account.billing.offer ? t('billing.perMonth', { price: formatMoney(state.account.billing.offer.amountMinor, state.account.billing.offer.currency, locale) }) : t('billing.subscribe'),
+                      note: t('billing.planNote'),
+                    }
+                  : null
+              }
+            />
           </div>
         )}
       </div>

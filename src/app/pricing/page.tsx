@@ -5,13 +5,17 @@ import { PlanComparison } from '@/components/plans/PlanComparison';
 import { BrandMark } from '@/components/shell/BrandMark';
 import { localizedPath } from '@/i18n/config';
 import { getRequestLocale, getT } from '@/i18n/server';
+import { formatMoney } from '@/lib/money';
 import { hasAllTools, isDefaultSplit } from '@/lib/plans';
 import { registrationMode } from '@/server/auth';
+import { basePrice } from '@/server/billing/paypal/subscriptions';
+import { paypalConfig } from '@/server/env';
 import { getDb } from '@/server/db/client';
 import { describablePlanOffer } from '@/server/entitlements';
 
-// Public plan comparison, linked from the landing page. No prices and nothing
-// to buy: Free is available, Pro is coming soon.
+// Public plan comparison, linked from the landing page. Until subscriptions
+// open (PayPal set up and a price published) there is nothing to buy and Pro
+// reads "coming soon"; afterwards Pro shows its monthly price and leads to checkout.
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT('meta');
@@ -34,6 +38,15 @@ export default async function PricingPage() {
   const t = await getT('plans');
   const tc = await getT('common');
   const tl = await getT('landing');
+  const tb = await getT('billing');
+  // Once subscriptions are open: Pro's monthly price (in USD; signed-in accounts see their own currency at checkout).
+  const base = await (async () => {
+    try {
+      return paypalConfig() ? await basePrice(getDb()) : null;
+    } catch {
+      return null;
+    }
+  })();
   return (
     <main className="min-h-[100dvh] bg-background" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="mx-auto w-full max-w-4xl px-4 pb-12 pt-5 md:px-6 md:pt-8">
@@ -63,6 +76,7 @@ export default async function PricingPage() {
                   : { href: '/app', label: tc('openStudio') }
               }
               registration={registration}
+              proAction={base ? { href: '/subscribe', label: tb('subscribe'), price: tb('perMonth', { price: formatMoney(base.amountMinor, 'USD', locale) }), note: tb('planNote') } : null}
             />
           ) : (
             // The database could not be read: no comparison rather than a wrong one.

@@ -8,6 +8,7 @@
 //   npm run db -- revoke-admin <userId>       take the admin role away; never from the last admin (audited)
 //   npm run db -- set-plan <userId> free|pro  assign a plan without billing, for testing (audited)
 //   npm run db -- maintenance                 nightly: remove never-confirmed password sign-ups, prune rate limits
+//   npm run db -- paypal-check | paypal-setup | billing-reconcile   PayPal (scripts/paypal-commands.ts)
 //   npm run db -- mail-test <email> [en|he]   check the email provider: connect, sign in, send one test message
 //   npm run db -- create-tester <username> free|pro [he]
 //                                             a username account for a tester (ADR-0012); does nothing if the
@@ -59,6 +60,7 @@ import { learnAccess } from '@/lib/learn/access';
 import { LEARN_COLLECTIONS, itemAssetIds, itemsOf } from '@/lib/learn/model';
 import { publishedLearnContent } from '@/server/learn/content';
 import { learnDiscard, learnImportCommand, learnPublish, learnStatus } from './learn-commands';
+import { billingReconcile, paypalCheck, paypalSetup } from './paypal-commands';
 import { closeMongo, getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
@@ -81,7 +83,7 @@ import {
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-owner <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove | learn-import <folder> | learn-status | learn-publish | learn-discard';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-owner <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove | learn-import <folder> | learn-status | learn-publish | learn-discard | paypal-check | paypal-setup | billing-reconcile';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -303,6 +305,15 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
       return;
     case 'learn-discard':
       process.exitCode = await learnDiscard(db);
+      return;
+    case 'paypal-check':
+      process.exitCode = await paypalCheck(db);
+      return;
+    case 'paypal-setup':
+      process.exitCode = await paypalSetup(db);
+      return;
+    case 'billing-reconcile':
+      process.exitCode = await billingReconcile(db);
       return;
     default:
       throw new Error(USAGE);

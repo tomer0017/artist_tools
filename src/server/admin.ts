@@ -20,7 +20,7 @@ import {
   type UserRole,
 } from '@/server/db/collections';
 import { GRANT_REASONS, activeGrant, listGrants, liveGrantFilter } from '@/server/grants';
-import { assignedPlanOf, effectivePlan, getEntitlements, subscriptionGrantsPlan, type Entitlements } from '@/server/entitlements';
+import { assignedPlanOf, currentSubscription, effectivePlan, getEntitlements, subscriptionGrantsPlan, SUBSCRIPTIONS_READ, type Entitlements } from '@/server/entitlements';
 import { pendingInitialPassword } from '@/server/password-accounts';
 import { getUsage, usagePeriod } from '@/server/usage';
 
@@ -206,7 +206,7 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
       { $sort: { createdAt: -1, _id: -1 } },
       { $skip: (page - 1) * pageSize },
       { $limit: pageSize },
-      byUser('subscriptions', [], [{ $sort: { updatedAt: -1 } }, { $limit: 1 }, { $project: { _id: 0, planId: 1, status: 1, currentPeriodEnd: 1, cancelAtPeriodEnd: 1 } }], 'subscription'),
+      byUser('subscriptions', [], [{ $sort: { updatedAt: -1 } }, { $limit: SUBSCRIPTIONS_READ }, { $project: { _id: 0, planId: 1, status: 1, currentPeriodEnd: 1, cancelAtPeriodEnd: 1 } }], 'subscription'),
       byUser('usage', [{ $eq: ['$period', usagePeriod(now)] }, { $eq: ['$feature', 'export.gif'] }], [{ $group: { _id: null, total: { $sum: '$quantity' } } }]),
       byUser('accounts', [{ $eq: ['$providerId', 'google'] }], [{ $sort: { createdAt: 1 } }, { $limit: 1 }, { $project: { _id: 0, accountId: 1 } }], 'google'),
       byUser('accounts', [{ $eq: ['$providerId', 'credential'] }], [{ $count: 'n' }], 'password'),
@@ -228,7 +228,8 @@ export async function listUsers(db: Db, query: UserListQuery = {}, now = new Dat
     .toArray();
 
   const rows: AdminUserRow[] = raw.map((u) => {
-    const subscription = u.subscription[0] ?? null;
+    // The same subscription access is decided by (src/server/entitlements.ts).
+    const subscription = currentSubscription(u.subscription, now);
     const best = u.grants.find((g) => g.planId === 'pro') ?? u.grants[0] ?? null;
     const grant = best ? { planId: best.planId, endsAt: best.endsAt } : null;
     return {
@@ -364,7 +365,7 @@ export interface AdminUserDetail {
   password: { setAt: Date } | null;
   grants: { id: string; planId: PlanId; startsAt: Date; endsAt: Date; reason: string; grantedBy: string; revokedAt: Date | null; extendedAt: Date | null; live: boolean }[];
   sessions: { active: number; lastActiveAt: Date | null };
-  /** The latest subscription, read-only, exactly as the payment provider's verified events wrote it. */
+  /** The subscription deciding paid access (else the latest one), read-only, exactly as verified provider events wrote it. */
   subscription: AdminSubscriptionView | null;
   /** The latest payments, refunds and disputes (read-only, newest first). */
   payments: AdminPaymentView[];
@@ -398,14 +399,13 @@ export async function getUserDetail(db: Db, userId: ObjectId, now = new Date()):
   const { users, accounts, sessions, subscriptions, payments: paymentDocs, auditEvents } = collections(db);
   const user = await users.findOne({ _id: userId });
   if (!user) return null;
-  const [google, password, grants, activeSessions, lastSession, subscription, payments, entitlements, usageThisMonth, logins, events, initialPassword] = await Promise.all([
+  const [google, password, grants, activeSessions, lastSession, subscriptionDocs, payments, entitlements, usageThisMonth, logins, events, initialPassword] = await Promise.all([
     accounts.findOne({ userId, providerId: 'google' }, { sort: { createdAt: 1 }, projection: { accountId: 1, createdAt: 1 } }),
     accounts.findOne({ userId, providerId: 'credential' }, { projection: { createdAt: 1 } }),
     listGrants(db, userId),
     sessions.countDocuments({ userId, expiresAt: { $gt: now } }),
     sessions.findOne({ userId }, { sort: { updatedAt: -1 }, projection: { updatedAt: 1 } }),
-    // The same subscription entitlements read (the latest one).
-    subscriptions.findOne({ userId }, { sort: { updatedAt: -1 } }),
+    subscriptions.find({ userId }, { sort: { updatedAt: -1 }, limit: SUBSCRIPTIONS_READ }).toArray(),
     paymentDocs
       .find({ userId }, { sort: { occurredAt: -1 }, limit: ACCOUNT_PAYMENTS_SHOWN, projection: { kind: 1, status: 1, amountMinor: 1, currency: 1, occurredAt: 1, receiptUrl: 1, provider: 1 } })
       .toArray(),
@@ -416,6 +416,8 @@ export async function getUserDetail(db: Db, userId: ObjectId, now = new Date()):
     pendingInitialPassword(db, userId, now),
   ]);
   const isLive = (g: { revokedAt: Date | null; startsAt: Date; endsAt: Date }) => g.revokedAt === null && g.startsAt <= now && g.endsAt > now;
+  // The same subscription access is decided by (src/server/entitlements.ts).
+  const subscription = currentSubscription(subscriptionDocs, now);
   return {
     id: user._id.toHexString(),
     name: user.name,

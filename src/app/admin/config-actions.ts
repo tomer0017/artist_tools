@@ -9,6 +9,7 @@ import { discardDraft, getPublished, publishDraft, restoreAsDraft, saveDraft, ty
 import { createCoupon, setCouponStatus } from '@/server/coupons';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
+import { mayChangeRoles } from '@/server/admin';
 import { log } from '@/server/log';
 import { currentAdmin, signedInRecently } from '@/server/session';
 import type { ActionResult } from './actions';
@@ -21,6 +22,8 @@ import type { ActionResult } from './actions';
 // command, and here they are published, discarded or restored.
 
 const DENIED: ActionResult = { ok: false, message: 'You are not allowed to do that.' };
+// The Pro price is what customers pay: only the owner changes it (anyone, until an owner is set).
+const OWNER_ONLY: ActionResult = { ok: false, message: 'Only the owner can change prices.' };
 const REAUTH: ActionResult = { ok: false, reauth: true, message: 'For your security, confirm it is you (sign in again), then publish.' };
 
 const specs = { catalog: catalogSpec, pricing: pricingSpec, learn_content: learnContentSpec } as const;
@@ -34,6 +37,7 @@ export async function startDraft(input: { kind: string }): Promise<ActionResult>
   if (!admin) return DENIED;
   const kind = Editable.safeParse(input.kind);
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
+  if (kind.data === 'pricing' && !(await mayChangeRoles(getDb(), admin.id))) return OWNER_ONLY;
   const spec = specs[kind.data] as ConfigSpec<unknown>;
   const published = await getPublished(getDb(), spec);
   // The live document as stored (for the catalog, also what a newer release added: kept, not applied).
@@ -48,6 +52,7 @@ export async function saveConfigDraft(input: { kind: string; document: unknown; 
   if (!admin) return DENIED;
   const kind = Editable.safeParse(input.kind);
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
+  if (kind.data === 'pricing' && !(await mayChangeRoles(getDb(), admin.id))) return OWNER_ONLY;
   const note = typeof input.note === 'string' ? input.note.trim().slice(0, 200) || null : null;
   const actor = `admin:${admin.id.toHexString()}`;
   // The catalog form edits only the features this release knows; the rest of the draft is kept (ADR-0014).
@@ -65,6 +70,7 @@ export async function discardConfigDraft(input: { kind: string }): Promise<Actio
   if (!admin) return DENIED;
   const kind = Kind.safeParse(input.kind);
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
+  if (kind.data === 'pricing' && !(await mayChangeRoles(getDb(), admin.id))) return OWNER_ONLY;
   const discarded = await discardDraft(getDb(), kind.data, `admin:${admin.id.toHexString()}`);
   revalidatePath(pathOf(kind.data));
   return { ok: true, message: discarded ? 'Draft discarded.' : 'There was no draft.' };
@@ -75,6 +81,7 @@ export async function publishConfig(input: { kind: string }): Promise<ActionResu
   if (!admin) return DENIED;
   const kind = Kind.safeParse(input.kind);
   if (!kind.success) return { ok: false, message: 'That request was not valid.' };
+  if (kind.data === 'pricing' && !(await mayChangeRoles(getDb(), admin.id))) return OWNER_ONLY;
   if (!signedInRecently(admin.signedInAt)) return REAUTH;
   const result = await publishDraft(getDb(), specs[kind.data] as ConfigSpec<unknown>, `admin:${admin.id.toHexString()}`);
   revalidatePath(pathOf(kind.data));
@@ -89,6 +96,7 @@ export async function restoreConfig(input: { kind: string; version: number }): P
   if (!admin) return DENIED;
   const parsed = z.object({ kind: Kind, version: z.number().int().min(1) }).safeParse(input);
   if (!parsed.success) return { ok: false, message: 'That request was not valid.' };
+  if (parsed.data.kind === 'pricing' && !(await mayChangeRoles(getDb(), admin.id))) return OWNER_ONLY;
   const result = await restoreAsDraft(getDb(), specs[parsed.data.kind] as ConfigSpec<unknown>, parsed.data.version, `admin:${admin.id.toHexString()}`);
   revalidatePath(pathOf(parsed.data.kind));
   if (result.status === 'not_found') return { ok: false, message: 'That version does not exist.' };

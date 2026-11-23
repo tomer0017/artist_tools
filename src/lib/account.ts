@@ -71,4 +71,28 @@ export interface AccountSummary {
   usernamePasswordEnabled: boolean;
   /** Administrators only: the owner flag (set from the server command line) and their second factor, for the account page. */
   admin?: { owner: boolean; mfaEnrolled: boolean; trustedDevices: number };
+  /** Paying for Pro through PayPal (docs/billing/03-paypal.md). */
+  billing?: BillingSummary;
+}
+
+/** What the account and plans pages show about paying for Pro, as the server read it. */
+export interface BillingSummary {
+  /** Whether this server takes subscriptions now (PayPal set up and a price published). */
+  available: boolean;
+  /** The monthly price in this account's currency now, when it can be stated (ILS needs a confirmed rate). */
+  offer: { amountMinor: number; currency: Currency } | null;
+  subscription: {
+    status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'expired';
+    amountMinor: number;
+    currency: Currency;
+    /** End of the paid period (ISO). */
+    paidThrough: string | null;
+    /** When PayPal charges next (ISO); null once renewal has stopped. */
+    nextBillingAt: string | null;
+    renewing: boolean;
+    /** PayPal's test environment: no real money. */
+    sandbox: boolean;
+  } | null;
+  payments: { kind: 'charge' | 'refund' | 'chargeback'; status: 'succeeded' | 'failed'; amountMinor: number; currency: Currency; at: string }[];
+  refundRequest: { status: 'open' | 'refunded' | 'declined'; requestedAt: string } | null;
 }

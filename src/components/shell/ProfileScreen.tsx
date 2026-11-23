@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BadgeCheck, Check, Crown, Lock, LogOut, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import { useLocale, useTranslations } from 'use-intl';
+import { BillingCard } from '@/components/account/BillingCard';
 import { DataCard, DevicesCard, NameEditor, PreferencesCard, SignInMethodsCard } from '@/components/account/ProfileSections';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { formatMoney } from '@/lib/money';
 import { featureRows, hasAllTools, isDefaultSplit, type FeatureId } from '@/lib/plans';
 import { AccountAvatar, useAccount, useSignOut, type StudioAccount } from './account';
 import { BrandMark } from './BrandMark';
@@ -253,13 +255,23 @@ export default function ProfileScreen() {
             <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
               <p className="font-semibold text-foreground">{t('plan.upgradeTitle')}</p>
               <p className="mt-1 text-sm text-muted-foreground">{isDefaultSplit(account.offer) ? t('plan.upgradeLead') : t('plan.upgradeLeadPartial')}</p>
-              <button
-                type="button"
-                disabled
-                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground opacity-60 sm:w-auto sm:px-6"
-              >
-                <Sparkles className="h-4 w-4" aria-hidden="true" /> {t('plan.upgradeSoon')}
-              </button>
+              {account.billing?.available ? (
+                <Link
+                  href="/subscribe"
+                  className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground hover:opacity-90 sm:w-auto sm:px-6"
+                >
+                  <Crown className="h-4 w-4" aria-hidden="true" /> {tg('billing.subscribe')}
+                  {account.billing.offer && <span className="font-normal opacity-90">· {tg('billing.perMonth', { price: formatMoney(account.billing.offer.amountMinor, account.billing.offer.currency, locale) })}</span>}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground opacity-60 sm:w-auto sm:px-6"
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden="true" /> {t('plan.upgradeSoon')}
+                </button>
+              )}
             </div>
           )}
           <Link
@@ -271,6 +283,7 @@ export default function ProfileScreen() {
         </section>
         )}
 
+        <BillingCard account={account} onChanged={state.refresh} />
         <PreferencesCard account={account} onChanged={state.refresh} />
         <SignInMethodsCard account={account} onChanged={state.refresh} />
         <DevicesCard />
