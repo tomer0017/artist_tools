@@ -116,28 +116,37 @@ test.describe('signed in', () => {
   // (SessionKeepAlive), which re-issues the cookie for 30 days. The seeded
   // cookie lasts only until the browser closes, so without that renewal the
   // reopened browser would be signed out. Chrome and Safari's engine, each
-  // with its own profile on disk.
-  test('stays signed in after the browser is closed and opened again (mobile)', async ({ playwright, browserName }, testInfo) => {
+  // with its own profile on disk; the page reports itself hidden, like a tab
+  // opened in the background (and headless WebKit on Linux, CI run 59), which
+  // must not stop the renewal.
+  test('stays signed in after the browser is closed and opened again, even when the page opens in the background (mobile)', async ({ playwright, browserName }, testInfo) => {
+    test.setTimeout(90_000);
     const baseURL = testInfo.project.use.baseURL!;
     const seeded = JSON.parse(readFileSync(`e2e/.auth/persistent-${testInfo.project.name}.json`, 'utf8')) as { cookies: Parameters<BrowserContext['addCookies']>[0] };
     const dir = mkdtempSync(path.join(tmpdir(), 'sc-profile-'));
     const engine = playwright[browserName];
     try {
-      let context = await engine.launchPersistentContext(dir, { baseURL });
-      await context.addCookies(seeded.cookies);
-      let page = context.pages()[0] ?? (await context.newPage());
-      const renewed = page.waitForResponse((r) => r.url().includes('/api/auth/get-session') && r.status() === 200);
-      await page.goto('/app');
-      await renewed;
-      await expect.poll(async () => (await context.cookies()).find((c) => c.name === 'sc.session_token')?.expires ?? -1).toBeGreaterThan(Date.now() / 1000 + 29 * 86_400);
-      await context.close();
-
-      context = await engine.launchPersistentContext(dir, { baseURL });
-      page = context.pages()[0] ?? (await context.newPage());
-      await page.goto('/app/profile');
-      await expect(page).toHaveURL(/\/app\/profile$/);
-      await expect(page.getByRole('heading', { name: 'Your account', level: 1 })).toBeVisible();
-      await context.close();
+      await test.step('the first page renews the sign-in into a 30-day cookie', async () => {
+        const context = await engine.launchPersistentContext(dir, { baseURL });
+        await context.addInitScript(() => Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }));
+        await context.addCookies(seeded.cookies);
+        const page = context.pages()[0] ?? (await context.newPage());
+        const renewed = page.waitForResponse((r) => r.url().includes('/api/auth/get-session'), { timeout: 20_000 });
+        await page.goto('/app');
+        expect((await renewed).status()).toBe(200);
+        await expect
+          .poll(async () => (await context.cookies()).find((c) => c.name === 'sc.session_token')?.expires ?? -1, { timeout: 15_000 })
+          .toBeGreaterThan(Date.now() / 1000 + 29 * 86_400);
+        await context.close();
+      });
+      await test.step('the reopened browser is still signed in', async () => {
+        const context = await engine.launchPersistentContext(dir, { baseURL });
+        const page = context.pages()[0] ?? (await context.newPage());
+        await page.goto('/app/profile');
+        await expect(page).toHaveURL(/\/app\/profile$/);
+        await expect(page.getByRole('heading', { name: 'Your account', level: 1 })).toBeVisible();
+        await context.close();
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
