@@ -1,7 +1,8 @@
 # PayPal subscriptions — how it works and how to run it
 
-**Written:** 2026-11-23. **State:** built and tested locally (fake PayPal in the
-tests). Not yet run against PayPal's sandbox or live, not deployed.
+**Written:** 2026-11-23. **State (2026-11-24):** in production with live PayPal
+(plans and webhook verified, subscriptions open to everyone); staging mirrors it
+without PayPal keys.
 Decisions: [ADR-0022](../adr/0022-paypal-subscriptions.md).
 
 ## What a customer gets
@@ -32,6 +33,15 @@ Decisions: [ADR-0022](../adr/0022-paypal-subscriptions.md).
 - **Failed renewal.** PayPal retries after 5 and 10 days. Pro continues for a grace week (`GRACE_DAYS`).
   If PayPal suspends the subscription after its retries, Pro ends once the grace week is over.
 - **Manual Pro and the admin role** are separate sources of access. Billing never changes them, and they never change billing.
+- **Where Pro is offered.** Only while the account may subscribe (PayPal set up, a price published, subscriptions open to it)
+  and is not on Pro or already renewing:
+  - an "Upgrade to Pro" button in the top bar, and a framed offer (what Pro adds, the price, the button) on Home and the account page;
+  - a Pro screen in place of a locked tool, lesson or challenge that Pro opens;
+  - a gilt "Pro" mark on such tools (Home) and on such lessons and challenges (the Learn lists);
+  - the Pro card first on the plans page on phones.
+
+  What Pro adds is read from the published plans and Learn content (`src/lib/pro-perks.ts`, `src/server/billing/upsell.ts`),
+  never written by hand. On phones, checkout shows the order (price, consent, PayPal, the terms) right after the title.
 
 ## Safety rules built in
 

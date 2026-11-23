@@ -3,8 +3,10 @@ import { ChevronRight, Lock } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { useIsMobile } from '@/hooks/use-mobile';
 import LearnOnHome from '@/components/learn/LearnOnHome';
+import { ProBanner, ProMark, UpgradeButton, proOfferFor } from '@/components/billing/pro';
+import { TOOL_FEATURES } from '@/lib/plans';
 import { BrandMark } from './BrandMark';
-import { AccountButton, AccountLine, useToolAllowed } from './account';
+import { AccountButton, AccountLine, useAccount, useToolAllowed } from './account';
 import { HOME_ORDER, TOOLS, TOOL_ART, pathForView } from './tools';
 import type { TabId } from '@/types/project';
 
@@ -50,7 +52,10 @@ export default function HomeScreen() {
             {isMobile && (
               <div className="mb-5 flex items-center justify-between gap-3">
                 <BrandMark />
-                <AccountButton />
+                <div className="flex items-center gap-2">
+                  <UpgradeButton compact />
+                  <AccountButton />
+                </div>
               </div>
             )}
             <h1 className="text-[28px] font-bold leading-[1.1] tracking-tight text-foreground md:text-[40px] lg:text-[46px]">
@@ -68,6 +73,9 @@ export default function HomeScreen() {
             </p>
           </div>
         </section>
+
+        {/* Pro, said up front: what it adds and what it costs (only while it is on offer to this account). */}
+        <ProBanner className="px-4 pb-6 md:px-6 lg:px-8" />
 
         <h2 className="px-4 pb-2.5 text-sm font-semibold text-muted-foreground md:px-6 lg:px-8">
           {t('question')}
@@ -99,6 +107,9 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
   const tt = useTranslations(`tools.${id}`);
   // A tool the plan does not include stays on Home, marked, and opens to say why.
   const locked = !useToolAllowed()(id);
+  const account = useAccount()?.account;
+  // Locked behind Pro while Pro can be bought: the badge says so (and the tool opens to the upgrade).
+  const proBadge = locked && proOfferFor(account) && account!.offer.pro.includes(TOOL_FEATURES[id]);
   const art = TOOL_ART[id];
   const Icon = TOOLS[id].icon;
   const title = tt('title');
@@ -127,10 +138,14 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
           <div className="flex items-center gap-2">
             <Icon className="h-[18px] w-[18px] shrink-0 text-primary md:h-6 md:w-6" aria-hidden="true" />
             <h3 className="text-[15px] font-semibold leading-tight text-foreground md:text-xl">{title}</h3>
-            {locked && (
-              <span data-locked-badge className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-foreground/80">
-                <Lock className="h-3 w-3" aria-hidden="true" /> {t('locked.badge')}
-              </span>
+            {proBadge ? (
+              <ProMark />
+            ) : (
+              locked && (
+                <span data-locked-badge className="flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-foreground/80">
+                  <Lock className="h-3 w-3" aria-hidden="true" /> {t('locked.badge')}
+                </span>
+              )
             )}
           </div>
           <p className="mt-1 text-[13px] leading-snug text-muted-foreground md:mt-1.5 md:text-[15px]">{description}</p>

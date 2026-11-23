@@ -6,7 +6,8 @@ import { CHALLENGE_LEVELS } from '@/lib/learn/model';
 import { unitNumbers, unitsOfLessons } from '@/lib/learn/course';
 import { DEFAULT_FILTERS, filtersActive, matchesFilters, type ChallengeFilters } from '@/lib/learn/pick';
 import { itemPath, learnPath } from '@/lib/learn/routes';
-import { useLearnSummary } from '@/components/shell/account';
+import { ProMark, proOfferFor } from '@/components/billing/pro';
+import { useAccount, useLearnSummary } from '@/components/shell/account';
 import { useCompletions, useLearnList, type ListEntry } from './data';
 import { useClassMode } from './ClassMode';
 import { useModuleLock } from './LearnHome';
@@ -172,6 +173,7 @@ function ChallengeCard({ item, count, saved }: { item: ListEntry; count: number;
   const t = useTranslations('learn');
   const loc = useLocalized();
   const lock = useModuleLock('challenges');
+  const offerPro = proOfferFor(useAccount()?.account);
   return (
     <Link
       href={itemPath(item.id)}
@@ -193,7 +195,7 @@ function ChallengeCard({ item, count, saved }: { item: ListEntry; count: number;
               <Timer className="h-3 w-3" aria-hidden="true" /> {t('challenges.quickBadge')}
             </span>
           )}
-          {!item.open && <LockBadge pro={lock === 'pro'} />}
+          {!item.open && (item.inPro && offerPro ? <ProMark /> : <LockBadge pro={lock === 'pro'} />)}
           {item.published === false && <DraftBadge />}
           {saved && (
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-foreground" data-saved-badge>

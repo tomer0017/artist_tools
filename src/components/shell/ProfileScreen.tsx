@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { BadgeCheck, Check, Crown, Lock, LogOut, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import { useLocale, useTranslations } from 'use-intl';
 import { BillingCard } from '@/components/account/BillingCard';
+import { ProBanner, proOfferFor } from '@/components/billing/pro';
 import { DataCard, DevicesCard, NameEditor, PreferencesCard, SignInMethodsCard } from '@/components/account/ProfileSections';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatMoney } from '@/lib/money';
@@ -179,6 +180,9 @@ export default function ProfileScreen() {
           <NameEditor account={account} onChanged={state.refresh} />
         </section>
 
+        {/* Pro, up front: what it adds and what it costs, before the details below. */}
+        <ProBanner className="mt-4" />
+
         {/* Access: an administrator has everything, so no plan, limits or upgrade offers. */}
         {isAdmin && (
           <section aria-label={t('adminAccess.section')} className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
@@ -251,7 +255,7 @@ export default function ProfileScreen() {
             })}
           </ul>
 
-          {!isAdmin && plan === 'free' && (
+          {!isAdmin && plan === 'free' && !proOfferFor(account) && (
             <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
               <p className="font-semibold text-foreground">{t('plan.upgradeTitle')}</p>
               <p className="mt-1 text-sm text-muted-foreground">{account.billing?.available ? (isDefaultSplit(account.offer) ? t('plan.upgradeLeadLive') : t('plan.upgradeLeadPartialLive')) : isDefaultSplit(account.offer) ? t('plan.upgradeLead') : t('plan.upgradeLeadPartial')}</p>

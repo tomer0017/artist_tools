@@ -4,6 +4,7 @@ import { useTranslations } from 'use-intl';
 import { useProject } from '@/hooks/useProjectStore';
 import type { NavViewId } from '@/types/project';
 import { AccountButton, useLearnSummary, useToolAllowed } from './account';
+import { UpgradeButton } from '@/components/billing/pro';
 import { BrandMark } from './BrandMark';
 import { NAV_ORDER, navItem, pathForView } from './tools';
 
@@ -71,6 +72,7 @@ export function TopNav() {
           )}
         </ul>
       </nav>
+      <UpgradeButton />
       <AccountButton />
     </header>
   );

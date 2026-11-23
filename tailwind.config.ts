@@ -14,7 +14,12 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+      },
       colors: {
+        ivory: "hsl(var(--ivory))",
+        mat: "hsl(var(--mat))",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

@@ -57,6 +57,9 @@ export default function PlansScreen() {
                       label: t('billing.subscribe'),
                       price: state.account.billing.offer ? t('billing.perMonth', { price: formatMoney(state.account.billing.offer.amountMinor, state.account.billing.offer.currency, locale) }) : t('billing.subscribe'),
                       note: t('billing.planNote'),
+                      amount: state.account.billing.offer ? formatMoney(state.account.billing.offer.amountMinor, state.account.billing.offer.currency, locale) : undefined,
+                      unit: t('billing.pro.perMonthUnit'),
+                      recommended: t('billing.pro.recommended'),
                     }
                   : null
               }

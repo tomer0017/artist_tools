@@ -1,7 +1,9 @@
 import { LEARN_MODULE, isItemId, itemImages, itemsOf, listPicture } from '@/lib/learn/model';
 import { UnreadableConfigError } from '@/server/config/versions';
 import { log } from '@/server/log';
-import { liveLearn } from '@/server/learn/live';
+import { learnAccess } from '@/lib/learn/access';
+import { getPlanStates } from '@/server/entitlements';
+import { liveLearn, planLearnViewer } from '@/server/learn/live';
 import { assetsFor, fullItem, listEntry } from '@/server/learn/present';
 import { learnJson, learnRequest } from '@/server/learn/request';
 
@@ -35,7 +37,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       const picture = listPicture(item);
       const assets = listed && view.thumbnail(id) && picture ? await assetsFor(db, [picture.assetId]) : new Map();
       const summary = listed ? { item: listEntry(item, state, view.thumbnail(id), assets, false) } : {};
-      return learnJson({ error: 'locked', reason: state.reason, feature: LEARN_MODULE[item.collection], ...summary }, 403);
+      // Whether Pro opens it: its page then offers the upgrade (ProPaywall, src/components/billing/pro.tsx).
+      const inPro = entitlements.planId !== 'pro' && learnAccess(planLearnViewer(entitlements, await getPlanStates(db), 'pro'), content).state(id).status === 'open';
+      return learnJson({ error: 'locked', reason: state.reason, feature: LEARN_MODULE[item.collection], ...(inPro ? { inPro: true } : {}), ...summary }, 403);
     }
     const assets = await assetsFor(db, itemImages(item).map((ref) => ref.assetId));
     return learnJson({ contentVersion: version, item: fullItem(item, assets, entitlements.access === 'admin') });

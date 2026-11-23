@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Frank_Ruhl_Libre } from 'next/font/google';
 import { ErrorReporter } from '@/components/common/ErrorReporter';
 import { I18nProvider } from '@/i18n/client';
 import { dirOf } from '@/i18n/config';
@@ -28,11 +29,15 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
+// The display serif of Pro surfaces only (the gilded-frame look: plans, checkout,
+// upgrade prompts): Hebrew and Latin, served from this site (font-src 'self').
+const display = Frank_Ruhl_Libre({ subsets: ['hebrew', 'latin'], weight: ['500', '700'], variable: '--font-display', display: 'swap' });
+
 // The page's language and direction follow the request (src/i18n/config.ts).
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getRequestLocale();
   return (
-    <html lang={locale} dir={dirOf(locale)}>
+    <html lang={locale} dir={dirOf(locale)} className={display.variable}>
       <body>
         <ErrorReporter />
         <I18nProvider locale={locale} messages={messagesFor(locale)}>

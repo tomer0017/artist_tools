@@ -36,6 +36,8 @@ export interface ListEntry {
   published?: boolean;
   open: boolean;
   lock: LockReason | null;
+  /** Locked, and Pro opens it (set only while this account is not on Pro). */
+  inPro?: boolean;
   thumbnailAssetId: string | null;
 }
 
@@ -81,7 +83,7 @@ export type OpenItem = OpenExercise | OpenChallenge;
 
 export type ItemAnswer =
   | { status: 'open'; item: OpenItem; contentVersion: number | null }
-  | { status: 'locked'; reason: LockReason; feature: LearnFeatureId; item: ListEntry | null }
+  | { status: 'locked'; reason: LockReason; feature: LearnFeatureId; item: ListEntry | null; /** Pro opens it (the page offers the upgrade). */ inPro?: boolean }
   | { status: 'not_found' };
 
 export interface CompletionView {
@@ -151,8 +153,8 @@ export function useLearnItem(id: string, enabled = true) {
       const response = await learnFetch(`/api/learn/items/${id}`);
       if (response.status === 404) return { status: 'not_found' };
       if (response.status === 403) {
-        const body = (await response.json().catch(() => ({}))) as { reason?: LockReason; feature?: LearnFeatureId; item?: ListEntry };
-        return { status: 'locked', reason: body.reason ?? 'not_in_plan', feature: body.feature ?? 'learn.curriculum', item: body.item ?? null };
+        const body = (await response.json().catch(() => ({}))) as { reason?: LockReason; feature?: LearnFeatureId; item?: ListEntry; inPro?: boolean };
+        return { status: 'locked', reason: body.reason ?? 'not_in_plan', feature: body.feature ?? 'learn.curriculum', item: body.item ?? null, inPro: body.inPro === true };
       }
       const body = await json<{ item: OpenItem; contentVersion: number | null }>(response);
       return { status: 'open', item: body.item, contentVersion: body.contentVersion };

@@ -6,7 +6,7 @@ import { collections } from '@/server/db/collections';
 import { currentSubscription } from '@/server/entitlements';
 import { paypalConfig } from '@/server/env';
 import { latestRate, rateConfirmed, usdToIls } from './fx';
-import { basePrice, PROVIDER } from './paypal/subscriptions';
+import { basePrice, billingAccess, PROVIDER } from './paypal/subscriptions';
 
 const money = (value: unknown): Currency => (isCurrency(value) ? value : 'USD');
 
@@ -24,12 +24,16 @@ export async function billingSummary(db: Db, userId: ObjectId, currency: Currenc
   } catch {
     configured = false;
   }
-  const [base, subs, payments, refund] = await Promise.all([
+  const [base, subs, payments, refund, access, user] = await Promise.all([
     configured ? basePrice(db) : Promise.resolve(null),
     c.subscriptions.find({ userId, provider: PROVIDER }, { sort: { updatedAt: -1 }, limit: 20 }).toArray(),
     c.payments.find({ userId, provider: PROVIDER }, { sort: { occurredAt: -1 }, limit: 12 }).toArray(),
     c.refundRequests.findOne({ userId }, { sort: { requestedAt: -1 } }),
+    billingAccess(db),
+    c.users.findOne({ _id: userId }, { projection: { email: 1, role: 1 } }),
   ]);
+  // Subscribing is offered only to accounts that may do it now (open to everyone, or an admin or a listed tester).
+  const mayBuy = access.openToEveryone || user?.role === 'admin' || (user?.email ? access.testerEmails.includes(user.email.toLowerCase()) : false);
   let offer: BillingSummary['offer'] = null;
   if (base) {
     if (currency === 'USD') offer = { amountMinor: base.amountMinor, currency };
@@ -40,7 +44,7 @@ export async function billingSummary(db: Db, userId: ObjectId, currency: Currenc
   }
   const sub = currentSubscription(subs, now);
   return {
-    available: base !== null,
+    available: base !== null && mayBuy,
     offer,
     subscription:
       sub && sub.amountMinor != null
@@ -59,10 +63,14 @@ export async function billingSummary(db: Db, userId: ObjectId, currency: Currenc
   };
 }
 
-/** Whether Pro can be bought on this server now (PayPal set up and a monthly price published): public pages then stop saying "coming soon". */
+/**
+ * Whether anyone can buy Pro on this server now (PayPal set up, a monthly price
+ * published, subscriptions open to everyone): public pages then show the price
+ * and stop saying "coming soon".
+ */
 export async function subscriptionsOpen(db: Db): Promise<boolean> {
   try {
-    return paypalConfig() !== null && (await basePrice(db)) !== null;
+    return paypalConfig() !== null && (await basePrice(db)) !== null && (await billingAccess(db)).openToEveryone;
   } catch {
     return false;
   }

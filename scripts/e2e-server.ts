@@ -38,7 +38,10 @@ import { publishDraft, saveDraft } from '@/server/config/versions';
 import { migrate } from '@/server/db/migrate';
 import { createMailer } from '@/server/mail/mailer';
 import { createUsernameAccount, holdInitialPassword } from '@/server/password-accounts';
-import { learnContentSpec } from '@/server/learn/content';
+import { learnContentSpec, publishedLearnContent } from '@/server/learn/content';
+import { itemsOf } from '@/lib/learn/model';
+import { pricingSpec } from '@/server/config/pricing';
+import { setBillingAccess } from '@/server/billing/paypal/subscriptions';
 import { importSeed } from '@/server/learn/import';
 import { writeLearnFixture } from '@/test/learn-fixture';
 
@@ -202,6 +205,36 @@ for (const name of ['persistent-chromium', 'persistent-iphone-webkit']) await se
 {
   const mfaAdmin = await seedSignedInUser(db, 'admin-mfa', 'admin');
   for (const name of ['admin-mfa-2', 'admin-mfa-3', 'admin-mfa-4', 'admin-mfa-5', 'admin-mfa-6', 'admin-mfa-7']) await seedSession(db, mfaAdmin, name);
+}
+// E2E_BILLING_QA=1 (for looking at the upgrade screens locally; the suite never
+// sets it): Pro on sale as on production. A $1 monthly price, subscriptions open
+// to everyone, a confirmed shekel rate, Measure and Compare in Pro only, and the
+// first two lessons open on Free. PAYPAL_* (sandbox, made up) must be set too;
+// nothing reaches PayPal until someone presses Continue with PayPal.
+if (process.env.E2E_BILLING_QA === '1') {
+  const price = { id: 'pro-month-usd', planId: 'pro' as const, interval: 'month' as const, currency: 'USD' as const, amountMinor: 100, trialDays: null, active: true, providerRefs: {} };
+  if ((await saveDraft(db, pricingSpec, { prices: [price] }, 'cli')).status !== 'saved') throw new Error('Could not save the QA price');
+  if ((await publishDraft(db, pricingSpec, 'cli')).status !== 'published') throw new Error('Could not publish the QA price');
+  await setBillingAccess(db, { openToEveryone: true, testerEmails: [] }, 'cli');
+  const now = new Date();
+  await db.collection('fx_rates').insertOne({ _id: 'USD_ILS:2026-11-23', pair: 'USD_ILS', date: '2026-11-23', rateMicros: 3_343_000, source: 'boi', fetchedAt: now, checkedAt: now } as never);
+  const lessons = itemsOf(await publishedLearnContent(db)).filter((i) => i.collection === 'curriculum' && i.published).map((i) => i.id);
+  const all = { mode: 'all' as const };
+  const none = { mode: 'none' as const };
+  const learnModules = ['learn.curriculum', 'learn.challenges'] as const;
+  const qaCatalog = {
+    plans: {
+      free: { features: [...STAGING_CATALOG.plans.free.features, ...learnModules], quotas: {} },
+      pro: { features: [...STAGING_CATALOG.plans.pro.features, ...learnModules], quotas: {} },
+    },
+    disabled: [],
+    learn: {
+      access: { free: { curriculum: { mode: 'selected' as const, items: lessons.slice(0, 2) }, color: none, challenges: all }, pro: { curriculum: all, color: none, challenges: all } },
+      previews: 'thumbnail' as const,
+    },
+  };
+  if ((await saveDraft(db, catalogSpec, qaCatalog, 'cli', 'Billing QA')).status !== 'saved') throw new Error('Could not save the QA catalog');
+  if ((await publishDraft(db, catalogSpec, 'cli')).status !== 'published') throw new Error('Could not publish the QA catalog');
 }
 // Accounts set to Hebrew that have not seen the tool introductions yet (one per browser project, and one
 // whose language the i18n spec switches).

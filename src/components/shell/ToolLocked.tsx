@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Lock } from 'lucide-react';
 import { useTranslations } from 'use-intl';
+import { ProPaywall, proOfferFor } from '@/components/billing/pro';
 import { TOOL_FEATURES } from '@/lib/plans';
 import type { TabId } from '@/types/project';
 import { useAccount } from './account';
@@ -23,6 +24,12 @@ export default function ToolLocked({ tool }: { tool: TabId }) {
   const onSomePlan = inPro || account?.offer.free.includes(feature) === true;
   const reason = !onSomePlan ? 'off' : inPro && account?.plan.effective !== 'pro' ? 'pro' : 'plan';
   const Icon = TOOLS[tool].icon;
+  const tp = useTranslations('billing.pro');
+
+  // Pro opens it and Pro can be bought: the upgrade, in the tool's place.
+  if (reason === 'pro' && proOfferFor(account)) {
+    return <ProPaywall title={tp('toolTitle', { tool: tt('title') })} icon={<Icon className="h-7 w-7" aria-hidden="true" />} back={{ href: pathForView('home'), label: t('back') }} />;
+  }
 
   return (
     <section

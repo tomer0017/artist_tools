@@ -2,7 +2,9 @@ import { z } from 'zod';
 import { LEARN_COLLECTIONS, listPicture } from '@/lib/learn/model';
 import { UnreadableConfigError } from '@/server/config/versions';
 import { log } from '@/server/log';
-import { liveLearn } from '@/server/learn/live';
+import { learnAccess } from '@/lib/learn/access';
+import { getPlanStates } from '@/server/entitlements';
+import { liveLearn, planLearnViewer } from '@/server/learn/live';
 import { assetsFor, listEntry } from '@/server/learn/present';
 import { learnJson, learnRequest } from '@/server/learn/request';
 
@@ -38,11 +40,13 @@ export async function GET(request: Request) {
       .filter((group) => group.collection === query.data.collection && rows.some(({ item }) => item.groupId === group.id))
       .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
       .map(({ id, order, title, summary, level }) => ({ id, order, title: { en: title.en, he: title.he }, ...(summary ? { summary: { en: summary.en, he: summary.he } } : {}), ...(level ? { level } : {}) }));
+    // Locked items that Pro opens are marked, so the list can offer the upgrade (src/components/billing/pro.tsx).
+    const pro = entitlements.planId !== 'pro' && rows.some(({ state }) => state.status !== 'open') ? learnAccess(planLearnViewer(entitlements, await getPlanStates(db), 'pro'), content) : null;
     return learnJson({
       collection: query.data.collection,
       contentVersion: version,
       groups,
-      items: rows.map(({ item, state }) => listEntry(item, state, view.thumbnail(item.id), assets, admin)),
+      items: rows.map(({ item, state }) => ({ ...listEntry(item, state, view.thumbnail(item.id), assets, admin), ...(pro && state.status !== 'open' && pro.state(item.id).status === 'open' ? { inPro: true } : {}) })),
     });
   } catch (error) {
     if (error instanceof UnreadableConfigError) {

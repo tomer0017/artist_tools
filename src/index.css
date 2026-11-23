@@ -48,6 +48,24 @@
     --toolbar-bg: 240 5% 12%;
     --panel-bg: 240 5% 12%;
     --surface-hover: 240 4% 22%;
+    /* Pro surfaces (the gilded frame): the mat inside the frame, and ivory headings. */
+    --mat: 30 7% 12%;
+    --ivory: 40 46% 90%;
+  }
+}
+
+@layer components {
+  /* A thin gilt frame, like a painting's: Pro surfaces only. */
+  .gilt-frame {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(hsl(var(--mat)), hsl(var(--mat))) padding-box,
+      linear-gradient(135deg, #f6d98b 0%, #c8902e 30%, #8c5a16 52%, #e9bd5b 78%, #f6d98b 100%) border-box;
+  }
+  /* The small round seal on a Pro frame (a crown on gilt). */
+  .gilt-seal {
+    background: linear-gradient(135deg, #f6d98b 0%, #c8902e 55%, #9c6b1c 100%);
+    color: #1c1407;
   }
 }
 

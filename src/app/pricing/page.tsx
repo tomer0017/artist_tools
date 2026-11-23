@@ -10,7 +10,6 @@ import { hasAllTools, isDefaultSplit } from '@/lib/plans';
 import { registrationMode } from '@/server/auth';
 import { basePrice } from '@/server/billing/paypal/subscriptions';
 import { subscriptionsOpen } from '@/server/billing/summary';
-import { paypalConfig } from '@/server/env';
 import { getDb } from '@/server/db/client';
 import { describablePlanOffer } from '@/server/entitlements';
 
@@ -41,13 +40,7 @@ export default async function PricingPage() {
   const tl = await getT('landing');
   const tb = await getT('billing');
   // Once subscriptions are open: Pro's monthly price (in USD; signed-in accounts see their own currency at checkout).
-  const base = await (async () => {
-    try {
-      return paypalConfig() ? await basePrice(getDb()) : null;
-    } catch {
-      return null;
-    }
-  })();
+  const base = (await subscriptionsOpen(getDb())) ? await basePrice(getDb()) : null;
   return (
     <main className="min-h-[100dvh] bg-background" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="mx-auto w-full max-w-4xl px-4 pb-12 pt-5 md:px-6 md:pt-8">
@@ -77,7 +70,7 @@ export default async function PricingPage() {
                   : { href: '/app', label: tc('openStudio') }
               }
               registration={registration}
-              proAction={base ? { href: '/subscribe', label: tb('subscribe'), price: tb('perMonth', { price: formatMoney(base.amountMinor, 'USD', locale) }), note: tb('planNote') } : null}
+              proAction={base ? { href: '/subscribe', label: tb('subscribe'), price: tb('perMonth', { price: formatMoney(base.amountMinor, 'USD', locale) }), note: tb('planNote'), amount: formatMoney(base.amountMinor, 'USD', locale), unit: tb('pro.perMonthUnit'), recommended: tb('pro.recommended') } : null}
             />
           ) : (
             // The database could not be read: no comparison rather than a wrong one.

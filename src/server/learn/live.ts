@@ -4,8 +4,9 @@ import type { Db } from 'mongodb';
 import { LEARN_FEATURE_IDS } from '@/lib/plans';
 import type { LearnSummary } from '@/lib/account';
 import { learnAccess, type ItemState, type LearnAccessView, type LearnViewer } from '@/lib/learn/access';
-import { LEARN_COLLECTIONS, LEARN_MODULE, type LearnContent, type LearnItem } from '@/lib/learn/model';
-import type { Entitlements } from '@/server/entitlements';
+import { LEARN_COLLECTIONS, LEARN_MODULE, NO_LEARN_ACCESS, type LearnContent, type LearnItem } from '@/lib/learn/model';
+import type { PlanId } from '@/lib/plans';
+import type { Entitlements, PlanState } from '@/server/entitlements';
 import { getPublished } from '@/server/config/versions';
 import { learnContentSpec, publishedLearnContent } from './content';
 
@@ -23,6 +24,23 @@ export function learnViewerOf(entitlements: Entitlements): LearnViewer {
     modules: LEARN_FEATURE_IDS.filter((f) => entitlements.features.includes(f)),
     offered: LEARN_FEATURE_IDS.filter((f) => offered.has(f)),
     access: entitlements.learn,
+  };
+}
+
+/**
+ * What an active, non-admin account would get on `planId` as published: the
+ * same resolver, fed the plan's own features and Learn rules. Used to say
+ * what upgrading opens (a locked item that Pro opens, how many more lessons).
+ */
+export function planLearnViewer(entitlements: Entitlements, plans: Partial<Record<PlanId, PlanState>>, planId: PlanId): LearnViewer {
+  const plan = plans[planId];
+  const offered = new Set([...entitlements.offer.free, ...entitlements.offer.pro]);
+  return {
+    active: true,
+    admin: false,
+    modules: plan?.active ? LEARN_FEATURE_IDS.filter((f) => plan.features.includes(f) && offered.has(f)) : [],
+    offered: LEARN_FEATURE_IDS.filter((f) => offered.has(f)),
+    access: plan?.active && plan.learn ? plan.learn : NO_LEARN_ACCESS(),
   };
 }
 

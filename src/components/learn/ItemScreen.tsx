@@ -5,6 +5,7 @@ import { Camera, ChevronDown, Lock, Maximize2, PencilLine, SearchX, Sparkles, Ti
 import { isLesson } from '@/lib/learn/model';
 import { lessonNumbers, unitsOfLessons } from '@/lib/learn/course';
 import { itemPath, learnPath } from '@/lib/learn/routes';
+import { ProPaywall, proOfferFor } from '@/components/billing/pro';
 import { useAccount, useLearnSummary } from '@/components/shell/account';
 import { pathForView } from '@/components/shell/tools';
 import { assetUrl, useLearnItem, useLearnList, type ItemAnswer, type OpenItem } from './data';
@@ -77,6 +78,12 @@ function LockedItem({ answer, back }: { answer: Extract<ItemAnswer, { status: 'l
   const offered = inPro || account?.offer.free.includes(answer.feature) === true;
   const reason = answer.reason === 'module_off' ? (!offered ? 'off' : inPro && account?.plan.effective !== 'pro' ? 'pro' : 'plan') : 'plan';
   const Icon = answer.item?.kind === 'challenge' ? Sparkles : PencilLine;
+  const tp = useTranslations('billing.pro');
+  // Pro opens it and Pro can be bought: the upgrade, on its own page.
+  if (answer.inPro && proOfferFor(account)) {
+    const title = answer.item ? tp('itemTitle', { title: loc(answer.item.title) }) : answer.feature === 'learn.challenges' ? tp('challengeTitle') : tp('lessonTitle');
+    return <ProPaywall title={title} icon={<Icon className="h-7 w-7" aria-hidden="true" />} back={{ href: learnPath({ screen: 'home' }), label: t('back') }} />;
+  }
   return (
     <section aria-labelledby="learn-locked-title" data-learn-locked={answer.reason} className="flex justify-center py-6">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm md:p-8">

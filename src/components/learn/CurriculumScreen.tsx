@@ -4,7 +4,8 @@ import { ChevronRight } from 'lucide-react';
 import { lessonNumbers, unitNumbers, unitProgress, upNext } from '@/lib/learn/course';
 import type { LearnCollection, Localized } from '@/lib/learn/model';
 import { itemPath, learnPath } from '@/lib/learn/routes';
-import { useLearnSummary } from '@/components/shell/account';
+import { ProMark, proOfferFor } from '@/components/billing/pro';
+import { useAccount, useLearnSummary } from '@/components/shell/account';
 import { useCompletions, useLearnList, type ListAnswer, type ListEntry, type ListGroup } from './data';
 import { useClassMode } from './ClassMode';
 import { useModuleLock } from './LearnHome';
@@ -114,6 +115,7 @@ function LessonRow({ item, number, collection, count, upNext }: { item: ListEntr
   const t = useTranslations('learn.curriculum');
   const loc = useLocalized();
   const lock = useModuleLock(collection);
+  const offerPro = proOfferFor(useAccount()?.account);
   return (
     <Link
       href={itemPath(item.id)}
@@ -132,7 +134,7 @@ function LessonRow({ item, number, collection, count, upNext }: { item: ListEntr
         {item.skill && <span className="block text-[13px] leading-snug text-muted-foreground">{loc(item.skill)}</span>}
         {(!item.open || item.published === false || count > 0) && (
           <span className="mt-1 flex flex-wrap items-center gap-1.5">
-            {!item.open && <LockBadge pro={lock === 'pro'} />}
+            {!item.open && (item.inPro && offerPro ? <ProMark /> : <LockBadge pro={lock === 'pro'} />)}
             {item.published === false && <DraftBadge />}
             <DoneTick count={count} />
           </span>

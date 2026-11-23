@@ -31,7 +31,7 @@ export function PlanComparison({
   /** Shown in the questions when known: whether anyone can sign up yet. */
   registration?: 'open' | 'invite' | null;
   /** Once Pro can be bought: its monthly price and where subscribing starts (otherwise Pro reads "coming soon"). */
-  proAction?: { href: string; label: string; price: string; note: string } | null;
+  proAction?: { href: string; label: string; price: string; note: string; /** The formatted amount alone, shown large on the Pro card. */ amount?: string; unit?: string; recommended?: string } | null;
 }) {
   const t = useTranslations('plans');
   const tg = useTranslations();
@@ -60,13 +60,13 @@ export function PlanComparison({
     <div>
       <div className="grid gap-4 md:grid-cols-2">
         {/* Free */}
-        <section aria-labelledby="plan-free" className="flex flex-col rounded-2xl border border-primary/50 bg-card p-5 shadow-sm md:p-6">
+        <section aria-labelledby="plan-free" className={`flex flex-col rounded-2xl border bg-card p-5 shadow-sm md:p-6 ${proAction ? 'border-border' : 'border-primary/50'}`}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="plan-free" className="text-xl font-semibold text-foreground">{t('free')}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{t('freeLead')}</p>
             </div>
-            <span className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">{t('availableNow')}</span>
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${proAction ? 'border border-border bg-secondary/60 text-foreground/80' : 'bg-primary text-primary-foreground'}`}>{t('availableNow')}</span>
           </div>
           <ul className="mt-5 space-y-3" aria-label={t('includedInFree')}>
             {inFree.map((row) => (
@@ -81,7 +81,7 @@ export function PlanComparison({
           </ul>
           <div className="mt-auto pt-6">
             {current === 'free' && !isAdmin ? (
-              <p className="flex h-11 items-center justify-center rounded-xl border border-primary/40 bg-primary/10 text-sm font-semibold text-primary">{t('currentPlan')}</p>
+              <p className={`flex h-11 items-center justify-center rounded-xl border text-sm font-semibold ${proAction ? 'border-border bg-secondary/40 text-muted-foreground' : 'border-primary/40 bg-primary/10 text-primary'}`}>{t('currentPlan')}</p>
             ) : freeAction ? (
               <Link
                 href={freeAction.href}
@@ -94,23 +94,36 @@ export function PlanComparison({
         </section>
 
         {/* Pro */}
-        <section aria-labelledby="plan-pro" className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
+        <section
+          aria-labelledby="plan-pro"
+          className={`flex flex-col p-5 md:p-6 ${proAction ? 'gilt-frame order-first rounded-[14px] shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)] md:order-none' : 'rounded-2xl border border-border bg-card shadow-sm'}`}
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 id="plan-pro" className="flex items-center gap-1.5 text-xl font-semibold text-foreground">
-                <Crown className="h-5 w-5 text-primary" aria-hidden="true" /> {t('pro')}
+              <h2 id="plan-pro" className={proAction ? 'flex items-center gap-2 font-display text-[26px] font-bold leading-none text-ivory' : 'flex items-center gap-1.5 text-xl font-semibold text-foreground'}>
+                <Crown className={proAction ? 'h-6 w-6 text-primary' : 'h-5 w-5 text-primary'} aria-hidden="true" /> {t('pro')}
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">{t('proLead')}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{t('proLead')}</p>
             </div>
             {proAction ? (
-              <span className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{proAction.price}</span>
+              proAction.recommended ? (
+                <span className="gilt-seal shrink-0 rounded-full px-2.5 py-1 text-xs font-bold">{proAction.recommended}</span>
+              ) : (
+                <span className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{proAction.price}</span>
+              )
             ) : (
               <span className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-xs font-semibold text-foreground">
                 <Clock className="h-3 w-3" aria-hidden="true" /> {t('comingSoon')}
               </span>
             )}
           </div>
-          <p className="mt-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('everythingPlus')}</p>
+          {proAction?.amount && (
+            <p className="mt-5 flex items-baseline gap-2 text-ivory">
+              <span className="font-display text-[44px] font-bold leading-none tabular-nums">{proAction.amount}</span>
+              <span className="text-sm text-foreground/70">{proAction.unit}</span>
+            </p>
+          )}
+          <p className="mt-5 text-sm font-medium text-foreground/80">{t('everythingPlus')}</p>
           <ul className="mt-3 space-y-3" aria-label={t('addedInPro')}>
             {proOnly.map((row) => (
               <li key={`${row.kind}-${row.id}`} className="flex gap-3">
@@ -128,7 +141,7 @@ export function PlanComparison({
             ) : proAction ? (
               <Link
                 href={proAction.href}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-semibold text-primary-foreground transition-[filter] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <Crown className="h-4 w-4" aria-hidden="true" /> {proAction.label}
               </Link>
@@ -155,7 +168,7 @@ export function PlanComparison({
       <section aria-labelledby="plans-compare" className="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
         <h2 id="plans-compare" className="px-4 pb-2 pt-4 text-base font-semibold text-foreground md:px-5">{t('compare')}</h2>
         <table className="w-full text-start text-sm">
-          <thead className="text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className="text-xs text-muted-foreground">
             <tr className="border-b border-border">
               <th scope="col" className="px-4 py-2 text-start font-medium md:px-5">{t('feature')}</th>
               <th scope="col" className="w-16 px-2 py-2 text-center font-medium md:w-24">{t('free')}</th>
