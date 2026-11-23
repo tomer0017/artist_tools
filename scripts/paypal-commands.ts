@@ -72,16 +72,17 @@ export async function paypalSetup(db: Db): Promise<number> {
   const settings = settingsOrExplain();
   if (!settings) return 1;
   const client = createPayPalClient(settings);
+  const scopes = await client.scopes();
+  if (!scopes.includes(SUBSCRIPTIONS_SCOPE)) console.log('Warning: PayPal does not list Subscriptions among this app\'s permissions.');
+  // The plans need a price; without one they are created by the first checkout instead.
   const base = await basePrice(db);
-  if (!base) {
-    console.log('Publish a monthly Pro price in Admin → Pricing first: the plans are created with it.');
-    return 1;
+  if (!base) console.log('No published monthly Pro price yet: the PayPal plans are created on the first checkout after it is published.');
+  else {
+    console.log(`USD plan ${await ensurePlan(db, client, 'USD', base.amountMinor)}`);
+    const rate = await rateForQuote(db);
+    if (rate) console.log(`ILS plan ${await ensurePlan(db, client, 'ILS', usdToIls(base.amountMinor, rate.rateMicros))}`);
+    else console.log('ILS plan not created yet: the Bank of Israel rate could not be confirmed (the first ILS checkout creates it).');
   }
-  const usd = await ensurePlan(db, client, 'USD', base.amountMinor);
-  console.log(`USD plan ${usd}`);
-  const rate = await rateForQuote(db);
-  if (rate) console.log(`ILS plan ${await ensurePlan(db, client, 'ILS', usdToIls(base.amountMinor, rate.rateMicros))}`);
-  else console.log('ILS plan not created yet: the Bank of Israel rate could not be confirmed (the first ILS checkout creates it).');
   const { baseURL } = authConfig();
   if (!baseURL.startsWith('https://')) {
     console.log(`No webhook: PayPal only notifies https addresses (this server is ${new URL(baseURL).origin}). Subscriptions are still read from PayPal on return and by billing-reconcile.`);
