@@ -40,6 +40,8 @@ export interface StageProps {
   /** He stands on this element's bottom edge (or on the first match of `floorSelector` inside the container). */
   floorRef?: RefObject<HTMLElement | null>;
   floorSelector?: string;
+  /** Stand on the floor element's bottom edge (Home's hero) or its top edge (on top of the Learn home's cards). */
+  floorEdge?: 'top' | 'bottom';
   view: CompanionView;
 }
 
@@ -49,26 +51,28 @@ const QUIET_MS = 4000;
 const SIGN_TIMEOUT_MS = 40_000;
 const MICRO_MIN_MS = 18_000;
 
-function measureStage(container: HTMLElement, floor: HTMLElement): Measured | null {
+function measureStage(container: HTMLElement, floor: HTMLElement, edge: 'top' | 'bottom' = 'bottom'): Measured | null {
   const c = container.getBoundingClientRect();
   const f = floor.getBoundingClientRect();
   if (c.width === 0 || f.height === 0) return null;
   const rtl = getComputedStyle(container).direction === 'rtl';
+  const floorY = (edge === 'top' ? f.top : f.bottom) - c.top - 2;
+  const top = container.querySelector<HTMLElement>('[data-sketchy-top]');
+  const topLimit = (top ? top.getBoundingClientRect().bottom - c.top : edge === 'top' ? 0 : f.top - c.top) + 6;
+  // Only text in the band where he stands (between the top limit and the floor) has to stay clear.
   let textEnd = 0;
   for (const el of container.querySelectorAll<HTMLElement>('[data-sketchy-avoid]')) {
     const range = document.createRange();
     range.selectNodeContents(el);
     for (const r of range.getClientRects()) {
-      if (r.width === 0 || r.bottom < f.top || r.top > f.bottom) continue;
+      if (r.width === 0 || r.bottom - c.top < topLimit || r.top - c.top > floorY) continue;
       textEnd = Math.max(textEnd, rtl ? c.right - r.left : r.right - c.left);
     }
   }
-  const top = container.querySelector<HTMLElement>('[data-sketchy-top]');
-  const topLimit = (top ? top.getBoundingClientRect().bottom : f.top) - c.top + 6;
-  return { width: c.width, floor: f.bottom - c.top - 2, textEnd, topLimit, rtl, narrow: window.innerWidth < 768 };
+  return { width: c.width, floor: floorY, textEnd, topLimit, rtl, narrow: window.innerWidth < 768 };
 }
 
-export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelector, view }: StageProps) {
+export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelector, floorEdge = 'bottom', view }: StageProps) {
   // The floor: the element given, or found inside the container when the stage cannot reach it directly.
   const floorRef = useMemo<RefObject<HTMLElement | null>>(
     () => ({
@@ -211,7 +215,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     const floor = floorRef.current;
     if (!container || !floor) return;
     const update = () => {
-      const measured = measureStage(container, floor);
+      const measured = measureStage(container, floor, floorEdge);
       const next = measured ? geometryOf(measured, settings.size) : null;
       setGeo((was) => (JSON.stringify(was) === JSON.stringify(next) ? was : next));
     };
@@ -226,7 +230,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
       observer.disconnect();
       window.removeEventListener('orientationchange', update);
     };
-  }, [containerRef, floorRef, settings.size]);
+  }, [containerRef, floorRef, floorEdge, settings.size]);
 
   // Keep him on a valid spot when the room changes (rotation, resizing).
   useEffect(() => {
@@ -327,14 +331,14 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     if (!container || !sign || !box || !geo) return;
     const c = container.getBoundingClientRect();
     const r = box.getBoundingClientRect();
-    const measured = measureStage(container, floorRef.current!);
+    const measured = measureStage(container, floorRef.current!, floorEdge);
     const fox = { left: r.left - c.left, right: r.right - c.left, top: r.top - c.top, height: r.height };
     const stage = { width: c.width, topLimit: measured?.topLimit ?? 8, floor: geo.floor };
     // Two steps: the width first (the text wraps to it), then the height it takes.
     const first = signPlacement(fox, sign.offsetHeight, stage, facingRef.current);
     sign.style.width = `${first.width}px`;
     setSignPos(signPlacement(fox, sign.offsetHeight, stage, facingRef.current));
-  }, [containerRef, floorRef, geo]);
+  }, [containerRef, floorRef, floorEdge, geo]);
 
   const present = useCallback(
     async (next: CompanionTip) => {
@@ -602,7 +606,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     if (!menu || !menuEl.current || !containerRef.current || !geo || xNow.current === null) return;
     const c = containerRef.current.getBoundingClientRect();
     const m = menuEl.current;
-    const measured = measureStage(containerRef.current, floorRef.current!);
+    const measured = measureStage(containerRef.current, floorRef.current!, floorEdge);
     const top = measured?.topLimit ?? 8;
     const foxLeft = xNow.current - geo.width / 2;
     const foxRight = xNow.current + geo.width / 2;
@@ -622,7 +626,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     }
     setMenuPos({ left: Math.round(Math.min(Math.max(8, left), Math.max(8, c.width - m.offsetWidth - 8))), top: Math.round(at) });
     window.requestAnimationFrame(() => m.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }));
-  }, [menu, geo, facing, containerRef, floorRef]);
+  }, [menu, geo, facing, containerRef, floorRef, floorEdge]);
 
   // Below him there is no post to hold: he points down at the sign instead.
   useEffect(() => {

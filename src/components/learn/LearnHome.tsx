@@ -70,7 +70,8 @@ export default function LearnHome() {
   return (
     <div ref={page} className="relative">
       <LearnHeader title={t('title')} lead={t('lead')} />
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Sketchy stands on top of these cards, beside the title (ADR-0024). */}
+      <div className="grid gap-4 md:grid-cols-2" data-sketchy-floor="">
         {showCourse && (
           <section aria-labelledby="learn-course-title" data-learn-choice="curriculum" className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
             <div className="flex items-center gap-3">
@@ -157,7 +158,7 @@ export default function LearnHome() {
       </section>
       {companion && (
         <Suspense fallback={null}>
-          <CompanionStage screen="learn" containerRef={page} floorSelector="header" />
+          <CompanionStage screen="learn" containerRef={page} floorSelector="[data-sketchy-floor]" floorEdge="top" />
         </Suspense>
       )}
     </div>
