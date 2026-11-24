@@ -186,3 +186,34 @@ testing it on desktop and iPhone, the founder asked for these fixes:
   signs appeared on desktop. Pace, cooldown and daily cap are unchanged.
   Clicking him opens his menu at once whatever the pace. Admin → Companion's
   preview shows any tip at once and scrolls into view.
+
+### Second amendment (2026-11-24): a calm assistant in one place
+
+The founder then tested on a real iPhone and asked for calm, helpful behaviour
+over animation. The stage is simpler now:
+
+- **One place.** He walks in once a visit from the edge of the screen into
+  his corner of the scrolling area, and stays there while the page scrolls.
+  There is no hero spot and no move between places. Going from Home to the
+  Learn home and back, he is simply there (`visit` in `Stage.tsx`). His corner
+  is measured from the scrolling area's outer sides, so it is the same with
+  or without a scrollbar.
+- **A small state machine.** The states are entering, idle (standing, then
+  sitting after 75 s, then dozing after the admin's "rest after"), showing a
+  sign, and leaving. There is no wandering, and no random sketch, think or
+  laugh. A tip's own animation no longer plays before the sign; only a
+  challenge to spin (or a tip marked jump or celebrate) gets a little jump
+  first. A click opens the menu with no flourish.
+- **The walk.** Two identical steps a cycle: from the drawn stride the legs
+  swing toward each other and back, never past the drawing. The body is high
+  at the passing moment and low at contact. The walking speed comes from this
+  gait at a calm cadence (`gaitSpeed`, about one second per two steps), so the
+  feet do not slide. A change of pose fades over 260 ms.
+- **Helpful pace.** The default ("balanced") offers a suggestion after 25 s of
+  quiet, then at most every 8 minutes, and no more than 10 a day; it is still
+  the admin's choice. Suggestions lean toward what follows the tool used last
+  and away from offering that same tool again (`affinity`). Memory
+  revision 2 drops, once, a snooze stored while ✕ wrongly started one.
+- **The roulette on a phone.** After a spin the result comes first, right
+  under the title, with its buttons. The wheel shrinks beside "Spin again",
+  and mood and category fold away behind "Change mood or category".

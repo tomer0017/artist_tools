@@ -8,10 +8,10 @@ import { classModeOn } from '@/lib/learn/class-mode';
 import { useAccount } from '@/components/shell/account';
 import { useCourseStart } from '@/components/learn/useCourseStart';
 import { CLIPS } from './clips';
-import { aimAt, dockGeometry, geometryOf, signPlacement, type Geometry, type Measured } from './geometry';
+import { dockGeometry, signPlacement, type Geometry } from './geometry';
 import { Menu } from './Menu';
 import { PRIORITY, useSketchyPresence } from './presence';
-import { strideCycle } from './raster-engine';
+import { gaitSpeed, strideCycle } from './raster-engine';
 import { preloadSketchy } from './raster-mesh';
 import { Roulette } from './Roulette';
 import { Sign } from './Sign';
@@ -20,95 +20,60 @@ import { useAbilities, useRunAction, type MenuView } from './actions';
 import { loadMemory, saveMemory, stageMounted, takePending, useCompanionEvents, useCompanionPrefs, useLastTool, useReducedMotion, type CompanionEvent, type CompanionView } from './state';
 
 // ─── The stage (ADR-0024) ──────────────────────────────────────────────────────
-// Sketchy's place on a screen and what he does there. He first stands on the
-// floor line of the screen's top area (Home's hero, the Learn home's cards),
-// only on the free side of its text (geometry.ts). Once the page scrolls his
-// spot half out of view he runs into his floating corner of the scrolling
-// area (above a phone's bottom bar), and he is back on his spot when it is in
-// full view again: one Sketchy, always at hand while the page scrolls. There:
-//   - he walks in (his legs at the pace of the ground he covers), looks
-//     around and waves; the first time he introduces himself, on a new day he
-//     says hello;
-//   - his eyes and head follow the pointer; on a touch screen he glances
-//     toward a tap;
-//   - after a save or a completed lesson or challenge he celebrates and
-//     offers what could come next;
-//   - after a quiet while he may hold up a sign with a suggestion (the pace,
-//     the daily cap and "Not now" are the admin's, ../../lib/companion/brain);
-//   - now and then he walks to another free spot, sits, sketches, or rests;
-//   - a click (or Enter) opens his menu at once, whatever the pace of his
-//     suggestions; he never moves while it or a sign is open, and never offers
-//     anything while the person is using the page (a tap, a key or a scroll in
-//     the last seconds).
-// While the roulette (or anything else showing its own Sketchy) is open he is
-// not drawn at all (presence.ts), and comes back once when it closes. In a
-// hidden tab he stops. With reduced motion he does not walk: he appears, and
-// every pose is still.
+// Sketchy as a calm personal drawing assistant on Home and the Learn home.
+//   - Once a visit he walks in from the edge of the screen into his corner of
+//     the scrolling area (the end of the reading direction, above a phone's
+//     bottom bar), and stays there while the page scrolls: no other place, no
+//     second entrance, no jumps. Between Home and the Learn home he is simply
+//     there.
+//   - He stands, breathes, blinks and follows the pointer with his eyes;
+//     after a quiet while he sits down, later he dozes; a tap or the pointer
+//     close by and he stands again. Nothing else plays on its own.
+//   - Now and then he pulls out his wooden sign with a suggestion that fits
+//     the moment (the screen, the tool used last, who the person is, what their
+//     plan opens) and a real button; a challenge to spin comes with a little
+//     jump. The pace, the daily cap and "Not now" are the admin's
+//     (../../lib/companion/brain).
+//   - After a save or a completed lesson or challenge he celebrates once and
+//     may suggest a next step.
+//   - A click (or Enter) opens his menu at once.
+//   - While the roulette (or anything else showing its own Sketchy) is open
+//     he is not drawn at all (presence.ts); he is back when it closes.
+// In a hidden tab he stops. With reduced motion he does not walk: he appears,
+// and every pose is still.
 
 export interface StageProps {
   screen: ScreenId;
-  /** The element he lives in (position: relative); his floor, text to avoid and top limit are found inside it. */
+  /** The screen's content, inside its scrolling area: his corner is that area's. */
   containerRef: RefObject<HTMLElement | null>;
-  /** He stands on this element's bottom edge (or on the first match of `floorSelector` inside the container). */
-  floorRef?: RefObject<HTMLElement | null>;
-  floorSelector?: string;
-  /** Stand on the floor element's bottom edge (Home's hero) or its top edge (on top of the Learn home's cards). */
-  floorEdge?: 'top' | 'bottom';
   view: CompanionView;
 }
 
-type Phase = 'waiting' | 'entering' | 'idle' | 'walking' | 'sign' | 'leaving';
-type Place = 'hero' | 'dock';
+type Phase = 'waiting' | 'entering' | 'idle' | 'sign' | 'leaving';
+type Posture = 'stand' | 'sit' | 'doze';
 type DockGeometry = Geometry & { topLimit: number };
-type Box = { left: number; top: number; width: number; height: number };
 
 const QUIET_MS = 4000;
-const SIGN_TIMEOUT_MS = 40_000;
-const MICRO_MIN_MS = 18_000;
-/** His spot scrolled this far out of view: he floats; back in full view: he returns to it. */
-const DOCK_BELOW = 0.5;
-const HERO_FROM = 0.98;
+const SIGN_TIMEOUT_MS = 45_000;
+/** After this long with nothing happening he sits down (he dozes after the admin's "rest after"). */
+const SIT_AFTER_MS = 75_000;
+/** The pointer this close (CSS pixels) wakes him. */
+const NEAR = 160;
 
-function measureStage(container: HTMLElement, floor: HTMLElement, edge: 'top' | 'bottom' = 'bottom'): Measured | null {
-  const c = container.getBoundingClientRect();
-  const f = floor.getBoundingClientRect();
-  if (c.width === 0 || f.height === 0) return null;
-  const rtl = getComputedStyle(container).direction === 'rtl';
-  const floorY = (edge === 'top' ? f.top : f.bottom) - c.top - 2;
-  const top = container.querySelector<HTMLElement>('[data-sketchy-top]');
-  const topLimit = (top ? top.getBoundingClientRect().bottom - c.top : edge === 'top' ? 0 : f.top - c.top) + 6;
-  // Only text in the band where he stands (between the top limit and the floor) has to stay clear.
-  let textEnd = 0;
-  for (const el of container.querySelectorAll<HTMLElement>('[data-sketchy-avoid]')) {
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    for (const r of range.getClientRects()) {
-      if (r.width === 0 || r.bottom - c.top < topLimit || r.top - c.top > floorY) continue;
-      textEnd = Math.max(textEnd, rtl ? c.right - r.left : r.right - c.left);
-    }
-  }
-  return { width: c.width, floor: floorY, textEnd, topLimit, rtl, narrow: window.innerWidth < 768 };
-}
+/** This visit (until the page is reloaded): he walks in once and says hello once, on whichever screen. */
+const visit = { entered: false, greeted: false };
 
-/** The scrolling area's visible content box on screen (inside its scrollbar). */
+/**
+ * The scrolling area on screen. Its outer sides, scrollbar or not, so his corner is the same on
+ * every screen (a desktop scrollbar is narrower than the gap he keeps from the side).
+ */
 function areaOf(scroller: HTMLElement | null) {
   if (!scroller) return { left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight };
   const r = scroller.getBoundingClientRect();
-  const left = r.left + scroller.clientLeft;
-  const top = r.top + scroller.clientTop;
-  return { left, right: left + scroller.clientWidth, top, bottom: top + scroller.clientHeight };
+  return { left: r.left, right: r.right, top: r.top, bottom: r.top + scroller.clientTop + scroller.clientHeight };
 }
 
-export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelector, floorEdge = 'bottom', view }: StageProps) {
-  // The floor: the element given, or found inside the container when the stage cannot reach it directly.
-  const floorRef = useMemo<RefObject<HTMLElement | null>>(
-    () => ({
-      get current() {
-        return floorRefProp?.current ?? (floorSelector ? (containerRef.current?.querySelector<HTMLElement>(floorSelector) ?? null) : null);
-      },
-    }),
-    [containerRef, floorRefProp, floorSelector],
-  );
+export function Stage({ screen, containerRef, view }: StageProps) {
   const t = useTranslations('companion');
   const locale = useLocale() === 'he' ? 'he' : 'en';
   const account = useAccount();
@@ -122,20 +87,12 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   // He is drawn only while nothing else shows its own Sketchy (the roulette).
   const owns = useSketchyPresence(`stage:${screen}`, PRIORITY.stage);
 
-  const [heroGeo, setHeroGeo] = useState<Geometry | null>(null);
-  const [dockGeo, setDockGeo] = useState<DockGeometry | null>(null);
-  const [place, setPlace] = useState<Place>('hero');
-  const placeRef = useRef<Place>(place);
-  placeRef.current = place;
-  const geo = place === 'dock' ? dockGeo : heroGeo;
-  // Read the latest geometry inside callbacks that outlive a render (an entrance, a sign shown later).
+  const [geo, setGeo] = useState<DockGeometry | null>(null);
+  // Read the latest geometry inside callbacks that outlive a render (his entrance, a sign shown later).
   const geoRef = useRef(geo);
   geoRef.current = geo;
-  const dockRef = useRef(dockGeo);
-  dockRef.current = dockGeo;
   const [x, setX] = useState<number | null>(null);
   const [facing, setFacing] = useState<'left' | 'right'>('left');
-  // Read where he faces now (callbacks made at his entrance outlive that render).
   const facingRef = useRef(facing);
   facingRef.current = facing;
   const [moveMs, setMoveMs] = useState(0);
@@ -150,32 +107,26 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
 
   const fox = useRef<SketchyHandle>(null);
   const foxBox = useRef<HTMLDivElement>(null);
-  const home = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const signEl = useRef<HTMLDivElement>(null);
   const menuEl = useRef<HTMLDivElement>(null);
   const phase = useRef<Phase>('waiting');
+  const posture = useRef<Posture>('stand');
   const memory = useRef<Memory | null>(null);
   const timers = useRef(new Set<number>());
   const lastInput = useRef(0);
-  const lastMove = useRef(Date.now());
-  const lastMicro = useRef(Date.now());
-  const microAfter = useRef(MICRO_MIN_MS);
-  /** The last thing that happened (arrival, a sign, the menu, a stroll, waking up): he rests after a long quiet. */
+  /** The last thing that happened (arrival, a sign, the menu, a celebration): he sits and dozes after a long quiet. */
   const lastEvent = useRef(Date.now());
   const arrivedAt = useRef(Date.now());
-  const restingSince = useRef<number | null>(null);
-  const spotIndex = useRef(0);
   const xNow = useRef<number | null>(null);
   /** Only the newest quiet loop runs (each effect run starts a new one). */
   const loop = useRef(0);
-  /** Each entrance or move between his places; an older one stops where it is. */
+  /** His entrance; a newer one (or hiding him) stops an older one where it is. */
   const moves = useRef(0);
-  /** Said hello on this visit (the introduction, a celebration or the day's greeting). */
-  const greeted = useRef(false);
-  const dockedBefore = useRef(false);
-  const shownPlace = useRef<Place | null>(null);
-  const highlighted = useRef<Element | null>(null);
+  /** His hello on this visit; asking for him (a click) cancels one still on its way. */
+  const hello = useRef(0);
+  const menuOpen = useRef(false);
+  menuOpen.current = menu !== null;
   const alive = useRef(true);
 
   const classMode = (() => {
@@ -208,41 +159,16 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     () => () => {
       alive.current = false;
       clearTimers();
-      highlighted.current?.removeAttribute('data-sketchy-highlight');
     },
     [clearTimers],
   );
   const scroller = useCallback(() => containerRef.current?.closest<HTMLElement>('.overflow-y-auto') ?? null, [containerRef]);
 
-  /** The box his place is measured in: the container (hero), or the screen (dock). */
-  const frame = useCallback((): Box => {
-    if (placeRef.current === 'dock') return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-    const c = containerRef.current?.getBoundingClientRect();
-    return c ? { left: c.left, top: c.top, width: c.width, height: c.height } : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-  }, [containerRef]);
-  /** Nothing of his goes above this line (the brand row on phones, the top of the scrolling area when floating). */
-  const topLimit = useCallback((): number => {
-    if (placeRef.current === 'dock') return dockRef.current?.topLimit ?? 8;
-    const container = containerRef.current;
-    const floor = floorRef.current;
-    return (container && floor ? measureStage(container, floor, floorEdge)?.topLimit : null) ?? 8;
-  }, [containerRef, floorRef, floorEdge]);
-
   const allowed = useCallback((id: AnimationId) => settings.animations[id] !== false, [settings.animations]);
   /** A clip, or a calmer one when the admin switched it off. */
   const choose = useCallback(
     (id: AnimationId): AnimationId => {
-      const fallbacks: Partial<Record<AnimationId, AnimationId[]>> = {
-        run: ['walk'],
-        celebrate: ['jump', 'wave'],
-        jump: ['celebrate', 'wave'],
-        laugh: ['wave'],
-        rest: ['sit'],
-        point: ['holdSign'],
-        draw: ['think'],
-        curious: ['think'],
-        think: ['curious'],
-      };
+      const fallbacks: Partial<Record<AnimationId, AnimationId[]>> = { run: ['walk'], celebrate: ['jump', 'wave'], jump: ['celebrate', 'wave'], rest: ['sit'], sit: ['idle'] };
       for (const c of [id, ...(fallbacks[id] ?? [])]) if (allowed(c)) return c;
       return 'idle';
     },
@@ -250,18 +176,30 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   );
   /** Play a clip; resolves when a clip that ends has ended, or after `ms` for one that loops. */
   const play = useCallback(
-    (id: AnimationId, ms = 1600, params?: { aim?: number }) =>
+    (id: AnimationId, ms = 1600) =>
       new Promise<void>((resolve) => {
         const clip = choose(id);
         if (!fox.current) return resolve();
         if (CLIPS[clip].loop || reduced) {
-          fox.current.play(clip, { params });
+          fox.current.play(clip);
           later(reduced ? Math.min(ms, 900) : ms, resolve);
-        } else fox.current.play(clip, { params, onEnd: () => resolve(), restart: true });
+        } else fox.current.play(clip, { onEnd: () => resolve(), restart: true });
       }),
     [choose, later, reduced],
   );
-  const rest = useCallback(() => fox.current?.play(choose('sit')), [choose]);
+  /** Back to standing quietly (after a sign, the menu or a celebration). */
+  const settle = useCallback(() => {
+    posture.current = 'stand';
+    lastEvent.current = Date.now();
+    if (phase.current === 'idle') fox.current?.play('idle');
+  }, []);
+  /** Up from sitting or dozing, without a fuss. */
+  const wake = useCallback(() => {
+    lastEvent.current = Date.now();
+    if (posture.current === 'stand' || phase.current !== 'idle') return;
+    posture.current = 'stand';
+    fox.current?.play('idle');
+  }, []);
 
   const persist = useCallback(
     (next: Memory) => {
@@ -271,35 +209,13 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     [userId],
   );
 
-  // ── geometry: his spot in the hero, and his floating corner ────────────────
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    const floor = floorRef.current;
-    if (!container || !floor) return;
-    const update = () => {
-      const measured = measureStage(container, floor, floorEdge);
-      const next = measured ? geometryOf(measured, settings.size) : null;
-      setHeroGeo((was) => (JSON.stringify(was) === JSON.stringify(next) ? was : next));
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(container);
-    observer.observe(floor);
-    window.addEventListener('orientationchange', update);
-    // Web fonts change where the text ends.
-    void document.fonts?.ready.then(update).catch(() => {});
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('orientationchange', update);
-    };
-  }, [containerRef, floorRef, floorEdge, settings.size]);
-
+  // ── his corner ─────────────────────────────────────────────────────────────
   useLayoutEffect(() => {
     const area = scroller();
     const update = () => {
       const rtl = getComputedStyle(containerRef.current ?? document.documentElement).direction === 'rtl';
       const next = dockGeometry(areaOf(area), window.innerWidth, rtl, window.innerWidth < 768, settings.size);
-      setDockGeo((was) => (JSON.stringify(was) === JSON.stringify(next) ? was : next));
+      setGeo((was) => (JSON.stringify(was) === JSON.stringify(next) ? was : next));
     };
     update();
     const observer = new ResizeObserver(update);
@@ -313,20 +229,14 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     };
   }, [containerRef, scroller, settings.size]);
 
-  // Keep him on a valid spot when the room changes (rotation, resizing); a move between places is the arrival's.
+  // His corner moved (rotation, a resized window, a phone's toolbar): he is in it at once.
   useEffect(() => {
-    if (!geo || xNow.current === null || phase.current === 'waiting' || phase.current === 'entering') return;
-    if (shownPlace.current !== place) {
-      shownPlace.current = place;
-      return;
-    }
-    const spot = geo.spots[Math.min(spotIndex.current, geo.spots.length - 1)];
-    spotIndex.current = Math.min(spotIndex.current, geo.spots.length - 1);
-    xNow.current = spot;
+    if (!geo || xNow.current === null || phase.current === 'waiting' || phase.current === 'entering' || phase.current === 'leaving') return;
+    xNow.current = geo.spots[0];
     setMoveMs(0);
-    setX(spot);
+    setX(geo.spots[0]);
     setFacing(geo.facing);
-  }, [geo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [geo]);
 
   // ── a hidden tab: he stops ─────────────────────────────────────────────────
   useEffect(() => {
@@ -335,7 +245,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
-  // ── tips ───────────────────────────────────────────────────────────────────
+  // ── suggestions ────────────────────────────────────────────────────────────
   const contextFor = useCallback(
     (trigger: TriggerId): Context => {
       const now = Date.now();
@@ -344,34 +254,29 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     [audience, can, lastTool, screen],
   );
 
-  const clearHighlight = useCallback(() => {
-    highlighted.current?.removeAttribute('data-sketchy-highlight');
-    highlighted.current = null;
-  }, []);
-
   const placeSign = useCallback(() => {
     const sign = signEl.current;
     const box = foxBox.current;
     const g = geoRef.current;
     if (!sign || !box || !g) return;
-    const c = frame();
+    const width = window.innerWidth;
     const r = box.getBoundingClientRect();
-    const at = { left: r.left - c.left, right: r.right - c.left, top: r.top - c.top, height: r.height };
-    const stage = { width: c.width, topLimit: topLimit(), floor: g.floor };
+    const at = { left: r.left, right: r.right, top: r.top, height: r.height };
+    const room = { width, topLimit: g.topLimit, floor: g.floor };
     // Two steps: the width first (the text wraps to it), then the height it takes.
-    const first = signPlacement(at, sign.offsetHeight, stage, facingRef.current);
+    const first = signPlacement(at, sign.offsetHeight, room, facingRef.current);
     sign.style.width = `${first.width}px`;
-    const placed = signPlacement(at, sign.offsetHeight, stage, facingRef.current);
-    if (placed.below && placeRef.current === 'dock') {
-      // Floating, there is nothing below him: the sign goes above him instead.
-      const width = Math.min(placed.width, c.width - 16);
-      const left = Math.min(Math.max(8, at.left + (at.right - at.left) / 2 - width / 2), c.width - width - 8);
-      const top = Math.max(stage.topLimit, at.top - sign.offsetHeight - 4);
-      setSignPos({ left: Math.round(left), top: Math.round(top), width, below: false, maxHeight: at.top - 4 - stage.topLimit < sign.offsetHeight ? Math.round(at.top - 4 - stage.topLimit) : null });
+    const placed = signPlacement(at, sign.offsetHeight, room, facingRef.current);
+    if (placed.below) {
+      // Nothing below him in his corner: on a very narrow screen the sign goes above him.
+      const w = Math.min(placed.width, width - 16);
+      const left = Math.min(Math.max(8, (at.left + at.right) / 2 - w / 2), width - w - 8);
+      const above = at.top - 4 - g.topLimit;
+      setSignPos({ left: Math.round(left), top: Math.round(Math.max(g.topLimit, at.top - sign.offsetHeight - 4)), width: w, below: false, maxHeight: above < sign.offsetHeight ? Math.round(above) : null });
       return;
     }
     setSignPos(placed);
-  }, [frame, topLimit]);
+  }, []);
 
   const closeSign = useCallback(
     (snoozed: boolean) => {
@@ -381,35 +286,28 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
         return null;
       });
       setSignPos(null);
-      clearHighlight();
       phase.current = 'idle';
-      lastEvent.current = Date.now();
-      lastMicro.current = Date.now();
-      if (alive.current) void play('idle', 600).then(() => phase.current === 'idle' && rest());
+      settle();
     },
-    [clearHighlight, persist, play, rest, settings.snoozeHours],
+    [persist, settle, settings.snoozeHours],
   );
 
+  /** He pulls out his sign with a suggestion; a challenge to spin (or an excited tip) gets a little jump first. */
   const present = useCallback(
     async (next: CompanionTip) => {
       if (!fox.current || !geoRef.current) return;
       phase.current = 'sign';
-      restingSince.current = null;
+      posture.current = 'stand';
       const now = Date.now();
       persist(remember(memory.current!, next, now, dayOf(now)));
-      // The move that comes with it: pointing at the tool card it is about, or its own animation.
-      const target = next.action.type === 'openTool' && placeRef.current === 'hero' ? containerRef.current?.querySelector(`[data-tool-card="${next.action.tool}"]`) : null;
-      if (next.animation === 'point' && target && allowed('point')) {
-        const shoulder = fox.current.anchor('shoulder');
-        const r = target.getBoundingClientRect();
-        const aim = shoulder ? aimAt({ x: shoulder.left, y: shoulder.top }, { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 80) }) : 30;
-        target.setAttribute('data-sketchy-highlight', '');
-        highlighted.current = target;
-        await play('point', 1700, { aim });
-      } else if (next.animation !== 'holdSign') {
-        await play(next.animation, 1500);
-      }
+      const excited = next.action.type === 'roulette' || next.action.type === 'classRoulette' || next.animation === 'jump' || next.animation === 'celebrate';
+      if (excited && !reduced) await play('jump');
       if (!alive.current || phase.current !== 'sign') return;
+      // The person opened his menu meanwhile: that comes first.
+      if (menuOpen.current) {
+        phase.current = 'idle';
+        return;
+      }
       fox.current?.play(choose('holdSign'));
       setSignPos(null);
       setTip(next);
@@ -418,7 +316,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
         if (phase.current === 'sign') closeSign(false);
       });
     },
-    [allowed, choose, closeSign, containerRef, later, locale, persist, play, t],
+    [choose, closeSign, later, locale, persist, play, reduced, t],
   );
 
   const offer = useCallback(
@@ -445,6 +343,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     setMenu(null);
     setTip(null);
     setSignPos(null);
+    phase.current = phase.current === 'sign' ? 'idle' : phase.current;
     setRoulette(o);
   }, []);
   const host = useMemo(() => ({ openRoulette, openMenu, nextLessonHref: nextLesson && !nextLesson.loading ? nextLesson.href : null }), [nextLesson, openMenu, openRoulette]);
@@ -472,7 +371,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   }, [can, contextFor, drawingTips.length, nextLesson, openRoulette, present, runAction, view.tips]);
 
   // ── moving ─────────────────────────────────────────────────────────────────
-  /** Walk (or run) to `target` in his current place; his steps match the ground he covers. */
+  /** Walk (or run) to `target` at his natural rhythm, his steps matched to the ground he covers. */
   const walkTo = useCallback(
     (target: number, run = false) =>
       new Promise<void>((resolve) => {
@@ -481,7 +380,6 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
         const from = xNow.current ?? target;
         const dist = Math.abs(target - from);
         if (dist < 2) return resolve();
-        const clip = run ? choose('run') : 'walk';
         if (reduced || !allowed('walk')) {
           setMoveMs(0);
           setFaded(true);
@@ -493,15 +391,15 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
           });
           return;
         }
-        phase.current = phase.current === 'entering' ? 'entering' : 'walking';
+        const clip = run ? choose('run') : 'walk';
+        const gait = clip === 'run' ? 'run' : 'walk';
         setFacing(target < from ? 'left' : 'right');
-        const pxPerSec = CLIPS[clip].speed! * (g.height / 292) * (settings.speed / 100);
-        fox.current?.play(clip, { params: { cycle: strideCycle(clip === 'run' ? 'run' : 'walk', pxPerSec, g.height) } });
+        const pxPerSec = gaitSpeed(gait, g.height, settings.speed);
+        fox.current?.play(clip, { params: { cycle: strideCycle(gait, pxPerSec, g.height) } });
         const ms = Math.round((dist / pxPerSec) * 1000);
         setMoveMs(ms);
         xNow.current = target;
         setX(target);
-        lastMove.current = Date.now();
         later(ms + 30, resolve);
       }),
     [allowed, choose, later, reduced, settings.speed],
@@ -518,168 +416,75 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     const g = geoRef.current;
     if (g && !reduced && allowed('walk')) {
       setFacing(g.offstage > (xNow.current ?? 0) ? 'right' : 'left');
-      const clip = choose('run');
-      const pxPerSec = CLIPS[clip].speed! * (g.height / 292);
-      fox.current?.play(clip, { params: { cycle: strideCycle(clip === 'run' ? 'run' : 'walk', pxPerSec, g.height) } });
-      const ms = Math.round((Math.abs(g.offstage - (xNow.current ?? 0)) / pxPerSec) * 1000);
-      setMoveMs(ms);
-      setX(g.offstage);
-      await new Promise((r) => later(ms + 50, () => r(null)));
+      await walkTo(g.offstage);
     } else {
       setFaded(true);
-      await new Promise((r) => later(350, () => r(null)));
+      await wait(350);
     }
     await account?.refresh();
     return true;
-  }, [account, allowed, choose, clearTimers, later, play, reduced, savePrefs]);
-
-  /**
-   * Arrive in a place: from the side at a run when he floats in (a walk on his first entrance),
-   * or simply appear (back on his spot, or with less motion). False if a newer move took over.
-   */
-  const enter = useCallback(
-    async (to: Place, move: number, first: boolean): Promise<boolean> => {
-      const g = geoRef.current;
-      if (!g) return false;
-      const spot = g.spots[0];
-      spotIndex.current = 0;
-      shownPlace.current = to;
-      const moving = !reduced && allowed('walk') && (first || to === 'dock');
-      phase.current = 'entering';
-      restingSince.current = null;
-      xNow.current = moving ? g.offstage : spot;
-      setMoveMs(0);
-      setX(xNow.current);
-      setFacing(g.facing);
-      setFaded(true);
-      // His artwork is ready before he moves (never a still picture sliding in).
-      await Promise.all([preloadSketchy(), wait(first ? Math.max(300, settings.firstDelaySec * 1000) : 40)]);
-      if (move !== moves.current || !alive.current) return false;
-      setFaded(false);
-      if (moving) await walkTo(spot, !first);
-      if (move !== moves.current || !alive.current) return false;
-      setFacing(g.facing);
-      phase.current = 'idle';
-      arrivedAt.current = Date.now();
-      lastEvent.current = Date.now();
-      lastMove.current = Date.now();
-      return true;
-    },
-    [allowed, reduced, settings.firstDelaySec, wait, walkTo],
-  );
+  }, [account, allowed, clearTimers, play, reduced, savePrefs, wait, walkTo]);
 
   /** His hello on this visit: the introduction, a celebration of what just happened, or the day's greeting. */
-  const greet = useCallback(async () => {
-    greeted.current = true;
-    const pending = takePending();
-    const firstTime = memory.current!.metAt === null;
-    if (firstTime) {
-      // His introduction comes with its own wave.
-      const intro = pickTip(view.tips, contextFor('firstVisit'), memory.current!);
-      if (intro) {
-        void present(intro);
-        return;
+  const greet = useCallback(
+    async (walkedIn: boolean) => {
+      visit.greeted = true;
+      const token = ++hello.current;
+      const still = () => token === hello.current && alive.current;
+      const pending = takePending();
+      const firstTime = memory.current!.metAt === null;
+      if (firstTime) {
+        if (walkedIn) await play('wave', 1800);
+        if (!still()) return;
+        // His introduction, on his sign.
+        const intro = pickTip(view.tips, contextFor('firstVisit'), memory.current!);
+        if (intro) return void present(intro);
+        persist({ ...memory.current!, metAt: Date.now() });
+      } else if (pending && settings.celebrate) {
+        await play(choose('celebrate'));
+        if (!still()) return;
+        if (offer(pending.type === 'saved' ? 'afterSave' : 'afterComplete')) return;
+      } else {
+        if (walkedIn) await play('wave', 1800);
+        if (!still()) return;
+        if (offer('arrive')) return;
       }
-      await play('wave', 1800);
-      persist({ ...memory.current!, metAt: Date.now() });
-    } else if (pending && settings.celebrate) {
-      await play(choose('celebrate'));
-      if (offer(pending.type === 'saved' ? 'afterSave' : 'afterComplete')) return;
-    } else {
-      await play('curious', 1500);
-      await play('wave', 1800);
-      if (offer('arrive')) return;
-    }
-    if (phase.current === 'idle') rest();
-  }, [choose, contextFor, offer, persist, play, present, rest, settings.celebrate, view.tips]);
-
-  const heroSpotInView = useCallback((): number => {
-    const el = home.current;
-    if (!el) return 0;
-    const r = el.getBoundingClientRect();
-    const a = areaOf(scroller());
-    const seen = Math.max(0, Math.min(r.bottom, a.bottom) - Math.max(r.top, a.top)) * Math.max(0, Math.min(r.right, a.right) - Math.max(r.left, a.left));
-    return r.width * r.height > 0 ? seen / (r.width * r.height) : 0;
-  }, [scroller]);
-
-  // ── his entrance, once his places and his memory are known ─────────────────
-  useEffect(() => {
-    if (!dockGeo || !userId || phase.current !== 'waiting') return;
-    memory.current = loadMemory(userId);
-    const to: Place = heroGeo && heroSpotInView() >= DOCK_BELOW ? 'hero' : 'dock';
-    placeRef.current = to;
-    setPlace(to);
-    phase.current = 'entering';
-    const move = ++moves.current;
-    // Placed in the next frame, once the place's geometry is in effect.
-    window.requestAnimationFrame(() => {
-      geoRef.current = to === 'dock' ? dockRef.current : geoRef.current;
-      void enter(to, move, true).then((arrived) => {
-        if (arrived && move === moves.current) void greet();
-      });
-    });
-  }, [dockGeo, heroGeo, userId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /** Float in his corner, or go back to his spot: whatever he was showing closes (no snooze). */
-  const moveTo = useCallback(
-    (to: Place) => {
-      if (placeRef.current === to || phase.current === 'waiting' || phase.current === 'leaving') return;
-      if (to === 'hero' && !heroGeo) return;
-      const move = ++moves.current;
-      setTip(null);
-      setSignPos(null);
-      setMenu(null);
-      clearHighlight();
-      placeRef.current = to;
-      geoRef.current = to === 'dock' ? dockRef.current : heroGeo;
-      setPlace(to);
-      void enter(to, move, false).then(async (arrived) => {
-        if (!arrived || move !== moves.current) return;
-        if (!greeted.current) return void greet();
-        const hello = to === 'dock' && !dockedBefore.current;
-        dockedBefore.current ||= to === 'dock';
-        await play(hello ? 'wave' : 'idle', hello ? 1500 : 700);
-        if (move === moves.current && phase.current === 'idle') rest();
-      });
+      if (phase.current === 'idle') settle();
     },
-    [clearHighlight, enter, greet, heroGeo, play, rest],
+    [choose, contextFor, offer, persist, play, present, settings.celebrate, settle, view.tips],
   );
 
-  // Where his spot is: half out of view, he floats; fully back in view, he returns. Never while his
-  // menu or the roulette is open (the menu scrolls itself into view): he catches up once they close.
-  const menuOpen = useRef(false);
-  menuOpen.current = menu !== null;
+  // ── his entrance: once a visit, from the edge of the screen into his corner ──
   useEffect(() => {
-    const el = home.current;
-    if (!el || !heroGeo) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (roulette || menuOpen.current) return;
-        if (placeRef.current === 'hero' && entry.intersectionRatio < DOCK_BELOW) moveTo('dock');
-        else if (placeRef.current === 'dock' && entry.intersectionRatio >= HERO_FROM) moveTo('hero');
-      },
-      { threshold: [0, 0.25, DOCK_BELOW, 0.75, HERO_FROM, 1] },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [heroGeo, moveTo, roulette]);
-  useEffect(() => {
-    if (menu !== null || roulette || !heroGeo || phase.current === 'waiting' || phase.current === 'entering') return;
-    const seen = heroSpotInView();
-    if (placeRef.current === 'hero' && seen < DOCK_BELOW) moveTo('dock');
-    else if (placeRef.current === 'dock' && seen >= HERO_FROM) moveTo('hero');
-  }, [menu, roulette]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── back from the roulette: once, where he was ─────────────────────────────
-  const hadFox = useRef(owns);
-  useEffect(() => {
-    if (owns && !hadFox.current && phase.current !== 'waiting') {
+    if (!geo || !userId || phase.current !== 'waiting') return;
+    memory.current = loadMemory(userId);
+    phase.current = 'entering';
+    const move = ++moves.current;
+    const walkIn = !visit.entered && !reduced && allowed('walk');
+    visit.entered = true;
+    const spot = geo.spots[0];
+    xNow.current = walkIn ? geo.offstage : spot;
+    setMoveMs(0);
+    setX(xNow.current);
+    setFacing(geo.facing);
+    // Back on another screen of this visit he is simply there.
+    setFaded(walkIn);
+    void (async () => {
+      // His artwork is ready before he moves (never a still picture sliding in).
+      await Promise.all([preloadSketchy(), wait(walkIn ? Math.max(300, settings.firstDelaySec * 1000) : 0)]);
+      if (move !== moves.current || !alive.current) return;
+      setFaded(false);
+      if (walkIn) await walkTo(spot);
+      if (move !== moves.current || !alive.current) return;
+      setFacing(geo.facing);
+      phase.current = 'idle';
+      posture.current = 'stand';
+      arrivedAt.current = Date.now();
       lastEvent.current = Date.now();
-      lastMicro.current = Date.now();
-      window.requestAnimationFrame(() => void play('wave', 1200).then(() => phase.current === 'idle' && rest()));
-    }
-    hadFox.current = owns;
-  }, [owns, play, rest]);
+      if (walkIn) fox.current?.play('idle');
+      if (!visit.greeted) await greet(walkIn);
+    })();
+  }, [geo, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── the person's input (he never interrupts it), the pointer and taps ──────
   useEffect(() => {
@@ -699,12 +504,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
       const dx = px - (r.left + r.width / 2);
       const dy = py - (r.top + r.height * 0.32);
       const d = Math.hypot(dx, dy);
-      // Waking up when the pointer comes close.
-      if (d < 140 && restingSince.current !== null && phase.current === 'idle') {
-        restingSince.current = null;
-        lastEvent.current = Date.now();
-        void play('curious', 1400).then(() => phase.current === 'idle' && rest());
-      }
+      if (d < NEAR) wake();
       // His own frame: forward is the way he faces; close by he looks less far.
       const toward = facingRef.current === 'left' ? -1 : 1;
       const reach = Math.min(1, d / 160);
@@ -743,9 +543,9 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
       document.removeEventListener('mouseout', onOut);
       area.removeEventListener('scroll', input);
     };
-  }, [scroller, play, rest]);
+  }, [scroller, wake]);
 
-  // ── the quiet loop: a suggestion, a stroll, a sketch, a rest ───────────────
+  // ── the quiet loop: a suggestion now and then; sitting, then dozing, after a long quiet ──
   useEffect(() => {
     if (!geo || !pageShown || !owns) return;
     const generation = ++loop.current;
@@ -753,37 +553,15 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
       if (!alive.current || generation !== loop.current) return;
       const now = Date.now();
       const busy = phase.current !== 'idle' || menu !== null || roulette !== null || tip !== null;
-      const quiet = now - lastInput.current > QUIET_MS;
-      if (!busy && quiet) {
+      if (!busy && now - lastInput.current > QUIET_MS) {
         if (now - arrivedAt.current >= settings.tipAfterSec * 1000 && offer('idle')) return;
-        if (settings.wander && !geo.compact && now - lastMove.current >= settings.wanderEverySec * 1000) {
-          const choices = geo.spots.map((_, i) => i).filter((i) => i !== spotIndex.current);
-          const nextSpot = choices[Math.floor(Math.random() * choices.length)];
-          if (nextSpot !== undefined) {
-            spotIndex.current = nextSpot;
-            restingSince.current = null;
-            const move = moves.current;
-            void walkTo(geo.spots[nextSpot]).then(async () => {
-              if (!alive.current || move !== moves.current) return;
-              setFacing(geo.facing);
-              phase.current = 'idle';
-              lastEvent.current = Date.now();
-              await play(Math.random() < 0.5 ? 'curious' : 'idle', 1200);
-              if (phase.current === 'idle') rest();
-            });
-            later(1000, tick);
-            return;
-          }
-        }
-        if (restingSince.current === null && now - lastEvent.current >= settings.restAfterSec * 1000 && allowed('rest')) {
-          restingSince.current = now;
+        const still = now - lastEvent.current;
+        if (posture.current !== 'doze' && still >= settings.restAfterSec * 1000 && allowed('rest')) {
+          posture.current = 'doze';
           fox.current?.play('rest');
-        } else if (restingSince.current === null && now - lastMicro.current >= microAfter.current) {
-          lastMicro.current = now;
-          microAfter.current = MICRO_MIN_MS + Math.random() * 20_000;
-          const micro: AnimationId[] = ['draw', 'think', 'curious', 'laugh'];
-          const pickMicro = micro[Math.floor(Math.random() * micro.length)];
-          void play(pickMicro, pickMicro === 'draw' ? 4200 : 1800).then(() => phase.current === 'idle' && restingSince.current === null && rest());
+        } else if (posture.current === 'stand' && still >= SIT_AFTER_MS) {
+          posture.current = 'sit';
+          fox.current?.play(choose('sit'));
         }
       }
       later(1000, tick);
@@ -796,67 +574,57 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
       window.clearTimeout(id);
       held.delete(id);
     };
-  }, [geo, pageShown, owns, menu, roulette, tip, settings, offer, walkTo, play, rest, later, allowed]);
+  }, [geo, pageShown, owns, menu, roulette, tip, settings, offer, later, allowed, choose]);
 
   // ── good news from elsewhere on the page ───────────────────────────────────
   const onEvent = useCallback(
     (event: CompanionEvent) => {
       if (!settings.celebrate || phase.current !== 'idle' || menu !== null || roulette !== null) return;
       takePending();
+      posture.current = 'stand';
       void play(choose('celebrate')).then(() => {
-        if (!offer(event.type === 'saved' ? 'afterSave' : 'afterComplete') && phase.current === 'idle') rest();
+        if (!offer(event.type === 'saved' ? 'afterSave' : 'afterComplete') && phase.current === 'idle') settle();
       });
     },
-    [choose, menu, offer, play, rest, roulette, settings.celebrate],
+    [choose, menu, offer, play, roulette, settings.celebrate, settle],
   );
   useCompanionEvents(onEvent);
 
-  // ── the menu's place: above him, beside him, or (in the hero on narrow screens) just below his feet ──
+  // ── the menu's place: above him, beside him, or above him with its entries scrolling ──
   useLayoutEffect(() => {
     if (!menu || !menuEl.current || !geo || xNow.current === null) return;
-    const c = frame();
+    const width = window.innerWidth;
     const m = menuEl.current;
-    const top = topLimit();
-    const docked = placeRef.current === 'dock';
+    const top = geo.topLimit;
     const foxLeft = xNow.current - geo.width / 2;
     const foxRight = xNow.current + geo.width / 2;
-    const above = geo.floor - geo.height - m.offsetHeight - 6;
-    const roomBeside = facing === 'left' ? foxLeft - 12 : c.width - foxRight - 12;
+    const above = geo.floor - geo.height - 6 - top;
+    const beside = facing === 'left' ? foxLeft - 12 : width - foxRight - 12;
     let left: number;
     let at: number;
     let maxHeight: number | null = null;
-    if (above >= top) {
+    if (m.offsetHeight <= above) {
       left = xNow.current - m.offsetWidth / 2;
-      at = above;
-    } else if (roomBeside >= m.offsetWidth) {
+      at = geo.floor - geo.height - 6 - m.offsetHeight;
+    } else if (beside >= m.offsetWidth) {
       left = facing === 'left' ? foxLeft - m.offsetWidth - 4 : foxRight + 4;
       at = Math.max(top, geo.floor - m.offsetHeight);
-      if (docked && m.offsetHeight > geo.floor - top) maxHeight = geo.floor - top;
-    } else if (docked) {
-      // Floating with little room: above him, its entries scrolling.
-      left = xNow.current - m.offsetWidth / 2;
-      at = top;
-      maxHeight = Math.max(160, geo.floor - geo.height - 6 - top);
+      if (m.offsetHeight > geo.floor - top) maxHeight = geo.floor - top;
     } else {
       left = xNow.current - m.offsetWidth / 2;
-      at = geo.floor + 6;
+      at = top;
+      maxHeight = Math.max(160, above);
     }
-    setMenuPos({ left: Math.round(Math.min(Math.max(8, left), Math.max(8, c.width - m.offsetWidth - 8))), top: Math.round(at), maxHeight: maxHeight === null ? null : Math.round(maxHeight) });
-    if (!docked) window.requestAnimationFrame(() => m.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }));
-  }, [menu, geo, facing, frame, topLimit]);
-
-  // Below him there is no post to hold: he points down at the sign instead.
-  useEffect(() => {
-    if (signPos?.below && allowed('point')) fox.current?.play('point', { params: { aim: 75 } });
-  }, [signPos?.below, allowed]);
+    setMenuPos({ left: Math.round(Math.min(Math.max(8, left), Math.max(8, width - m.offsetWidth - 8))), top: Math.round(at), maxHeight: maxHeight === null ? null : Math.round(maxHeight) });
+  }, [menu, geo, facing]);
 
   useLayoutEffect(() => {
     if (!tip) return;
-    // The sign takes its place once he holds the post up (the next frames), and again when the room changes.
+    // The sign takes its place once he holds the post up (the next frames), and again when his corner moves.
     placeSign();
     const id = later(320, placeSign);
     return () => window.clearTimeout(id);
-  }, [tip, placeSign, geo, place, later]);
+  }, [tip, placeSign, geo, later]);
 
   // Escape on a sign closes it (the menu handles its own).
   useEffect(() => {
@@ -870,73 +638,58 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
 
   const onFoxClick = () => {
     if (phase.current === 'leaving') return;
-    // Stop where he is (on his way in, too): the person asked for him.
-    if ((phase.current === 'walking' || phase.current === 'entering') && foxBox.current && geoRef.current) {
-      const r = foxBox.current.getBoundingClientRect();
-      const here = r.left + r.width / 2 - frame().left;
-      moves.current += 1;
-      xNow.current = here;
-      setMoveMs(0);
-      setX(here);
-      setFaded(false);
-      setFacing(geoRef.current.facing);
-      phase.current = 'idle';
-      arrivedAt.current = Date.now();
-    }
-    restingSince.current = null;
+    // Asked for: no hello on top (on his way in he finishes walking into his corner).
+    visit.greeted = true;
+    hello.current += 1;
+    posture.current = 'stand';
+    lastEvent.current = Date.now();
     if (menu) {
       setMenu(null);
+      settle();
       return;
     }
     if (tip) {
       setTip(null);
       setSignPos(null);
-      clearHighlight();
       phase.current = 'idle';
     }
-    fox.current?.play(choose('wave'));
-    later(900, () => phase.current === 'idle' && fox.current?.play('idle'));
+    if (phase.current === 'idle') fox.current?.play('idle');
     setMenu('main');
   };
 
   const closeMenu = useCallback(() => {
     setMenu(null);
     button.current?.focus({ preventScroll: true });
-    if (phase.current === 'idle') rest();
-    lastMicro.current = Date.now();
-    lastEvent.current = Date.now();
-  }, [rest]);
+    settle();
+  }, [settle]);
 
   const onSignAction = () => {
     if (!tip) return;
     const action = tip.action;
     setTip(null);
     setSignPos(null);
-    clearHighlight();
     phase.current = 'idle';
     if (!memory.current!.metAt) persist({ ...memory.current!, metAt: Date.now() });
-    void play(choose('jump'));
+    settle();
     runAction(action);
   };
 
-  if (!heroGeo && !dockGeo) return <div aria-hidden="true" className="hidden" data-sketchy-stage="waiting" />;
+  if (!geo) return <div aria-hidden="true" className="hidden" data-sketchy-stage="waiting" />;
 
-  const docked = place === 'dock';
   const scene =
-    geo && x !== null && owns ? (
-      <>
+    x !== null && owns ? (
+      <div className="pointer-events-none fixed inset-0 z-30 overflow-hidden" data-sketchy-stage={screen} data-sketchy-dock="" data-sketchy-motion={reduced ? 'reduced' : 'full'}>
         <div
           ref={foxBox}
           className="pointer-events-none absolute left-0 top-0"
           style={{
             transform: `translate3d(${Math.round(x - geo.width / 2)}px, ${Math.round(geo.floor - geo.height)}px, 0)`,
-            transition: `transform ${moveMs}ms linear, opacity 260ms ease`,
+            transition: `transform ${moveMs}ms linear, opacity 320ms ease`,
             opacity: faded ? 0 : 1,
             width: geo.width,
             height: geo.height,
           }}
           data-sketchy-fox=""
-          data-sketchy-place={place}
         >
           {/* Only his head and body take a tap; around him (the tail, the air) the page stays clickable. */}
           <button
@@ -963,7 +716,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
             onAction={onSignAction}
             onDismiss={() => closeSign(true)}
             onClose={() => closeSign(false)}
-            below={signPos?.below === true}
+            below={false}
             style={signPos ? { left: signPos.left, top: signPos.top, width: signPos.width, ...(signPos.maxHeight ? { maxHeight: signPos.maxHeight, display: 'flex' } : {}) } : { left: -10000, top: 0, visibility: 'hidden' }}
           />
         )}
@@ -992,25 +745,12 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
             style={menuPos ? { left: menuPos.left, top: menuPos.top, ...(menuPos.maxHeight ? { maxHeight: menuPos.maxHeight, overflowY: 'auto' } : {}) } : { left: -10000, top: 0, visibility: 'hidden' }}
           />
         )}
-      </>
+      </div>
     ) : null;
 
   return (
     <>
-      <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" data-sketchy-stage={screen} data-sketchy-compact={heroGeo?.compact || undefined} data-sketchy-motion={reduced ? 'reduced' : 'full'}>
-        {/* His spot in the hero, watched while he floats: in full view again, he goes back to it. */}
-        {heroGeo && (
-          <div
-            ref={home}
-            aria-hidden="true"
-            className="pointer-events-none absolute"
-            style={{ left: heroGeo.spots[0] - heroGeo.width / 2, top: heroGeo.floor - heroGeo.height, width: heroGeo.width, height: heroGeo.height }}
-            data-sketchy-home=""
-          />
-        )}
-        {!docked && scene}
-      </div>
-      {docked && scene && createPortal(<div className="pointer-events-none fixed inset-0 z-30 overflow-hidden" data-sketchy-stage={screen} data-sketchy-dock="">{scene}</div>, document.body)}
+      {scene && createPortal(scene, document.body)}
 
       {roulette && (
         <Roulette
@@ -1018,7 +758,6 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
           onOpenChange={(o) => {
             if (!o) {
               setRoulette(null);
-              lastMicro.current = Date.now();
               lastEvent.current = Date.now();
               window.setTimeout(() => button.current?.focus({ preventScroll: true }), 0);
             }

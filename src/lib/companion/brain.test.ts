@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_MEMORY, FRESH_DAYS, dayOf, fits, mayOffer, pickTip, readMemory, remember, snooze, type Context, type Memory } from './brain';
+import { EMPTY_MEMORY, FRESH_DAYS, affinity, dayOf, fits, mayOffer, pickTip, readMemory, remember, snooze, type Context, type Memory } from './brain';
 import type { CompanionTip } from './model';
 
 // What Sketchy suggests, and when (ADR-0024): the screen, the moment, the
@@ -138,8 +138,22 @@ describe('what he remembers', () => {
   it('reads back only sensible values from this browser', () => {
     expect(readMemory(null)).toEqual(EMPTY_MEMORY);
     expect(readMemory('nonsense')).toEqual(EMPTY_MEMORY);
-    const read = readMemory({ shown: { 'T-001': 5, evil: 3, 'T-002': -1 }, day: '2026-11-24', count: 1e9, lastTipAt: 'x', snoozeUntil: 7, metAt: 0, greetedDay: 'today' });
-    expect(read).toEqual({ shown: { 'T-001': 5 }, day: '2026-11-24', count: 100, lastTipAt: 0, snoozeUntil: 7, metAt: null, greetedDay: null });
+    const read = readMemory({ shown: { 'T-001': 5, evil: 3, 'T-002': -1 }, day: '2026-11-24', count: 1e9, lastTipAt: 'x', snoozeUntil: 7, metAt: 0, greetedDay: 'today', rev: 2 });
+    expect(read).toEqual({ shown: { 'T-001': 5 }, day: '2026-11-24', count: 100, lastTipAt: 0, snoozeUntil: 7, metAt: null, greetedDay: null, rev: 2 });
+  });
+
+  it('drops, once, a snooze kept from before ✕ stopped starting one (revision 2)', () => {
+    const old = readMemory({ shown: {}, day: '2026-11-24', count: 3, lastTipAt: 1, snoozeUntil: NOW + DAY, metAt: 1, greetedDay: '2026-11-24' });
+    expect(old).toMatchObject({ snoozeUntil: 0, count: 3, metAt: 1, greetedDay: '2026-11-24', rev: 2 });
+    // Saved again at revision 2, a "Not now" holds.
+    expect(readMemory({ ...snooze(old, 24, NOW), rev: 2 }).snoozeUntil).toBe(NOW + DAY);
+  });
+
+  it('suggests what follows on from the tool used last, and the same tool again less often', () => {
+    const grid = tip('T-001', { action: { type: 'openTool', tool: 'grid', label: { en: 'Grid', he: 'רשת' } } });
+    const compare = tip('T-002', { action: { type: 'openTool', tool: 'compare', label: { en: 'Compare', he: 'השוואה' } }, afterTools: ['grid'] });
+    expect(affinity(grid, { lastTool: 'grid' })).toBeLessThan(affinity(grid, { lastTool: null }));
+    expect(affinity(compare, { lastTool: 'grid' })).toBe(affinity(compare, { lastTool: null }) * 3);
   });
 
   it('forgets appearances older than 60 days', () => {

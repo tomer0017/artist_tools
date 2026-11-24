@@ -1,53 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { WIDTH_RATIO, aimAt, dockGeometry, geometryOf, holdPoints, signPlacement, type Measured } from './geometry';
+import { dockGeometry, dockHeight, holdPoints, signPlacement } from './geometry';
 
-// Where Sketchy may stand (ADR-0024): only beside the text, never above the
-// top limit, smaller when the room is small, and mirrored in Hebrew.
+// Where Sketchy is (ADR-0024): his floating corner (mirrored in Hebrew, above a
+// phone's bottom bar) and his sign on the post in his paw.
 
-const desktop: Measured = { width: 1152, floor: 240, textEnd: 480, topLimit: 8, rtl: false, narrow: false };
-const phone: Measured = { width: 390, floor: 212, textEnd: 288, topLimit: 52, rtl: false, narrow: true };
 
-describe('his room', () => {
-  it('on a desktop: full size, several spots, all on the free side of the text', () => {
-    const g = geometryOf(desktop, 100)!;
-    expect(g.height).toBe(168);
-    expect(g.spots.length).toBeGreaterThan(1);
-    for (const x of g.spots) expect(x - g.width / 2).toBeGreaterThan(desktop.textEnd);
-    for (const x of g.spots) expect(x + g.width / 2).toBeLessThanOrEqual(desktop.width);
-    expect(g.facing).toBe('left');
-    expect(g.offstage).toBeGreaterThan(desktop.width);
-  });
-
-  it('on a phone: smaller, one spot that fits beside the text and below the brand row', () => {
-    const g = geometryOf(phone, 100)!;
-    expect(g.compact).toBe(true);
-    expect(g.width).toBeLessThanOrEqual(phone.width - phone.textEnd);
-    expect(g.floor - g.height).toBeGreaterThanOrEqual(phone.topLimit);
-    expect(g.spots[0] - g.width / 2).toBeGreaterThan(phone.textEnd);
-  });
-
-  it('in Hebrew: everything mirrored (the free side is the left)', () => {
-    const g = geometryOf({ ...phone, rtl: true }, 100)!;
-    expect(g.facing).toBe('right');
-    expect(g.spots[0] + g.width / 2).toBeLessThan(phone.width - phone.textEnd);
-    expect(g.offstage).toBeLessThan(0);
-  });
-
-  it('with too little room he is not placed at all', () => {
-    expect(geometryOf({ ...phone, textEnd: 360 }, 100)).toBeNull();
-    expect(geometryOf({ ...phone, topLimit: 180 }, 100)).toBeNull();
-  });
-
-  it('the admin size scales him, within the room', () => {
-    expect(geometryOf(desktop, 70)!.height).toBe(Math.round(168 * 0.7));
-    // 140% would be 235 px: the room above the floor (232 px) caps him.
-    expect(geometryOf(desktop, 140)!.height).toBe(Math.min(Math.round(168 * 1.4), desktop.floor - desktop.topLimit));
-    expect(geometryOf(phone, 140)!.width).toBeLessThanOrEqual(phone.width - phone.textEnd);
-    expect(WIDTH_RATIO).toBeCloseTo(248 / 292);
-  });
-});
-
-describe('his sign and his pointing', () => {
+describe('his sign', () => {
   it('held up on the post in his paw, beside his head: never over his face, as wide as the room allows', () => {
     // English: he stands at the right, facing left; the sign takes the room on his left.
     const fox = { left: 290, right: 375, top: 110, height: 100 };
@@ -106,12 +64,6 @@ describe('his sign and his pointing', () => {
     expect(at).toMatchObject({ width: 300, below: false });
     expect(at.top).toBeGreaterThanOrEqual(8);
   });
-
-  it('aims down toward a card below him, never wildly', () => {
-    expect(aimAt({ x: 100, y: 100 }, { x: 300, y: 100 })).toBe(0);
-    expect(aimAt({ x: 100, y: 100 }, { x: 100, y: 400 })).toBe(80);
-    expect(aimAt({ x: 100, y: 100 }, { x: 200, y: -400 })).toBe(-35);
-  });
 });
 
 describe('his floating corner', () => {
@@ -144,5 +96,15 @@ describe('his floating corner', () => {
     expect(g.height).toBe(150);
     expect(g.spots[0] + g.width / 2).toBeLessThanOrEqual(1265 - 8);
     expect(dockGeometry(area, 1280, false, false, 120).height).toBe(180);
+  });
+});
+
+describe('his size where he floats', () => {
+  it('big enough to read his face on a phone, the standard size on a desktop, scaled by the admin', () => {
+    expect(dockHeight(320, true, 100)).toBe(112);
+    expect(dockHeight(390, true, 100)).toBe(117);
+    expect(dockHeight(500, true, 100)).toBe(132);
+    expect(dockHeight(1280, false, 100)).toBe(150);
+    expect(dockHeight(1280, false, 80)).toBe(120);
   });
 });

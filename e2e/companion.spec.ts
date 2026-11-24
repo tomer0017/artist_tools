@@ -1,9 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type Locator, type Page } from '@playwright/test';
 
-// Sketchy, the studio companion (ADR-0024), in real browsers: he walks onto
-// Home, introduces himself on a sign that never covers the navigation, the
-// tool cards or himself, opens his menu from a click or the keyboard with
+// Sketchy, the studio companion (ADR-0024), in real browsers: he walks once
+// into his corner of Home and stays there while the page scrolls, introduces
+// himself on a sign that never covers him or the navigation and stays on
+// screen, opens his menu from a click or the keyboard with
 // only what the account can really use, leads to real tools, spins a
 // roulette of challenges the account may open, celebrates a completed
 // challenge, can be hidden (and brought back from the account page), speaks
@@ -44,16 +45,24 @@ const homeScroller = (page: Page) => page.locator('main .overflow-y-auto').first
 test.describe('Sketchy on Home', () => {
   test.use({ storageState: auth('sketchy'), locale: 'en-US' });
 
-  test('walks in, introduces himself on a sign that covers neither the navigation, the tool cards nor himself', async ({ page }) => {
+  test('walks into his corner and introduces himself on a sign that covers neither him nor the navigation, all on screen', async ({ page }) => {
     await page.goto('/app');
     await expect(fox(page)).toBeVisible({ timeout: 15_000 });
-    await expect(sign(page)).toBeVisible({ timeout: 20_000 });
+    await expect(sign(page)).toBeVisible({ timeout: 25_000 });
     await expect(sign(page)).toHaveAttribute('data-sketchy-sign', 'T-001');
     await expect(sign(page).getByText('Hi, I’m Sketchy!')).toBeVisible();
     const s = await box(sign(page));
+    const viewport = page.viewportSize()!;
     expect(overlaps(s, await box(page.getByRole('navigation').first()))).toBe(false);
-    expect(overlaps(s, await box(page.locator('[data-tool-card="measure"]')))).toBe(false);
     expect(overlaps(s, await body(page))).toBe(false);
+    expect(s.x).toBeGreaterThanOrEqual(0);
+    expect(s.y).toBeGreaterThanOrEqual(0);
+    expect(s.x + s.width).toBeLessThanOrEqual(viewport.width);
+    expect(s.y + s.height).toBeLessThanOrEqual(viewport.height);
+    // In his corner (the end of the reading direction, at the bottom).
+    const f = await box(page.locator('[data-sketchy-fox]'));
+    expect(f.x + f.width / 2).toBeGreaterThan(viewport.width / 2);
+    expect(f.y + f.height).toBeGreaterThan(viewport.height * 0.6);
     // "Show me around" opens his tool guide.
     await sign(page).getByRole('button', { name: 'Show me around' }).click();
     await expect(page.locator('[data-sketchy-menu="choose"]')).toBeVisible();
@@ -214,21 +223,23 @@ test.describe('in Hebrew', () => {
 test.describe('on a phone', () => {
   test.use({ storageState: auth('sketchy-mobile'), locale: 'en-US' });
 
-  test('mobile: as big as the room beside the text allows, and his menu does not cover him or the bottom bar', async ({ page, isMobile }) => {
+  test('mobile: big enough to read his face, above the bottom bar, and his menu covers neither him nor the bar', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     await page.goto('/app');
     await expect(fox(page)).toBeVisible({ timeout: 15_000 });
+    await expect(sign(page)).toBeVisible({ timeout: 25_000 });
     const f = await box(page.locator('[data-sketchy-fox]'));
-    expect(f.height).toBeGreaterThanOrEqual(80);
-    expect(f.height).toBeLessThanOrEqual(125);
-    const lead = await box(page.locator('[data-sketchy-avoid]').last());
-    expect(f.x).toBeGreaterThanOrEqual(lead.x + lead.width - 1);
-    await expect(sign(page)).toBeVisible({ timeout: 20_000 });
+    const bar = await box(page.getByRole('navigation').last());
+    expect(f.height).toBeGreaterThanOrEqual(112);
+    expect(f.height).toBeLessThanOrEqual(132);
+    expect(f.y + f.height).toBeLessThanOrEqual(bar.y + 1);
     await sign(page).getByRole('button', { name: 'Not now' }).click();
     await fox(page).tap();
     const menu = page.locator('[data-sketchy-menu]');
     await expect(menu).toBeVisible();
-    expect(overlaps(await box(menu), await body(page))).toBe(false);
+    const m = await box(menu);
+    expect(overlaps(m, await body(page))).toBe(false);
+    expect(overlaps(m, bar)).toBe(false);
   });
 });
 
@@ -276,11 +287,51 @@ test.describe('exactly one Sketchy', () => {
     await expect(drawn(page)).toHaveCount(1);
   });
 
+  test('his suggestion has a real button: "Spin a challenge" opens the roulette, with only the roulette\'s Sketchy', async ({ page }) => {
+    // He has met this person before and not said hello today: the day's greeting is on his sign.
+    const me = (await (await page.request.get('/api/me?check=1')).json()) as { user: { id: string } };
+    await page.addInitScript((k) => window.localStorage.setItem(k, JSON.stringify({ shown: { 'T-003': 1, 'T-027': 1 }, day: '', count: 0, lastTipAt: 0, snoozeUntil: 0, metAt: 1, greetedDay: null, rev: 2 })), `studio-companion:${me.user.id}`);
+    await page.goto('/app');
+    await expect(sign(page)).toBeVisible({ timeout: 25_000 });
+    const action = sign(page).locator('[data-sketchy-action]');
+    await expect(action).toBeVisible();
+    const type = await action.getAttribute('data-sketchy-action');
+    test.skip(type !== 'roulette', `the greeting picked was "${type}"`);
+    await action.click();
+    const roulette = page.getByRole('dialog', { name: 'Sketchy’s challenge roulette' });
+    await expect(roulette).toBeVisible();
+    await expect(drawn(page)).toHaveCount(1);
+    await expect(roulette.locator('[data-sketchy-art]')).toHaveCount(1);
+  });
+
+  test('mobile: after a spin the challenge and its button are on screen at once, no scrolling', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'phones only');
+    await page.goto('/app');
+    await expect(fox(page)).toBeVisible({ timeout: 15_000 });
+    await expect(sign(page)).toBeVisible({ timeout: 25_000 });
+    await sign(page).getByRole('button', { name: 'Not now' }).click();
+    await fox(page).tap();
+    await page.locator('[data-menu-entry="challenge"]').tap();
+    const roulette = page.getByRole('dialog', { name: 'Sketchy’s challenge roulette' });
+    await expect(roulette).toBeVisible();
+    await expect(roulette.locator('[data-roulette-count]')).not.toHaveAttribute('data-roulette-count', '0');
+    await roulette.locator('[data-roulette-spin]').tap();
+    const result = roulette.locator('[data-roulette-result]');
+    await expect(result).toBeVisible({ timeout: 10_000 });
+    const open = roulette.locator('[data-roulette-open]');
+    await expect.poll(async () => { const b = await box(open); return b.y >= 0 && b.y + b.height <= page.viewportSize()!.height; }, { timeout: 5_000 }).toBe(true);
+    const title = await box(result.locator('h3'));
+    expect(title.y).toBeGreaterThanOrEqual(0);
+    // Spin again and the options are right there too.
+    await expect(roulette.locator('[data-roulette-spin]')).toBeInViewport();
+    await expect(roulette.locator('[data-roulette-options]')).toBeVisible();
+  });
+
   test('a sign closed with ✕ just closes: only "Not now" keeps him quiet for a while', async ({ page }) => {
     // He has met this person before and not said hello today: he greets them on a sign.
     const me = (await (await page.request.get('/api/me?check=1')).json()) as { user: { id: string } };
     const key = `studio-companion:${me.user.id}`;
-    await page.addInitScript((k) => window.localStorage.setItem(k, JSON.stringify({ shown: {}, day: '', count: 0, lastTipAt: 0, snoozeUntil: 0, metAt: 1, greetedDay: null })), key);
+    await page.addInitScript((k) => window.localStorage.setItem(k, JSON.stringify({ shown: {}, day: '', count: 0, lastTipAt: 0, snoozeUntil: 0, metAt: 1, greetedDay: null, rev: 2 })), key);
     await page.goto('/app');
     await expect(sign(page)).toBeVisible({ timeout: 25_000 });
     await sign(page).locator('[data-sketchy-close]').click();
@@ -291,19 +342,24 @@ test.describe('exactly one Sketchy', () => {
   });
 });
 
-test.describe('floating while the page scrolls', () => {
+test.describe('always at hand while the page scrolls', () => {
   test.use({ storageState: auth('sketchy-tools'), locale: 'en-US' });
 
-  test('he floats in the corner once his spot scrolls away, takes a tap there, and goes back to it at the top', async ({ page }) => {
+  test('he stays in his corner while the page scrolls (no second entrance, no jump), and takes a tap there', async ({ page }) => {
     await page.goto('/app');
     await expect(fox(page)).toBeVisible({ timeout: 15_000 });
+    const where = page.locator('[data-sketchy-fox]');
+    // Arrived: standing, not walking any more.
+    await expect(where.locator('svg[data-pose="walk"]')).toHaveCount(0, { timeout: 15_000 });
+    const before = await box(where);
     await homeScroller(page).evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
-    const docked = page.locator('[data-sketchy-dock] [data-sketchy-fox]');
-    await expect(docked).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(600);
+    const after = await box(where);
+    expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+    expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+    await expect(where.locator('svg[data-pose="walk"]')).toHaveCount(0);
     await expect(drawn(page)).toHaveCount(1);
     const viewport = page.viewportSize()!;
-    // Settled in his corner (he runs in from the side).
-    await expect.poll(async () => { const b = await box(docked); return b.x + b.width <= viewport.width && b.y + b.height <= viewport.height; }, { timeout: 8_000 }).toBe(true);
     await fox(page).click();
     const menu = page.locator('[data-sketchy-menu]');
     await expect(menu).toBeVisible();
@@ -313,8 +369,9 @@ test.describe('floating while the page scrolls', () => {
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
     await homeScroller(page).evaluate((el) => el.scrollTo({ top: 0 }));
-    await expect(page.locator('[data-sketchy-fox][data-sketchy-place="hero"]')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-sketchy-dock]')).toHaveCount(0);
+    await page.waitForTimeout(600);
+    const top = await box(where);
+    expect(Math.abs(top.y - before.y)).toBeLessThan(1);
     await expect(drawn(page)).toHaveCount(1);
   });
 
@@ -326,11 +383,37 @@ test.describe('floating while the page scrolls', () => {
     const docked = page.locator('[data-sketchy-dock] [data-sketchy-fox]');
     await expect(docked).toBeVisible({ timeout: 10_000 });
     const bar = await box(page.getByRole('navigation').last());
-    await expect.poll(async () => { const b = await box(docked); return b.x + b.width <= page.viewportSize()!.width + 1; }, { timeout: 8_000 }).toBe(true);
+    await expect.poll(async () => { const b = await box(docked); return b.x + b.width <= page.viewportSize()!.width + 1; }, { timeout: 15_000 }).toBe(true);
     const f = await box(docked);
     expect(f.height).toBeGreaterThanOrEqual(112);
     expect(f.y + f.height).toBeLessThanOrEqual(bar.y + 1);
     await expect(drawn(page)).toHaveCount(1);
+  });
+});
+
+test.describe('one entrance a visit', () => {
+  test.use({ storageState: auth('sketchy-class'), locale: 'en-US' });
+
+  test('going to Learn and back to Home he is simply there, never walking in again', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'the top navigation');
+    await page.goto('/app');
+    const where = page.locator('[data-sketchy-fox]');
+    await expect(where.locator('svg[data-pose="walk"]')).toBeAttached({ timeout: 15_000 });
+    await expect(where.locator('svg[data-pose="walk"]')).toHaveCount(0, { timeout: 15_000 });
+    const home = await box(where);
+    for (const [link, path] of [[page.locator('[data-nav-learn]'), /\/app\/learn$/], [page.getByRole('link', { name: 'Home', exact: true }), /\/app$/]] as const) {
+      await link.click();
+      await expect(page).toHaveURL(path);
+      await expect(where).toBeVisible({ timeout: 10_000 });
+      // Watched for a second and a half: never his walk, always in the same corner.
+      for (let i = 0; i < 6; i++) {
+        await expect(where.locator('svg[data-pose="walk"]')).toHaveCount(0);
+        const now = await box(where);
+        expect(Math.abs(now.x - home.x)).toBeLessThan(2);
+        expect(Math.abs(now.y - home.y)).toBeLessThan(2);
+        await page.waitForTimeout(250);
+      }
+    }
   });
 });
 
@@ -354,12 +437,13 @@ test.describe('walking and looking', () => {
     const f = await box(page.locator('[data-sketchy-fox]'));
     const head = page.locator('[data-sketchy-fox] [data-part="head"]');
     const tilt = async () => Number(/rotate\((-?[\d.]+)/.exec((await head.getAttribute('transform')) ?? '')?.[1] ?? 'NaN');
+    // Far above him, then low beside him (he floats at the bottom of the window): his head turns from one to the other.
     await page.mouse.move(f.x + f.width / 2, Math.max(1, f.y - 400));
     await page.waitForTimeout(700);
     const up = await tilt();
-    await page.mouse.move(f.x + f.width / 2, f.y + f.height + 400);
+    await page.mouse.move(Math.max(1, f.x - 200), page.viewportSize()!.height - 2);
     await page.waitForTimeout(700);
     const down = await tilt();
-    expect(down - up).toBeGreaterThan(5);
+    expect(down - up).toBeGreaterThan(4);
   });
 });

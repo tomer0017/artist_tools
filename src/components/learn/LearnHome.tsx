@@ -161,7 +161,7 @@ export default function LearnHome() {
           {/* Room to scroll the last lines above Sketchy where he floats. */}
           <div aria-hidden="true" className="h-28 md:h-16" data-sketchy-room="" />
           <Suspense fallback={null}>
-            <CompanionStage screen="learn" containerRef={page} floorSelector="[data-sketchy-floor]" floorEdge="top" />
+            <CompanionStage screen="learn" containerRef={page} />
           </Suspense>
         </>
       )}

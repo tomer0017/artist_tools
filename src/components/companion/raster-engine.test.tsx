@@ -2,7 +2,7 @@ import {afterEach,describe,expect,it,vi} from 'vitest';
 import {cleanup,render} from '@testing-library/react';
 import {ANIMATIONS} from '@/lib/companion/model';
 import {RasterRig} from './raster-rig';
-import {RasterEngine, SWING, strideCycle} from './raster-engine';
+import {CADENCE, RasterEngine, SWING, gaitSpeed, strideCycle} from './raster-engine';
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.useRealTimers();});
 function setup(id:'idle'|'walk'|'jump'='idle',reducedMotion=false){
  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);
@@ -47,10 +47,10 @@ describe('walking, looking (the remaster fixes)', () => {
     expect(strideCycle('run', 86, 168) * 86).toBeCloseTo(perCycle('run', 168), 5);
     // Never a frantic shuffle or a slow-motion stride.
     expect(strideCycle('walk', 10_000, 168)).toBe(0.42);
-    expect(strideCycle('walk', 1, 168)).toBe(1.4);
+    expect(strideCycle('walk', 1, 168)).toBe(1.6);
   });
 
-  it('swings his legs in opposite phase at the cycle he is given', () => {
+  it('walks in two identical steps a cycle: legs toward each other and back, never past the drawing (no limp)', () => {
     let now = 1000;
     vi.spyOn(performance, 'now').mockImplementation(() => now);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
@@ -58,15 +58,34 @@ describe('walking, looking (the remaster fixes)', () => {
     const view = render(<RasterRig pose="walk" />);
     const engine = new RasterEngine(view.container, { idleLife: false }, () => {});
     engine.play('walk', { params: { cycle: 0.8 } });
-    now = 1200; // a quarter of the cycle
+    const legs = () => [angle(view.container, 'legBack'), angle(view.container, 'legFront')];
+    now = 1200; // the first passing moment
     engine.renderNow();
-    expect(angle(view.container, 'legFront')).toBeCloseTo(-SWING.walk, 1);
-    expect(angle(view.container, 'legBack')).toBeCloseTo(SWING.walk, 1);
-    now = 1600; // three quarters
+    const first = legs();
+    expect(first[0]).toBeCloseTo(-SWING.walk, 1);
+    expect(first[1]).toBeCloseTo(SWING.walk, 1);
+    now = 1400; // contact: the drawn stride
     engine.renderNow();
-    expect(angle(view.container, 'legFront')).toBeCloseTo(SWING.walk, 1);
-    expect(angle(view.container, 'legBack')).toBeCloseTo(-SWING.walk, 1);
+    expect(legs().map((a) => Math.abs(a))).toEqual([0, 0]);
+    now = 1600; // the second step is the same as the first
+    engine.renderNow();
+    expect(legs()[0]).toBeCloseTo(first[0], 1);
+    expect(legs()[1]).toBeCloseTo(first[1], 1);
+    // Never beyond the drawing: the back leg only ever turns forward, the front one only back.
+    for (let t = 1000; t <= 1800; t += 37) {
+      now = t;
+      engine.renderNow();
+      const [back, front] = legs();
+      expect(back).toBeLessThanOrEqual(0.001);
+      expect(front).toBeGreaterThanOrEqual(-0.001);
+    }
     engine.dispose();
+  });
+
+  it('crosses the screen at his natural, calm rhythm, his feet keeping pace', () => {
+    for (const clip of ['walk', 'run'] as const) for (const h of [112, 150]) expect(strideCycle(clip, gaitSpeed(clip, h), h)).toBeCloseTo(CADENCE[clip], 6);
+    expect(CADENCE.walk).toBeGreaterThanOrEqual(0.9);
+    expect(gaitSpeed('walk', 150, 200)).toBeCloseTo(2 * gaitSpeed('walk', 150), 6);
   });
 
   it('turns his head smoothly toward what he looks at, and keeps still with less motion', () => {

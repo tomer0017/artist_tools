@@ -29,9 +29,15 @@ export interface Memory {
   metAt: number | null;
   /** The last day an `arrive` greeting was shown. */
   greetedDay: string | null;
+  /**
+   * The memory's revision. Before revision 2, closing a sign with ✕ also started the snooze
+   * meant for "Not now": a snooze kept from then is dropped once.
+   */
+  rev: number;
 }
 
-export const EMPTY_MEMORY: Memory = { shown: {}, day: '', count: 0, lastTipAt: 0, snoozeUntil: 0, metAt: null, greetedDay: null };
+export const MEMORY_REV = 2;
+export const EMPTY_MEMORY: Memory = { shown: {}, day: '', count: 0, lastTipAt: 0, snoozeUntil: 0, metAt: null, greetedDay: null, rev: MEMORY_REV };
 
 export interface Context {
   screen: ScreenId;
@@ -84,13 +90,24 @@ export function pickTip(tips: readonly CompanionTip[], ctx: Context, memory: Mem
   const others = candidates.filter((tip) => !notNow.has(tip.id));
   // Nothing fresh: the one seen longest ago, rather than the same one again.
   const pool = fresh.length > 0 ? fresh : others.length > 0 ? [...others].sort((a, b) => (memory.shown[a.id] ?? 0) - (memory.shown[b.id] ?? 0)).slice(0, 3) : candidates;
-  const total = pool.reduce((sum, tip) => sum + Math.max(1, tip.weight), 0);
+  const total = pool.reduce((sum, tip) => sum + affinity(tip, ctx), 0);
   let roll = random() * total;
   for (const tip of pool) {
-    roll -= Math.max(1, tip.weight);
+    roll -= affinity(tip, ctx);
     if (roll < 0) return tip;
   }
   return pool[pool.length - 1];
+}
+
+/**
+ * How well a tip suits the moment: its weight, made likelier when it follows on from the tool
+ * used last, and less likely when it only offers that same tool again.
+ */
+export function affinity(tip: Pick<CompanionTip, 'weight' | 'afterTools' | 'action'>, ctx: Pick<Context, 'lastTool'>): number {
+  let weight = Math.max(1, tip.weight);
+  if (ctx.lastTool && tip.afterTools?.includes(ctx.lastTool)) weight *= 3;
+  if (ctx.lastTool && tip.action.type === 'openTool' && tip.action.tool === ctx.lastTool) weight *= 0.25;
+  return weight;
 }
 
 /** Memory after a tip appeared (proactive ones count toward the day and the cooldown). */
@@ -127,14 +144,16 @@ export function readMemory(value: unknown): Memory {
     for (const [id, at] of Object.entries(v.shown as Record<string, unknown>).slice(0, 500)) if (/^T-\d{3,4}$/.test(id) && num(at) > 0) shown[id] = num(at);
   }
   const day = (x: unknown) => (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : null);
+  const current = num(v.rev) >= MEMORY_REV;
   return {
     shown,
     day: day(v.day) ?? '',
     count: Math.min(100, Math.floor(num(v.count))),
     lastTipAt: num(v.lastTipAt),
-    snoozeUntil: num(v.snoozeUntil),
+    snoozeUntil: current ? num(v.snoozeUntil) : 0,
     metAt: num(v.metAt) > 0 ? num(v.metAt) : null,
     greetedDay: day(v.greetedDay),
+    rev: MEMORY_REV,
   };
 }
 

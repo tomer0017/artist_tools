@@ -161,7 +161,7 @@ export interface MeshMotion {
 }
 
 /** How long what only the previous pose covered takes to fade out (ms). */
-export const FADE_MS = 170;
+export const FADE_MS = 260;
 
 /** One GPU draw per pose per frame (two during a change of pose). */
 export class RasterMesh {

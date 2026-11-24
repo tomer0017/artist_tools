@@ -145,11 +145,15 @@ export const ACTION_FEATURE: Record<ActionType, CompanionFeature> = {
 export const FREQUENCIES = ['quiet', 'balanced', 'chatty'] as const;
 export type Frequency = (typeof FREQUENCIES)[number];
 
-/** What each frequency means: seconds on screen before a suggestion, minutes between two, at most per day. */
+/**
+ * What each frequency means: seconds of quiet on a screen before a suggestion, minutes between
+ * two, at most per day. Balanced (the default) helps now and then during a visit (the founder,
+ * 2026-11-24: "occasionally pull out his sign"); quiet is for people who want little of it.
+ */
 export const FREQUENCY_PRESETS: Record<Frequency, { tipAfterSec: number; cooldownMin: number; maxPerDay: number }> = {
   quiet: { tipAfterSec: 45, cooldownMin: 240, maxPerDay: 2 },
-  balanced: { tipAfterSec: 20, cooldownMin: 45, maxPerDay: 5 },
-  chatty: { tipAfterSec: 10, cooldownMin: 10, maxPerDay: 12 },
+  balanced: { tipAfterSec: 25, cooldownMin: 8, maxPerDay: 10 },
+  chatty: { tipAfterSec: 12, cooldownMin: 3, maxPerDay: 20 },
 };
 
 export const LIMITS = {
