@@ -195,7 +195,7 @@ function ChallengeCard({ item, count, saved }: { item: ListEntry; count: number;
               <Timer className="h-3 w-3" aria-hidden="true" /> {t('challenges.quickBadge')}
             </span>
           )}
-          {!item.open && (item.inPro && offerPro ? <ProMark /> : <LockBadge pro={lock === 'pro'} />)}
+          {!item.open && (item.inPro && offerPro ? <ProMark /> : <LockBadge pro={item.inPro === true || lock === 'pro'} />)}
           {item.published === false && <DraftBadge />}
           {saved && (
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-foreground" data-saved-badge>

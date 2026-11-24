@@ -2,7 +2,7 @@ import 'server-only';
 import type { Db } from 'mongodb';
 import { z, type ZodError } from 'zod';
 import { FEATURES, FEATURE_LABELS, PLAN_FEATURES, PLAN_IDS, PLAN_NAMES, hasQuota, isLearnFeature, isPlanId, isToolFeature, type FeatureId, type PlanId } from '@/lib/plans';
-import { learnAccess } from '@/lib/learn/access';
+import { learnAccess, legacyLearnOf } from '@/lib/learn/access';
 import { COLLECTION_LABELS, LEARN_COLLECTIONS, NO_LEARN_ACCESS, collectionOfId, defaultLearnSection, itemsOf, ruleText, sameRule, type LearnContent, type LearnSection } from '@/lib/learn/model';
 import { collections, type PlanDoc } from '@/server/db/collections';
 import { LearnSectionSchema, learnAccessOf, mergeLearnSection, planLearnAccess, readLearnSection, withheldRuleNote, type WithheldRule } from './learn-access';
@@ -420,12 +420,17 @@ export function learnListIssues(next: LearnSection, live: LearnSection, content:
   return issues;
 }
 
-/** The Learn items each plan opens under a catalog, against this content (module, then rule), in order. */
+/**
+ * The Learn items each plan opens with this catalog and content, in order:
+ * each item's own access mode (ADR-0023); the catalog's old rules decide
+ * only items written before modes.
+ */
 export function planOpens(catalog: Catalog, content: LearnContent): Record<PlanId, string[]> {
   const docs = planDocsFor(catalog);
+  const legacy = legacyLearnOf({ free: { active: true, features: docs.free.features, learn: docs.free.learn }, pro: { active: true, features: docs.pro.features, learn: docs.pro.learn } });
   return Object.fromEntries(
     PLAN_IDS.map((planId) => {
-      const view = learnAccess({ active: true, admin: false, modules: docs[planId].features, offered: [], access: docs[planId].learn }, content);
+      const view = learnAccess({ active: true, admin: false, pro: planId === 'pro', legacy }, content);
       return [planId, LEARN_COLLECTIONS.flatMap((collection) => view.opens(collection))];
     }),
   ) as Record<PlanId, string[]>;

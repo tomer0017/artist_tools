@@ -11,6 +11,7 @@ import {
   type SubscriptionStatus,
   type UserRole,
 } from '@/server/db/collections';
+import { legacyLearnOf, type LegacyLearn } from '@/lib/learn/access';
 import { ALL_LEARN_ACCESS, NO_LEARN_ACCESS, type LearnAccess } from '@/lib/learn/model';
 import { learnAccessOf } from '@/server/config/learn-access';
 import { activeGrant } from '@/server/grants';
@@ -68,8 +69,10 @@ export interface Entitlements {
   dailyUsage: Partial<Record<FeatureId, number>>;
   /** What each plan includes as published (to explain a lock: "part of Pro", or off for everyone). */
   offer: PlanOffer;
-  /** Which Learn items the plan in force opens, and what locked ones show (ADR-0017): decided by src/lib/learn/access.ts. */
+  /** Which Learn items the plan in force opens under the old rules (ADR-0017); items with their own access mode ignore it (ADR-0023). */
   learn: LearnAccess;
+  /** Both published plans' old Learn rules: they decide only items written before access modes (src/lib/learn/access.ts). */
+  legacyLearn: LegacyLearn;
 }
 
 type SubscriptionState = Pick<SubscriptionDoc, 'planId' | 'status' | 'currentPeriodEnd'>;
@@ -175,6 +178,7 @@ export function computeEntitlements(input: {
     dailyUsage: input.dailyUsage ?? {},
     offer: offerOf(input.plans),
     learn: NO_LEARN_ACCESS(),
+    legacyLearn: legacyLearnOf(input.plans),
   };
   if (!input.user || input.user.status !== 'active') return none;
 

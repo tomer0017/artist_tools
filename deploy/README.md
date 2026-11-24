@@ -250,6 +250,12 @@ unreadable catalog with the defaults: `plans` stays exactly as it is.
     `learn.challenges` and the catalog section `learn`; the same floor
     applies. A release before M4 has no Learn routes: rolling back closes
     Learn, and its content and files stay untouched.
+  - ADR-0023 (per-item Learn access) adds `access` and `archived` to items
+    and `items` to versions; older releases ignore them. Each item's old
+    `published` flag is kept true only for Free items, so a release before
+    ADR-0023 shows Free items as before and every other item (Pro, Admin
+    only, Blocked, archived) to admins only: never more open. Roll forward
+    to bring Pro items back; Admin → Learn there is the old read-only page.
 - **After any rollback, check the catalog** with the release now live (read
   only):
 
@@ -315,7 +321,21 @@ unreadable catalog with the defaults: `plans` stays exactly as it is.
     audited.
   - `learn-discard`: discards the draft.
   - Admin → Learn shows the same, and publishes, discards and restores
-    versions. Who sees what is set in Admin → Plans.
+    versions. Since ADR-0023 it is also the editor: every lesson and
+    challenge is added, edited, copied, moved, archived and given its
+    Access (Free, Pro, Admin only, Blocked) there, each save live at once as
+    a new version. Admin → Plans only sums Learn up.
+  - `learn-access status`: read only. Every item's mode (own, or from the old
+    plan rules for content written before modes), what Free and Pro open,
+    and whether a release before modes would open more (it must not).
+  - `learn-access write-modes [--apply]`: write each item's mode as it is
+    decided now (access unchanged for everyone; checked in the dry run).
+  - `learn-access set <free|pro|admin|blocked> --all [--apply]`: one mode for
+    every item that is not archived (used once on production: all Free).
+  - `learn-access align-catalog [--apply]`: the catalog's old Learn rules to
+    All for both plans, so a release before modes shows Free items exactly as
+    this one does. Nothing is written without `--apply`; each apply publishes
+    only over the version its dry run read (compare-and-swap) and is audited.
 - **Backups:**
   - the content and asset metadata are in MongoDB, so in every dump;
   - the files are in the nightly incremental copy;

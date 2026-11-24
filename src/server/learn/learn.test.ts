@@ -8,7 +8,7 @@ import { MONGO_STARTUP_TIMEOUT, MONGO_STOP_TIMEOUT, startTestMongo, type TestMon
 import { fixtureSeed, writeLearnFixture } from '@/test/learn-fixture';
 import { PLAN_FEATURES } from '@/lib/plans';
 import { NO_LEARN_ACCESS, defaultLearnSection, type LearnContent, type LearnSection } from '@/lib/learn/model';
-import { catalogSpec, describeCatalogChanges, learnSectionOf, planOpens, readCatalog, saveCatalogEdit, type Catalog } from '@/server/config/catalog';
+import { catalogSpec, describeCatalogChanges, planOpens, saveCatalogEdit, type Catalog } from '@/server/config/catalog';
 import { getDraft, getPublished, listVersions, publishDraft, restoreAsDraft, saveDraft } from '@/server/config/versions';
 import { collections } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
@@ -17,10 +17,10 @@ import { describeContentChanges, everPublishedIds, learnContentSpec, publishedLe
 import { importSeed } from './import';
 import { liveLearn } from './live';
 
-// Learn end to end on a real database (ADR-0017): importing a folder as a
-// draft, publishing it, the checks every draft and publication passes, the
-// catalog's Learn section copied into `plans`, entitlements, and exports
-// from a Learn item. Nothing opens for Free or Pro until a catalog says so.
+// Learn end to end on a real database (ADR-0017, ADR-0023): importing a
+// folder as a draft, publishing it, the checks every draft and publication
+// passes, the catalog's old Learn rules (which decide only items without an
+// access mode of their own), entitlements, and exports from a Learn item.
 
 let mongo: TestMongo;
 let assetsDir: string;
@@ -123,7 +123,7 @@ describe('what every draft and publication must pass', () => {
       change(next);
       return saveDraft(db, learnContentSpec, next, 'cli');
     };
-    expect(await check((c) => (c.exercises[0].instruction.he = ' '))).toMatchObject({ status: 'invalid', issues: ['D-TEST-01: instruction needs English and Hebrew before it can be published'] });
+    expect(await check((c) => (c.exercises[0].instruction.he = ' '))).toMatchObject({ status: 'invalid', issues: ['D-TEST-01: instruction needs English and Hebrew before it can be Free or Pro'] });
     // An unpublished item may still be incomplete.
     expect((await check((c) => (c.exercises[2].instruction.he = ''))).status).toBe('saved');
     await collections(db).configVersions.deleteMany({ kind: 'learn_content', status: 'draft' });
@@ -149,25 +149,25 @@ describe('what every draft and publication must pass', () => {
 
     const without = structuredClone(v2);
     without.challenges = without.challenges.filter((c) => c.id !== 'CH-904');
-    expect(await saveDraft(db, learnContentSpec, without, 'cli')).toEqual({ status: 'invalid', issues: ['CH-904 was published, so it cannot be removed (unpublish it instead)'] });
+    expect(await saveDraft(db, learnContentSpec, without, 'cli')).toEqual({ status: 'invalid', issues: ['CH-904 was published, so it cannot be removed (archive it instead)'] });
     const unpublished = structuredClone(v2);
     unpublished.challenges.find((c) => c.id === 'CH-904')!.published = false;
     expect((await saveDraft(db, learnContentSpec, unpublished, 'cli')).status).toBe('saved');
     await collections(db).configVersions.deleteMany({ kind: 'learn_content', status: 'draft' });
 
-    // Going back to version 1 keeps CH-904, unpublished.
+    // Going back to version 1 keeps CH-904, archived.
     expect(await restoreAsDraft(db, learnContentSpec, 1, 'admin:owner')).toMatchObject({ status: 'saved' });
     const draft = (await getDraft(db, learnContentSpec))!;
-    expect(draft.note).toBe('Restored from version 1; kept unpublished: CH-904');
+    expect(draft.note).toBe('Restored from version 1; kept, archived: CH-904');
     const restored = draft.document as LearnContent;
-    expect(restored.challenges.map((c) => `${c.id}:${c.published}`)).toEqual(['CH-901:true', 'CH-902:true', 'CH-903:false', 'CH-904:false']);
+    expect(restored.challenges.map((c) => `${c.id}:${c.published}${c.archived ? ':archived' : ''}`)).toEqual(['CH-901:true', 'CH-902:true', 'CH-903:false', 'CH-904:false:archived']);
     expect((await publishDraft(db, learnContentSpec, 'admin:owner')).status).toBe('published');
     expect((await listVersions(db, 'learn_content')).map((v) => v.status)).toEqual(['published', 'archived', 'archived']);
   });
 });
 
-describe('the catalog’s Learn section', () => {
-  it('a catalog without one opens nothing, and the migration writes nothing into `plans`', async () => {
+describe('the catalog’s old Learn rules, for items without an access mode', () => {
+  it('a catalog without them opens nothing (Admin only), and the migration writes nothing into `plans`', async () => {
     await importAndPublish();
     await publishCatalog(OWNER);
     const before = await collections(db).plans.find({}).sort({ _id: 1 }).toArray();
@@ -178,19 +178,20 @@ describe('the catalog’s Learn section', () => {
       const entitlements = await getEntitlements(db, await account(plan));
       expect(entitlements.learn).toEqual(NO_LEARN_ACCESS());
       const { view } = await liveLearn(db, entitlements);
-      expect(['D-TEST-01', 'C-TEST-01', 'CH-901', 'CH-902'].map((id) => view.state(id).status)).toEqual(['locked', 'locked', 'locked', 'locked']);
+      expect(['D-TEST-01', 'C-TEST-01', 'CH-901', 'CH-902'].map((id) => view.state(id).status)).toEqual(['hidden', 'hidden', 'hidden', 'hidden']);
+      expect(['D-TEST-01', 'CH-901'].map((id) => view.mode(id))).toEqual(['admin', 'admin']);
       expect(view.list('challenges')).toEqual([]);
     }
   });
 
-  it('a published rule reaches `plans` and entitlements; the module still decides', async () => {
+  it('a published rule reaches `plans` and entitlements, and gives an item without a mode the access it had', async () => {
     await importAndPublish();
     const rules = freeRules({ challenges: { mode: 'selected', items: ['CH-901'], made: { by: 'pick' } }, curriculum: { mode: 'all' } }, 'thumbnail');
-    // Rules without the module: nothing opens yet.
+    // Rules without the module: nothing opens yet (no plan opens it: Admin only).
     expect(await publishCatalog({ ...OWNER, learn: rules })).toMatchObject({ status: 'published' });
     const free = await account('free');
     let view = (await liveLearn(db, await getEntitlements(db, free))).view;
-    expect(view.state('CH-901')).toEqual({ status: 'locked', reason: 'module_off' });
+    expect(view.state('CH-901')).toEqual({ status: 'hidden' });
     // With the Challenges module for Free: exactly CH-901.
     const withModule = structuredClone({ ...OWNER, learn: rules });
     withModule.plans.free.features.push('learn.challenges');
@@ -198,17 +199,18 @@ describe('the catalog’s Learn section', () => {
     const freeDoc = (await collections(db).plans.findOne({ _id: 'free' }))!;
     expect(freeDoc.learn).toEqual({ rules: rules.access.free, previews: 'thumbnail' });
     view = (await liveLearn(db, await getEntitlements(db, free))).view;
-    expect(['CH-901', 'CH-902', 'CH-903', 'D-TEST-01'].map((id) => view.state(id).status)).toEqual(['open', 'locked', 'hidden', 'locked']);
-    expect(view.thumbnail('CH-902')).toBe(true);
-    // Pro has neither the module nor a rule; an admin has everything, drafts included.
+    // CH-901 is Free; nothing else is opened by any plan's rules (Admin only), so it is not even listed.
+    expect(['CH-901', 'CH-902', 'CH-903', 'D-TEST-01'].map((id) => view.state(id).status)).toEqual(['open', 'hidden', 'hidden', 'hidden']);
+    expect(view.thumbnail('CH-902')).toBe(false);
+    // A Free item opens for Pro too; an admin has everything, drafts included.
     const pro = (await liveLearn(db, await getEntitlements(db, await account('pro')))).view;
-    expect(pro.state('CH-901')).toEqual({ status: 'locked', reason: 'module_off' });
+    expect(pro.state('CH-901')).toEqual({ status: 'open' });
     const admin = (await liveLearn(db, await getEntitlements(db, await account('free', 'admin')))).view;
     expect(['CH-901', 'CH-903', 'D-TEST-03'].map((id) => admin.state(id).status)).toEqual(['open', 'open', 'open']);
     // Back to no Learn access: `plans` says None again.
     expect(await publishCatalog(OWNER)).toMatchObject({ status: 'published' });
     expect((await collections(db).plans.findOne({ _id: 'free' }))!.learn).toEqual(NO_LEARN_ACCESS());
-    expect((await liveLearn(db, await getEntitlements(db, free))).view.state('CH-901').status).toBe('locked');
+    expect((await liveLearn(db, await getEntitlements(db, free))).view.state('CH-901').status).toBe('hidden');
   });
 
   it('a list may name only published items of its own collection; one already listed may stay after it is unpublished', async () => {
@@ -221,12 +223,12 @@ describe('the catalog’s Learn section', () => {
     await collections(db).configVersions.deleteMany({ kind: 'catalog', status: 'draft' });
     expect(await publishCatalog({ ...OWNER, learn: freeRules({ challenges: { mode: 'selected', items: ['CH-902'] } }) })).toMatchObject({ status: 'published' });
 
-    // Unpublishing a listed item warns first; the list keeps it, and the catalog can still be published.
+    // Unpublishing a listed item says so; the list keeps it, and the catalog can still be published.
     const live = await content();
     const next = structuredClone(live);
     next.challenges.find((c) => c.id === 'CH-902')!.published = false;
-    const changes = describeContentChanges(live, next, { free: learnSectionOf(readCatalogOf(await currentCatalog())).access.free });
-    expect(changes).toContain("Warning: Free's Challenges list names CH-902; Free loses it until it is published again");
+    const changes = describeContentChanges(live, next);
+    expect(changes).toContain('CH-902: access published (old plan rules) → unpublished (admins only)');
     expect((await saveDraft(db, learnContentSpec, next, 'cli')).status).toBe('saved');
     expect((await publishDraft(db, learnContentSpec, 'cli')).status).toBe('published');
     const again = structuredClone({ ...OWNER, learn: freeRules({ challenges: { mode: 'selected', items: ['CH-902'] } }) });
@@ -251,8 +253,18 @@ describe('the catalog’s Learn section', () => {
 
     const wider = structuredClone(catalog);
     wider.learn.access.free.curriculum = { mode: 'all' };
-    expect(describeCatalogChanges(catalog, wider, await content())).toEqual(['Free · Drawing curriculum: First 1 (D-TEST-01) → All', 'Free: gains D-TEST-02, D-BASE-01, D-LESSON-01']);
-    expect(describeCatalogChanges(wider, OWNER, await content())).toEqual(['Free: removes Drawing curriculum', 'Free · Drawing curriculum: All → None', 'Free: loses D-TEST-02, D-TEST-01, D-BASE-01, D-LESSON-01']);
+    // A Free item opens for Pro as well (ADR-0023), so Pro gains and loses them with Free.
+    expect(describeCatalogChanges(catalog, wider, await content())).toEqual([
+      'Free · Drawing curriculum: First 1 (D-TEST-01) → All',
+      'Free: gains D-TEST-02, D-BASE-01, D-LESSON-01',
+      'Pro: gains D-TEST-02, D-BASE-01, D-LESSON-01',
+    ]);
+    expect(describeCatalogChanges(wider, OWNER, await content())).toEqual([
+      'Free: removes Drawing curriculum',
+      'Free · Drawing curriculum: All → None',
+      'Free: loses D-TEST-02, D-TEST-01, D-BASE-01, D-LESSON-01',
+      'Pro: loses D-TEST-02, D-TEST-01, D-BASE-01, D-LESSON-01',
+    ]);
   });
 
   it('the editor saves the section; a catalog that never had one is written back exactly while it says nothing', async () => {
@@ -275,15 +287,17 @@ describe('exports from a Learn item', () => {
     expect(await publishCatalog(catalog)).toMatchObject({ status: 'published' });
     const free = await account('free');
     expect(await authorizeToolUse(db, free, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-901' })).toEqual({ status: 'recorded' });
+    // CH-902: no plan's rules open it (Admin only), so to Free it does not exist.
     expect(await authorizeToolUse(db, free, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-902' })).toEqual({
       status: 'denied',
       reason: 'not_included',
       missing: [],
-      learnItem: { id: 'CH-902', reason: 'not_in_plan' },
+      learnItem: { id: 'CH-902', reason: 'unavailable' },
     });
     expect(await authorizeToolUse(db, free, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-903' })).toMatchObject({ learnItem: { id: 'CH-903', reason: 'unavailable' } });
     const pro = await account('pro');
-    expect(await authorizeToolUse(db, pro, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-901' })).toMatchObject({ learnItem: { id: 'CH-901', reason: 'module_off' } });
+    // A Free item opens for Pro as well.
+    expect(await authorizeToolUse(db, pro, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-901' })).toEqual({ status: 'recorded' });
     // Only the one authorized export was counted.
     expect(await collections(db).usage.countDocuments({ userId: free, feature: 'export.image' })).toBe(2);
     expect((await collections(db).usage.find({ userId: free, feature: 'export.image' }).toArray()).every((u) => u.quantity === 1)).toBe(true);
@@ -298,13 +312,3 @@ describe('exports from a Learn item', () => {
     await expect(authorizeToolUse(db, admin, { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-901' })).rejects.toThrow('cannot be read');
   });
 });
-
-async function currentCatalog() {
-  return (await getPublished(db, catalogSpec))!.document;
-}
-
-function readCatalogOf(document: unknown): Catalog {
-  const read = readCatalog(document);
-  if (read.status === 'unreadable') throw new Error('unreadable');
-  return read.catalog;
-}

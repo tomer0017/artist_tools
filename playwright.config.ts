@@ -31,14 +31,14 @@ export default defineConfig({
         },
       ]
     : [
-        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity|google-only|username-accounts|entitlements/ },
+        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity|google-only|username-accounts|entitlements|learn-admin/ },
         // Safari/WebKit on iPhone — the mobile navigation, touch and sign-in checks.
         {
           name: "iphone-webkit",
           use: { ...devices["iPhone 13"], ...signedIn },
           testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch|color|grid|worksheets|study|learn-screens)\.spec\.ts/,
           // (username-accounts.spec.ts and entitlements.spec.ts run on the staging-like servers below.)
-          testIgnore: /username-accounts|entitlements/,
+          testIgnore: /username-accounts|entitlements|learn-admin/,
           grep: /mobile/,
         },
         // The public sign-in as staging runs it: Google, open to everyone, and
@@ -72,6 +72,25 @@ export default defineConfig({
           grep: /mobile/,
           fullyParallel: false,
           dependencies: ["entitlements"],
+        },
+        // Admin → Learn's editor (ADR-0023) on the same server, once the
+        // plan-enforcement tests are done: it changes the published Learn
+        // content, so it runs after them, one test at a time.
+        {
+          name: "learn-admin",
+          use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:8082" },
+          testMatch: /learn-admin\.spec\.ts/,
+          grepInvert: /mobile/,
+          fullyParallel: false,
+          dependencies: ["entitlements-iphone"],
+        },
+        {
+          name: "learn-admin-iphone",
+          use: { ...devices["iPhone 13"], baseURL: "http://localhost:8082" },
+          testMatch: /learn-admin\.spec\.ts/,
+          grep: /mobile/,
+          fullyParallel: false,
+          dependencies: ["learn-admin"],
         },
       ],
   // Always a fresh build and a freshly seeded database: never a leftover

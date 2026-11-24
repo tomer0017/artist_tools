@@ -4,6 +4,7 @@ import { DEFAULT_CURRENCY, DEFAULT_LOCALE } from '@/lib/locale';
 import { catalogReadNotes, catalogSpec, initialCatalog, readCatalog, syncPlans } from '@/server/config/catalog';
 import { pricingSpec } from '@/server/config/pricing';
 import { getPublished, seedDefaults } from '@/server/config/versions';
+import { backfillLearnHistory } from '@/server/learn/content';
 import { log } from '@/server/log';
 import { collections } from './collections';
 
@@ -72,6 +73,8 @@ export const INDEXES: IndexPlan[] = [
     options: { name: 'config_one_published', unique: true, partialFilterExpression: { status: 'published' } },
   },
   { collection: 'config_versions', key: { kind: 1, status: 1 }, options: { name: 'config_one_draft', unique: true, partialFilterExpression: { status: 'draft' } } },
+  // One Learn item's history: the versions that changed it (ADR-0023).
+  { collection: 'config_versions', key: { kind: 1, items: 1, version: -1 }, options: { name: 'config_versions_by_item', partialFilterExpression: { items: { $exists: true } } } },
   { collection: 'coupons', key: { code: 1 }, options: { name: 'coupon_code_unique', unique: true } },
   { collection: 'coupon_redemptions', key: { couponId: 1, userId: 1 }, options: { name: 'redemption_by_coupon_user' } },
   { collection: 'analytics_events', key: { userId: 1, name: 1, at: -1 }, options: { name: 'analytics_by_user' } },
@@ -126,6 +129,8 @@ export interface MigrationReport {
   plansUpdated: number;
   usersBackfilled: number;
   preferencesBackfilled: number;
+  /** Learn versions written before item histories, given the item IDs they changed (ADR-0023; once). */
+  learnHistoryBackfilled: number;
   /**
    * How this release read the published catalog. `unreadable`: `plans` was
    * left exactly as it was. `partial`: features it cannot apply are withheld.
@@ -171,6 +176,9 @@ export async function migrate(db: Db): Promise<MigrationReport> {
   const locale = await users.updateMany({ locale: { $exists: false } }, { $set: { locale: DEFAULT_LOCALE } });
   const currency = await users.updateMany({ currency: { $exists: false } }, { $set: { currency: DEFAULT_CURRENCY } });
 
+  // Learn versions published before item histories existed: which items each changed.
+  const learnHistoryBackfilled = await backfillLearnHistory(db);
+
   return {
     indexes: INDEXES.length,
     configSeeded,
@@ -178,6 +186,7 @@ export async function migrate(db: Db): Promise<MigrationReport> {
     plansUpdated,
     usersBackfilled,
     preferencesBackfilled: Math.max(locale.modifiedCount, currency.modifiedCount),
+    learnHistoryBackfilled,
     catalog,
   };
 }

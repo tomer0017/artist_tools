@@ -33,6 +33,19 @@ export interface ConfigSpec<T> {
   restoreDocument?: (db: Db, document: T, version: number) => Promise<{ document: T; note: string }>;
   /** Runs after a version is published, e.g. to bring dependent data in step. */
   onPublish?: (db: Db, document: T) => Promise<void>;
+  /**
+   * The keys (e.g. Learn item IDs) a publication changes against what was
+   * live, recorded on the version as `items` so each one's history can be
+   * listed without reading every version (ADR-0023).
+   */
+  changedKeys?: (previous: T | null, next: T) => string[];
+}
+
+/** The version's changed keys, from the spec: what was live (read by the spec's schema, or nothing) and what is published now. */
+function changedKeysOf<T>(spec: ConfigSpec<T>, previous: ConfigVersionDoc<T> | null, next: T): { items?: string[] } {
+  if (!spec.changedKeys) return {};
+  const before = previous ? spec.schema.safeParse(previous.document) : null;
+  return { items: spec.changedKeys(before?.success ? before.data : null, next) };
 }
 
 /** A published version this release cannot read. It is never replaced by the defaults (ADR-0014). */
@@ -154,11 +167,12 @@ export async function publishDraft<T>(db: Db, spec: ConfigSpec<T>, actor: string
   const parsed = await validate(db, spec, draft.document, 'publish');
   if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
   const previous = await getPublished(db, spec);
+  const changed = changedKeysOf(spec, previous, parsed.data);
   if (previous) await configVersions.updateOne({ _id: previous._id, status: 'published' }, { $set: { status: 'archived', updatedAt: now } });
   try {
     const { modifiedCount } = await configVersions.updateOne(
       { _id: draft._id, status: 'draft' },
-      { $set: { status: 'published', document: parsed.data, publishedBy: actor, publishedAt: now, updatedAt: now } },
+      { $set: { status: 'published', document: parsed.data, publishedBy: actor, publishedAt: now, updatedAt: now, ...changed } },
     );
     if (modifiedCount === 0) throw new Error('draft changed while publishing');
   } catch (error) {
@@ -202,6 +216,8 @@ export async function publishIfUnchanged<T>(
   actor: string,
   note: string,
   now = new Date(),
+  /** Keys this publication is about beyond what changed (Learn: the item an admin moved), added to `items`. */
+  extra: { keys?: string[] } = {},
 ): Promise<GuardedPublishResult> {
   const parsed = await validate(db, spec, document, 'publish');
   if ('issues' in parsed) return { status: 'invalid', issues: parsed.issues };
@@ -211,10 +227,24 @@ export async function publishIfUnchanged<T>(
   if (await getDraft(db, spec)) return { status: 'draft_exists' };
 
   const version = await nextVersion(db, spec.kind);
+  const changed = changedKeysOf(spec, live, parsed.data);
+  if (extra.keys?.length) changed.items = [...new Set([...(changed.items ?? []), ...extra.keys])].sort();
   let draftId;
   try {
     draftId = (
-      await configVersions.insertOne({ kind: spec.kind, version, status: 'draft', document: parsed.data, note, createdBy: actor, createdAt: now, updatedAt: now, publishedBy: null, publishedAt: null })
+      await configVersions.insertOne({
+        kind: spec.kind,
+        version,
+        status: 'draft',
+        document: parsed.data,
+        note,
+        createdBy: actor,
+        createdAt: now,
+        updatedAt: now,
+        publishedBy: null,
+        publishedAt: null,
+        ...changed,
+      })
     ).insertedId;
   } catch (error) {
     // A draft (or this version number) appeared since the check: leave it alone.

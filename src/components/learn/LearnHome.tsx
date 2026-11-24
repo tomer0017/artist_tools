@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'use-intl';
 import { Dices, History, PencilLine, Sparkles, Timer } from 'lucide-react';
-import { LEARN_MODULE, type LearnCollection } from '@/lib/learn/model';
+import type { LearnCollection } from '@/lib/learn/model';
 import { DEFAULT_FILTERS, pickChallenge } from '@/lib/learn/pick';
 import { itemPath, learnPath } from '@/lib/learn/routes';
 import { useAccount, useLearnSummary } from '@/components/shell/account';
@@ -20,12 +20,12 @@ import { LearnHeader, LockBadge, buttonPrimary, buttonSecondary, useLocalized } 
 // Class mode, for teachers, sits at the bottom. No progress bars, streaks or
 // badges.
 
-/** Whether a collection is locked for this account, and whether Pro has it ("Part of Pro"). */
+/** Whether a collection is locked for this account: only Pro items are in it for them (ADR-0023), so Pro has it ("Part of Pro"). */
 export function useModuleLock(collection: LearnCollection): null | 'pro' | 'plan' {
   const summary = useLearnSummary();
   const account = useAccount()?.account;
   if (summary.modules[collection] !== 'locked') return null;
-  return account?.offer.pro.includes(LEARN_MODULE[collection]) && account.plan.effective !== 'pro' ? 'pro' : 'plan';
+  return account?.plan.effective !== 'pro' ? 'pro' : 'plan';
 }
 
 /** Challenges completed, most recent first (Random skips the latest few). */

@@ -1,19 +1,22 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { learnAccess, type LearnViewer } from './access';
-import { ALL_LEARN_ACCESS, NO_LEARN_ACCESS, NO_RULES, type LearnContent, type LearnRules } from './model';
+import { NO_LEGACY, accessModeOf, learnAccess, legacyLearnOf, type LearnViewer, type LegacyLearn } from './access';
+import { NO_RULES, type AccessMode, type LearnContent } from './model';
 
-// The Learn resolver's full rule matrix (ADR-0017, docs/learn/05 §4):
-// inactive → nothing; admin → everything; unpublished → hidden; module off →
-// locked; then All, None or the frozen Selected list.
+// The Learn resolver's full matrix (ADR-0023): inactive → nothing; archived
+// and Blocked → nobody, admins included; admin → the rest; Admin only →
+// admins; Free → everyone signed in; Pro → Pro, listed as locked to others.
+// Items written before modes get the access the old plan rules gave them.
 
 const text = (s: string) => ({ en: s, he: s });
-const exercise = (id: string, collection: 'curriculum' | 'color', order: number, published: boolean) => ({
+const exercise = (id: string, order: number, published: boolean, access?: AccessMode, archived?: boolean) => ({
   id,
-  collection,
-  groupId: collection === 'curriculum' ? 'core' : 'paint',
+  collection: 'curriculum' as const,
+  groupId: 'core',
   order,
   published,
+  ...(access ? { access } : {}),
+  ...(archived ? { archived } : {}),
   title: text(id),
   objective: text('o'),
   materials: text('m'),
@@ -24,11 +27,12 @@ const exercise = (id: string, collection: 'curriculum' | 'color', order: number,
   worksheet: { kind: 'none' as const },
   tools: [],
 });
-const challenge = (id: string, order: number, published: boolean) => ({
+const challenge = (id: string, order: number, published: boolean, access?: AccessMode) => ({
   id,
   groupId: 'objects',
   order,
   published,
+  ...(access ? { access } : {}),
   title: text(id),
   prompt: text('p'),
   level: 'beginner' as const,
@@ -43,90 +47,90 @@ const challenge = (id: string, order: number, published: boolean) => ({
 
 const CONTENT: LearnContent = {
   groups: [],
-  exercises: [exercise('D-A-01', 'curriculum', 2, true), exercise('D-B-01', 'curriculum', 1, true), exercise('D-C-01', 'curriculum', 3, false), exercise('C-A-01', 'color', 1, true)],
-  challenges: [challenge('CH-001', 1, true), challenge('CH-002', 2, true), challenge('CH-003', 3, false)],
+  exercises: [
+    exercise('D-FREE-01', 1, true, 'free'),
+    exercise('D-PRO-01', 2, false, 'pro'),
+    exercise('D-ADM-01', 3, false, 'admin'),
+    exercise('D-BLK-01', 4, false, 'blocked'),
+    exercise('D-ARC-01', 5, false, 'free', true),
+  ],
+  challenges: [challenge('CH-001', 1, true, 'free'), challenge('CH-002', 2, false, 'pro')],
 };
 
-const viewer = (over: Partial<LearnViewer> & { rules?: Partial<LearnRules> } = {}): LearnViewer => ({
-  active: true,
-  admin: false,
-  modules: ['learn.curriculum', 'learn.color', 'learn.challenges'],
-  offered: [],
-  ...over,
-  access: { rules: { ...NO_RULES(), ...over.rules }, previews: over.access?.previews ?? 'title' },
-});
+const viewer = (over: Partial<LearnViewer> = {}): LearnViewer => ({ active: true, admin: false, pro: false, legacy: NO_LEGACY, ...over });
+const IDS = ['D-FREE-01', 'D-PRO-01', 'D-ADM-01', 'D-BLK-01', 'D-ARC-01', 'CH-001', 'CH-002', 'CH-999'];
 
-const states = (v: LearnViewer) => {
-  const view = learnAccess(v, CONTENT);
-  return Object.fromEntries(['D-A-01', 'D-B-01', 'D-C-01', 'C-A-01', 'CH-001', 'CH-002', 'CH-003', 'CH-999'].map((id) => [id, view.state(id).status === 'locked' ? `locked:${(view.state(id) as { reason: string }).reason}` : view.state(id).status]));
+const states = (v: LearnViewer, content: LearnContent = CONTENT) => {
+  const view = learnAccess(v, content);
+  return Object.fromEntries(IDS.map((id) => [id, view.state(id).status === 'locked' ? `locked:${(view.state(id) as { reason: string }).reason}` : view.state(id).status]));
 };
 
-describe('who may open which Learn item', () => {
-  it('an account that is not active gets nothing, admin or not', () => {
-    for (const admin of [false, true]) {
-      expect(Object.values(states(viewer({ active: false, admin, rules: { curriculum: { mode: 'all' }, color: { mode: 'all' }, challenges: { mode: 'all' } } })))).toEqual(Array(8).fill('hidden'));
-    }
+describe('who may open which Learn item (access modes)', () => {
+  it('an account that is not active gets nothing, admin or Pro or not', () => {
+    for (const over of [{}, { admin: true }, { pro: true }]) expect(Object.values(states(viewer({ active: false, ...over })))).toEqual(Array(IDS.length).fill('hidden'));
   });
 
-  it('an admin opens every item, unpublished ones included, whatever the plan says; unknown IDs stay hidden', () => {
-    expect(states(viewer({ admin: true, modules: [], access: NO_LEARN_ACCESS() }))).toEqual({
-      'D-A-01': 'open', 'D-B-01': 'open', 'D-C-01': 'open', 'C-A-01': 'open', 'CH-001': 'open', 'CH-002': 'open', 'CH-003': 'open', 'CH-999': 'hidden',
+  it('Free: Free items open, Pro items locked (listed), Admin only, Blocked and archived hidden', () => {
+    expect(states(viewer())).toEqual({
+      'D-FREE-01': 'open', 'D-PRO-01': 'locked:not_in_plan', 'D-ADM-01': 'hidden', 'D-BLK-01': 'hidden', 'D-ARC-01': 'hidden', 'CH-001': 'open', 'CH-002': 'locked:not_in_plan', 'CH-999': 'hidden',
     });
   });
 
-  it('unpublished items are hidden from everyone else, even with All', () => {
-    const s = states(viewer({ rules: { curriculum: { mode: 'all' }, challenges: { mode: 'all' } } }));
-    expect(s['D-C-01']).toBe('hidden');
-    expect(s['CH-003']).toBe('hidden');
+  it('Pro (paid, given or assigned): Free and Pro items open; nothing else', () => {
+    expect(states(viewer({ pro: true }))).toEqual({
+      'D-FREE-01': 'open', 'D-PRO-01': 'open', 'D-ADM-01': 'hidden', 'D-BLK-01': 'hidden', 'D-ARC-01': 'hidden', 'CH-001': 'open', 'CH-002': 'open', 'CH-999': 'hidden',
+    });
   });
 
-  it('a module missing from the plan locks all its items, whatever the rule', () => {
-    const s = states(viewer({ modules: ['learn.challenges'], rules: { curriculum: { mode: 'all' }, color: { mode: 'all' }, challenges: { mode: 'all' } } }));
-    expect(s).toMatchObject({ 'D-A-01': 'locked:module_off', 'D-B-01': 'locked:module_off', 'C-A-01': 'locked:module_off', 'CH-001': 'open', 'CH-002': 'open' });
+  it('an admin opens Free, Pro and Admin only items; Blocked and archived are hidden from admins too in the studio', () => {
+    expect(states(viewer({ admin: true }))).toEqual({
+      'D-FREE-01': 'open', 'D-PRO-01': 'open', 'D-ADM-01': 'open', 'D-BLK-01': 'hidden', 'D-ARC-01': 'hidden', 'CH-001': 'open', 'CH-002': 'open', 'CH-999': 'hidden',
+    });
   });
 
-  it('then the rule: None locks, All opens every published item, Selected opens exactly the list', () => {
-    expect(states(viewer())).toMatchObject({ 'D-A-01': 'locked:not_in_plan', 'C-A-01': 'locked:not_in_plan', 'CH-001': 'locked:not_in_plan' });
-    expect(states(viewer({ rules: { curriculum: { mode: 'all' } } }))).toMatchObject({ 'D-A-01': 'open', 'D-B-01': 'open', 'C-A-01': 'locked:not_in_plan' });
-    const selected = states(viewer({ rules: { challenges: { mode: 'selected', items: ['CH-002', 'CH-003', 'CH-999'] } } }));
-    expect(selected).toMatchObject({ 'CH-001': 'locked:not_in_plan', 'CH-002': 'open', 'CH-003': 'hidden', 'CH-999': 'hidden' });
+  it('lists show open and Pro-locked items in order, with thumbnails; opens() lists only what opens', () => {
+    const free = learnAccess(viewer(), CONTENT);
+    expect(free.list('curriculum').map(({ item, state }) => `${item.id}:${state.status}`)).toEqual(['D-FREE-01:open', 'D-PRO-01:locked']);
+    expect(free.opens('curriculum')).toEqual(['D-FREE-01']);
+    expect(free.thumbnail('D-PRO-01')).toBe(true);
+    expect(free.thumbnail('D-ADM-01')).toBe(false);
+    expect(learnAccess(viewer({ admin: true }), CONTENT).list('curriculum').map(({ item }) => item.id)).toEqual(['D-FREE-01', 'D-PRO-01', 'D-ADM-01']);
   });
 
-  it('a Selected list counts only for its own collection', () => {
-    const s = states(viewer({ rules: { curriculum: { mode: 'selected', items: ['C-A-01', 'CH-001'] } } }));
-    expect(s).toMatchObject({ 'C-A-01': 'locked:not_in_plan', 'CH-001': 'locked:not_in_plan', 'D-A-01': 'locked:not_in_plan' });
+  it('the plan rules never change an item that has its own mode', () => {
+    const open: LegacyLearn = { free: { modules: ['learn.curriculum', 'learn.challenges'], rules: { curriculum: { mode: 'all' }, color: { mode: 'all' }, challenges: { mode: 'all' } } }, pro: null };
+    expect(states(viewer({ legacy: open }))).toEqual(states(viewer()));
+    const closed: LegacyLearn = { free: null, pro: null };
+    expect(states(viewer({ legacy: closed }))).toEqual(states(viewer()));
   });
 
-  it('reordering content changes nothing: a list names IDs, never positions', () => {
-    const rules: Partial<LearnRules> = { curriculum: { mode: 'selected', items: ['D-B-01'], made: { by: 'first', n: 1, contentVersion: 1 } } };
-    const before = learnAccess(viewer({ rules }), CONTENT).opens('curriculum');
-    const reordered: LearnContent = { ...CONTENT, exercises: CONTENT.exercises.map((e) => (e.id === 'D-A-01' ? { ...e, order: 0 } : e)) };
-    expect(learnAccess(viewer({ rules }), reordered).opens('curriculum')).toEqual(before);
-    expect(before).toEqual(['D-B-01']);
+  it('a mode this release does not know counts as Blocked', () => {
+    const odd = { ...CONTENT, exercises: [{ ...exercise('D-ODD-01', 1, true), access: 'sculptors' as AccessMode }] };
+    expect(learnAccess(viewer({ admin: true }), odd).state('D-ODD-01').status).toBe('hidden');
+    expect(accessModeOf({ id: 'D-ODD-01', collection: 'curriculum', published: true, access: 'sculptors' }, NO_LEGACY)).toBe('blocked');
   });
 });
 
-describe('what lists may show', () => {
-  it('a module no plan offers is not listed at all; one another plan offers is listed locked', () => {
-    const none = learnAccess(viewer({ modules: [] }), CONTENT);
-    expect(none.list('curriculum')).toEqual([]);
-    const offered = learnAccess(viewer({ modules: [], offered: ['learn.curriculum'] }), CONTENT);
-    expect(offered.list('curriculum').map(({ item, state }) => `${item.id}:${state.status}`)).toEqual(['D-B-01:locked', 'D-A-01:locked']);
+describe('items written before modes keep the access the old rules gave them', () => {
+  // As on production in catalog v8: Free opens one lesson and every challenge; Pro opens everything.
+  const legacy = legacyLearnOf({
+    free: { active: true, features: ['tool.grid', 'learn.curriculum', 'learn.challenges'], learn: { rules: { ...NO_RULES(), curriculum: { mode: 'selected', items: ['D-OLD-01'] }, challenges: { mode: 'all' } } } },
+    pro: { active: true, features: ['learn.curriculum', 'learn.challenges'], learn: { rules: { curriculum: { mode: 'all' }, color: { mode: 'none' }, challenges: { mode: 'all' } } } },
+  });
+  const OLD: LearnContent = { groups: [], exercises: [exercise('D-OLD-01', 1, true), exercise('D-OLD-02', 2, true), exercise('D-OLD-03', 3, false)], challenges: [challenge('CH-010', 1, true)] };
+
+  it('derives Free, Pro and Admin only exactly as the old resolver decided', () => {
+    const mode = (id: string) => learnAccess(viewer({ legacy }), OLD).mode(id);
+    expect(['D-OLD-01', 'D-OLD-02', 'D-OLD-03', 'CH-010'].map(mode)).toEqual(['free', 'pro', 'admin', 'free']);
+    const free = learnAccess(viewer({ legacy }), OLD);
+    expect(free.opens('curriculum')).toEqual(['D-OLD-01']);
+    expect(free.state('D-OLD-02')).toEqual({ status: 'locked', reason: 'not_in_plan' });
+    expect(learnAccess(viewer({ legacy, pro: true }), OLD).opens('curriculum')).toEqual(['D-OLD-01', 'D-OLD-02']);
   });
 
-  it('lists follow the content order and never show unpublished items to anyone but admins', () => {
-    const view = learnAccess(viewer({ rules: { curriculum: { mode: 'all' } } }), CONTENT);
-    expect(view.list('curriculum').map(({ item }) => item.id)).toEqual(['D-B-01', 'D-A-01']);
-    expect(learnAccess(viewer({ admin: true }), CONTENT).list('curriculum').map(({ item }) => item.id)).toEqual(['D-B-01', 'D-A-01', 'D-C-01']);
-  });
-
-  it('thumbnails: for open items, and for listed locked items only while previews allow them', () => {
-    const titles = learnAccess(viewer({ rules: { challenges: { mode: 'selected', items: ['CH-001'] } } }), CONTENT);
-    expect([titles.thumbnail('CH-001'), titles.thumbnail('CH-002'), titles.thumbnail('CH-003')]).toEqual([true, false, false]);
-    const previews = learnAccess({ ...viewer({ rules: { challenges: { mode: 'selected', items: ['CH-001'] } } }), access: { rules: { ...NO_RULES(), challenges: { mode: 'selected', items: ['CH-001'] } }, previews: 'thumbnail' } }, CONTENT);
-    expect([previews.thumbnail('CH-001'), previews.thumbnail('CH-002'), previews.thumbnail('CH-003')]).toEqual([true, true, false]);
-    // A locked module no plan offers shows nothing, thumbnails included.
-    const off = learnAccess({ ...viewer({ modules: [] }), access: { ...ALL_LEARN_ACCESS() } }, CONTENT);
-    expect(off.thumbnail('CH-001')).toBe(false);
+  it('a module no plan includes, or a plan switched off, opens nothing (Admin only)', () => {
+    expect(learnAccess(viewer({ legacy: NO_LEGACY }), OLD).mode('D-OLD-01')).toBe('admin');
+    const off = legacyLearnOf({ free: { active: false, features: ['learn.curriculum'], learn: { rules: { ...NO_RULES(), curriculum: { mode: 'all' } } } } });
+    expect(off.free).toBeNull();
   });
 });

@@ -27,5 +27,5 @@ change its decision; a new record supersedes it.
 | [0019](0019-learn-lessons.md) | Lessons that teach: the lesson template, the optional baseline, challenges linked to lessons, tool presets and the way back | Accepted; its lesson page and publishing rules revised by 0020 |
 | [0020](0020-beginner-lessons.md) | Beginner lessons: one small skill per lesson, one picture, a short task, something to make, one "I did it — next lesson" button with Undo, the rest behind "Need help?"; drafts unnumbered | Accepted |
 | [0021](0021-challenges-creative-playground.md) | Challenges V2, a creative playground: a mood (an effort, never a skill), a spin, one idea with an optional twist, an optional timer worked out from wall-clock timestamps, Save and Mark as completed; saved ideas and the timer in this browser | Accepted |
-
-Format: Context · Decision · Consequences · Alternatives considered.
+| [0022](0022-paypal-subscriptions.md) | PayPal monthly Pro subscriptions | Accepted |
+| [0023](0023-learn-access-modes-and-editor.md) | Learn: each item's own access (Free, Pro, Admin only, Blocked) is the only setting; Admin → Learn edits items in place, each save live as a new version, with item and whole-content history and restore | Accepted (replaces how 0017 decided access) |

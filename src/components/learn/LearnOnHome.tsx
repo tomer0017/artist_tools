@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useTranslations } from 'use-intl';
 import { ChevronRight, Lock, PencilLine, Sparkles } from 'lucide-react';
 import { classModeOn } from '@/lib/learn/class-mode';
-import { LEARN_MODULE, type LearnCollection } from '@/lib/learn/model';
+import type { LearnCollection } from '@/lib/learn/model';
 import { learnPath } from '@/lib/learn/routes';
 import { useAccount, useLearnSummary } from '@/components/shell/account';
 import { useCourseStart } from './useCourseStart';
@@ -35,7 +35,7 @@ export default function LearnOnHome() {
   const course = useCourseStart(summary.visible && summary.modules.curriculum !== null && !classMode);
   if (!summary.visible) return null;
   const lockOf = (collection: LearnCollection) =>
-    summary.modules[collection] !== 'locked' ? null : account?.offer.pro.includes(LEARN_MODULE[collection]) && account.plan.effective !== 'pro' ? 'pro' : 'plan';
+    summary.modules[collection] !== 'locked' ? null : account?.plan.effective !== 'pro' ? 'pro' : 'plan';
   const doors = [
     showCourse
       ? {

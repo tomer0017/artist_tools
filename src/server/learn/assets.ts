@@ -196,6 +196,16 @@ export async function checkAssetFile(dir: string, doc: Pick<LearnAssetDoc, '_id'
   }
 }
 
+/** Whether an asset's file is there with its recorded size (a quick check for files already verified by their bytes). */
+export async function checkAssetSize(dir: string, doc: Pick<LearnAssetDoc, '_id' | 'contentType' | 'bytes'>): Promise<'ok' | 'missing' | 'changed'> {
+  try {
+    return (await stat(assetPath(dir, doc._id, doc.contentType))).size === doc.bytes ? 'ok' : 'changed';
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing';
+    throw error;
+  }
+}
+
 /** Write a file so that a partial one never exists under its name: a temporary file, flushed, then renamed. */
 async function writeOnce(dir: string, id: string, type: LearnAssetType, bytes: Uint8Array): Promise<void> {
   const target = assetPath(dir, id, type);

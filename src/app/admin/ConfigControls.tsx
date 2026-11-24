@@ -16,6 +16,7 @@ import { ReauthPanel } from '@/components/account/parts';
 import type { Viewer } from './AdminControls';
 import type { ActionResult } from './actions';
 import { discardConfigDraft, publishConfig, restoreConfig, startDraft } from './config-actions';
+import { utcStamp } from './when';
 
 // Draft → review → publish for versioned configuration (docs/adr/0006). The
 // editors save drafts; these controls start, discard and publish them, and
@@ -144,7 +145,7 @@ export function VersionHistory({ kind, versions }: { kind: 'catalog' | 'pricing'
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(iso)) + ' UTC' : '—');
+  const when = utcStamp;
   return (
     <section aria-label="Version history" className="mt-6 rounded-2xl border border-border bg-card p-4 md:p-5">
       <h2 className="text-base font-semibold text-foreground">Version history</h2>

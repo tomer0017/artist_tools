@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'use-intl';
 import { Camera, ChevronDown, Lock, Maximize2, PencilLine, SearchX, Sparkles, Timer } from 'lucide-react';
 import { isLesson } from '@/lib/learn/model';
@@ -30,7 +31,9 @@ import { DraftBadge, Failed, LearnHeader, Loading, buttonPrimary, buttonSecondar
 
 export default function ItemScreen({ id, kind }: { id: string; kind: 'exercise' | 'challenge' }) {
   const t = useTranslations('learn');
-  const query = useLearnItem(id);
+  // Admin → Learn's Preview link (?preview=1): admins see Blocked and archived items too.
+  const preview = useSearchParams()?.get('preview') === '1';
+  const query = useLearnItem(id, true, preview);
   const back =
     kind === 'challenge'
       ? { href: learnPath({ screen: 'challenges' }), label: t('places.challenges') }
@@ -55,8 +58,34 @@ export default function ItemScreen({ id, kind }: { id: string; kind: 'exercise' 
   const answer = query.data;
   if (answer.status === 'not_found') return <NotFound back={back} />;
   if (answer.status === 'locked') return <LockedItem answer={answer} back={back} />;
-  if (answer.item.kind === 'exercise' && isLesson(answer.item)) return <LessonCard item={answer.item} back={back} />;
-  return <OpenCard item={answer.item} back={back} />;
+  const note = <AdminNote item={answer.item} />;
+  if (answer.item.kind === 'exercise' && isLesson(answer.item)) {
+    return (
+      <>
+        {note}
+        <LessonCard item={answer.item} back={back} />
+      </>
+    );
+  }
+  return (
+    <>
+      {note}
+      <OpenCard item={answer.item} back={back} />
+    </>
+  );
+}
+
+/** What admins are told above an item: who sees it (ADR-0023). Learners never get an access mode, so never see this. */
+function AdminNote({ item }: { item: OpenItem }) {
+  const t = useTranslations('learn.adminView');
+  if (!item.access) return null;
+  const key = item.archived ? 'archived' : item.access;
+  const warn = key === 'blocked' || key === 'archived' || key === 'admin';
+  return (
+    <p data-learn-admin-view={key} className={`mb-3 rounded-xl border px-3 py-2 text-xs font-semibold ${warn ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground'}`}>
+      {t(key)}
+    </p>
+  );
 }
 
 function NotFound({ back }: { back: { href: string; label: string } }) {
@@ -76,7 +105,8 @@ function LockedItem({ answer, back }: { answer: Extract<ItemAnswer, { status: 'l
   const account = useAccount()?.account;
   const inPro = account?.offer.pro.includes(answer.feature) === true;
   const offered = inPro || account?.offer.free.includes(answer.feature) === true;
-  const reason = answer.reason === 'module_off' ? (!offered ? 'off' : inPro && account?.plan.effective !== 'pro' ? 'pro' : 'plan') : 'plan';
+  // A Pro item (ADR-0023) says it is part of Pro; a module lock (content before modes) as before.
+  const reason = answer.reason === 'module_off' ? (!offered ? 'off' : inPro && account?.plan.effective !== 'pro' ? 'pro' : 'plan') : answer.inPro && account?.plan.effective !== 'pro' ? 'pro' : 'plan';
   const Icon = answer.item?.kind === 'challenge' ? Sparkles : PencilLine;
   const tp = useTranslations('billing.pro');
   // Pro opens it and Pro can be bought: the upgrade, on its own page.

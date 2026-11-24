@@ -134,7 +134,7 @@ function LessonRow({ item, number, collection, count, upNext }: { item: ListEntr
         {item.skill && <span className="block text-[13px] leading-snug text-muted-foreground">{loc(item.skill)}</span>}
         {(!item.open || item.published === false || count > 0) && (
           <span className="mt-1 flex flex-wrap items-center gap-1.5">
-            {!item.open && (item.inPro && offerPro ? <ProMark /> : <LockBadge pro={lock === 'pro'} />)}
+            {!item.open && (item.inPro && offerPro ? <ProMark /> : <LockBadge pro={item.inPro === true || lock === 'pro'} />)}
             {item.published === false && <DraftBadge />}
             <DoneTick count={count} />
           </span>

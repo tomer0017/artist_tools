@@ -149,8 +149,8 @@ describe('what a published lesson must have', () => {
     lesson.skill = { en: 'A skill line far longer than sixty characters, which a list cannot show', he: 'מיומנות' };
     expect(contentIssues(doc)).toEqual(
       expect.arrayContaining([
-        'D-LESSON-01: steps.1.text needs English and Hebrew before it can be published',
-        'D-LESSON-01: create needs English and Hebrew before it can be published',
+        'D-LESSON-01: steps.1.text needs English and Hebrew before it can be Free or Pro',
+        'D-LESSON-01: create needs English and Hebrew before it can be Free or Pro',
         'D-LESSON-01: skill is longer than 60 characters',
         'D-LESSON-01: a lesson needs exactly one picture',
         "D-LESSON-01: a lesson's task has 1 to 3 lines",
@@ -215,13 +215,10 @@ describe('what a published lesson must have', () => {
 });
 
 describe('what learners receive', () => {
-  const OPEN_TO_ALL: LearnViewer = {
-    active: true,
-    admin: false,
-    modules: ['learn.curriculum', 'learn.color', 'learn.challenges'],
-    offered: ['learn.curriculum', 'learn.color', 'learn.challenges'],
-    access: { rules: { curriculum: { mode: 'all' }, color: { mode: 'all' }, challenges: { mode: 'all' } }, previews: 'title' },
-  };
+  const MODULES = ['learn.curriculum', 'learn.color', 'learn.challenges'];
+  const ALL = { curriculum: { mode: 'all' as const }, color: { mode: 'all' as const }, challenges: { mode: 'all' as const } };
+  // Items without a mode, opened by both plans' old rules: Free.
+  const OPEN_TO_ALL: LearnViewer = { active: true, admin: false, pro: false, legacy: { free: { modules: MODULES, rules: ALL }, pro: { modules: MODULES, rules: ALL } } };
 
   it('an open lesson: its parts, by name only — anything else it carries, at any depth, never leaves the server', () => {
     const doc = content();
@@ -250,7 +247,8 @@ describe('what learners receive', () => {
 
   it('a list row of a locked lesson: its title, skill line and place, never its task, picture or creative line', () => {
     const doc = content();
-    const view = learnAccess({ ...OPEN_TO_ALL, access: { ...OPEN_TO_ALL.access, rules: { ...OPEN_TO_ALL.access.rules, curriculum: { mode: 'none' } } } }, doc);
+    // The course only in Pro's rules: its lessons are Pro, listed locked to Free.
+    const view = learnAccess({ ...OPEN_TO_ALL, legacy: { free: { modules: MODULES, rules: { ...ALL, curriculum: { mode: 'none' } } }, pro: { modules: MODULES, rules: ALL } } }, doc);
     const item = itemsOf(doc).find((i) => i.id === 'D-LESSON-01')!;
     const row = listEntry(item, view.state(item.id), view.thumbnail(item.id), new Map(), false);
     expect(row).toEqual({

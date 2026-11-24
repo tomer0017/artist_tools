@@ -2,16 +2,19 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { FEATURES, FEATURE_LABELS, PLAN_IDS, PLAN_NAMES, hasQuota, type FeatureId, type PlanId } from '@/lib/plans';
-import type { ContentOutline, LearnSection } from '@/lib/learn/model';
+import Link from 'next/link';
+import { FEATURES, FEATURE_LABELS, PLAN_IDS, PLAN_NAMES, hasQuota, isLearnFeature, type FeatureId, type PlanId } from '@/lib/plans';
+import { ACCESS_LABELS, ACCESS_MODES, type AccessMode, type LearnSection } from '@/lib/learn/model';
 import type { ActionResult } from '../actions';
 import { saveConfigDraft } from '../config-actions';
-import { LearnAccessEditor } from './LearnAccessEditor';
 
 // The plan catalog as a form: for each feature, which plans include it, an
 // optional quota per plan (per day or per calendar month, UTC), and whether
-// it is switched off for everyone but admins; then the Learn access section
-// (ADR-0017). Read-only until a draft exists.
+// it is switched off for everyone but admins. Read-only until a draft
+// exists. Learn is not set here any more (ADR-0023): each lesson and
+// challenge has its own access in Admin → Learn, summed up below. The
+// catalog's old Learn modules and rules are kept in the form exactly as
+// they are (older releases still read them) and are not shown as settings.
 
 type Quota = { limit: number; period: 'day' | 'month' };
 export interface CatalogForm {
@@ -20,7 +23,9 @@ export interface CatalogForm {
   learn: LearnSection;
 }
 
-export function CatalogEditor({ catalog, editable, outline, contentVersion }: { catalog: CatalogForm; editable: boolean; outline: ContentOutline; contentVersion: number | null }) {
+export type LearnCounts = Record<AccessMode | 'archived', number>;
+
+export function CatalogEditor({ catalog, editable, learnCounts, contentVersion }: { catalog: CatalogForm; editable: boolean; learnCounts: LearnCounts | null; contentVersion: number | null }) {
   const [form, setForm] = useState<CatalogForm>(catalog);
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -45,7 +50,7 @@ export function CatalogEditor({ catalog, editable, outline, contentVersion }: { 
   return (
     <div className="mt-4">
       <ul className="grid gap-3 md:grid-cols-2">
-        {FEATURES.map((feature) => {
+        {FEATURES.filter((feature) => !isLearnFeature(feature)).map((feature) => {
           const off = form.disabled.includes(feature);
           return (
             <li key={feature} className="rounded-2xl border border-border bg-card p-4">
@@ -110,15 +115,33 @@ export function CatalogEditor({ catalog, editable, outline, contentVersion }: { 
           );
         })}
       </ul>
-      <LearnAccessEditor
-        section={form.learn}
-        outline={outline}
-        contentVersion={contentVersion}
-        features={{ free: form.plans.free.features, pro: form.plans.pro.features }}
-        disabled={form.disabled}
-        editable={editable}
-        onChange={(learn) => setForm((f) => ({ ...f, learn }))}
-      />
+      <section id="learn-access" aria-labelledby="learn-access-title" className="mt-6 rounded-2xl border border-border bg-card p-4">
+        <h2 id="learn-access-title" className="text-base font-semibold text-foreground">
+          Learn access
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          Set per lesson and challenge in{' '}
+          <Link href="/admin/learn" className="font-medium text-primary underline-offset-2 hover:underline">
+            Admin → Learn
+          </Link>
+          : each item’s Access (Free, Pro, Admin only, Blocked) is the only setting that decides who opens it. Nothing here changes it.
+        </p>
+        {learnCounts ? (
+          <p aria-label="Learn items by access" className="mt-3 flex flex-wrap gap-2 text-sm">
+            {ACCESS_MODES.map((mode) => (
+              <span key={mode} className="rounded-full border border-border px-3 py-1 text-foreground">
+                {ACCESS_LABELS[mode]} <strong>{learnCounts[mode]}</strong>
+              </span>
+            ))}
+            <span className="rounded-full border border-border px-3 py-1 text-muted-foreground">
+              Archived <strong>{learnCounts.archived}</strong>
+            </span>
+            <span className="self-center text-xs text-muted-foreground">content version {contentVersion ?? '—'}</span>
+          </p>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">The Learn content cannot be read by this version of the app.</p>
+        )}
+      </section>
       {editable && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
@@ -135,7 +158,7 @@ export function CatalogEditor({ catalog, editable, outline, contentVersion }: { 
             Save draft
           </button>
           <p className="text-xs text-muted-foreground">
-            Admins always keep every feature. A tool or a Learn module is on or off per plan; quotas apply to saves and exports and count per UTC day or calendar month.
+            Admins always keep every feature. A tool is on or off per plan; quotas apply to saves and exports and count per UTC day or calendar month.
           </p>
         </div>
       )}

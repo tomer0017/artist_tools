@@ -18,8 +18,9 @@ import type { ActionResult } from './actions';
 // rules as ./actions.ts: the admin is re-checked from the database, input is
 // validated on the server, everything is audited by the operation it calls.
 // Publishing a version needs a sign-in from the last 10 minutes. Learn
-// content (ADR-0017) has no editor yet: its drafts come from the import
-// command, and here they are published, discarded or restored.
+// content is edited item by item in Admin → Learn, each save live at once
+// (ADR-0023, ./learn/actions.ts); here only an imported draft (from the
+// server's import command) is published or discarded.
 
 const DENIED: ActionResult = { ok: false, message: 'You are not allowed to do that.' };
 // The Pro price is what customers pay: only the owner changes it (anyone, until an owner is set).
@@ -28,7 +29,7 @@ const REAUTH: ActionResult = { ok: false, reauth: true, message: 'For your secur
 
 const specs = { catalog: catalogSpec, pricing: pricingSpec, learn_content: learnContentSpec } as const;
 const Kind = z.enum(['catalog', 'pricing', 'learn_content']);
-/** Kinds whose drafts are edited here (Learn content is imported until its editor exists). */
+/** Kinds whose drafts are edited here (Learn content has its own editor, ADR-0023). */
 const Editable = z.enum(['catalog', 'pricing']);
 const pathOf = (kind: keyof typeof specs) => (kind === 'catalog' ? '/admin/plans' : kind === 'pricing' ? '/admin/pricing' : '/admin/learn');
 

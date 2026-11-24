@@ -6,7 +6,7 @@ import { mfaStatus } from '@/server/admin-mfa';
 import { billingSummary } from '@/server/billing/summary';
 import { collections } from '@/server/db/collections';
 import { getEntitlements, type Entitlements } from '@/server/entitlements';
-import { learnSummaryOf } from '@/server/learn/live';
+import { learnSummaryOf, publishedOutline } from '@/server/learn/live';
 
 /**
  * The signed-in person's own account, read fresh from the database (never from
@@ -20,13 +20,14 @@ export async function getAccountSummary(
   options: { now?: Date; emailPasswordEnabled?: boolean; usernamePasswordEnabled?: boolean } = {},
 ): Promise<{ account: AccountSummary; entitlements: Entitlements } | null> {
   const now = options.now ?? new Date();
-  const [user, entitlements, accounts] = await Promise.all([
+  const [user, entitlements, accounts, learnOutline] = await Promise.all([
     collections(db).users.findOne(
       { _id: userId },
       { projection: { name: 1, email: 1, username: 1, displayUsername: 1, emailVerified: 1, image: 1, createdAt: 1, lastLoginAt: 1, introsSeen: 1, locale: 1, currency: 1, marketingConsent: 1, owner: 1 } },
     ),
     getEntitlements(db, userId, now),
     collections(db).accounts.find({ userId }, { projection: { providerId: 1 } }).toArray(),
+    publishedOutline(db),
   ]);
   if (!user) return null;
   const currency = isCurrency(user.currency) ? user.currency : DEFAULT_CURRENCY;
@@ -60,7 +61,7 @@ export async function getAccountSummary(
       features: entitlements.features,
       offer: entitlements.offer,
       asOf: now.toISOString(),
-      learn: learnSummaryOf(entitlements),
+      learn: learnSummaryOf(entitlements, learnOutline),
       introsSeen: (user.introsSeen ?? []).filter((tool): tool is ToolId => (TOOL_IDS as readonly string[]).includes(tool)),
       locale: isLocale(user.locale) ? user.locale : DEFAULT_LOCALE,
       currency,

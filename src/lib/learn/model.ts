@@ -42,6 +42,36 @@ export function collectionOfId(id: string): LearnCollection | null {
 
 export type Localized = { en: string; he: string };
 
+// ─── Access modes (ADR-0023) ─────────────────────────────────────────────────
+// Each lesson and challenge says who may open it, and nothing else decides:
+//   free     every signed-in account;
+//   pro      accounts on Pro (paid, given for a time, or assigned), and admins;
+//            listed as locked to everyone else;
+//   admin    admins only, for checking before it goes out;
+//   blocked  nobody in the studio, admins included (still edited and
+//            previewed in Admin → Learn).
+// An archived item (deleted, recoverable) is in the studio for nobody.
+// Items written before modes existed have none: the old plan rules decide
+// them exactly as before (ADR-0017) until a mode is written.
+
+export const ACCESS_MODES = ['free', 'pro', 'admin', 'blocked'] as const;
+export type AccessMode = (typeof ACCESS_MODES)[number];
+
+export const ACCESS_LABELS: Record<AccessMode, string> = { free: 'Free', pro: 'Pro', admin: 'Admin only', blocked: 'Blocked' };
+
+export const isAccessMode = (value: unknown): value is AccessMode => (ACCESS_MODES as readonly unknown[]).includes(value);
+
+/** Free and Pro items are seen by learners: they must be complete in English and Hebrew. */
+export const isPublicMode = (mode: AccessMode): boolean => mode === 'free' || mode === 'pro';
+
+/**
+ * The `published` flag written next to a mode, for releases before modes
+ * (ADR-0023): only a Free item that is not archived. Such a release then
+ * shows Free items as before and every other item to admins only, so going
+ * back never opens anything more widely.
+ */
+export const publishedFlagFor = (mode: AccessMode, archived: boolean): boolean => mode === 'free' && !archived;
+
 export interface AssetRef {
   assetId: string;
   alt: Localized;
@@ -116,8 +146,12 @@ export interface LearnExercise {
   groupId: string;
   /** Display order within the collection (First N follows it). */
   order: number;
-  /** Unpublished items are visible to admins only. */
+  /** Before access modes: unpublished items were visible to admins only. Kept in step with the mode for older releases (publishedFlagFor). */
   published: boolean;
+  /** Who may open it (ADR-0023); missing on items written before modes. */
+  access?: AccessMode;
+  /** Deleted, recoverable: in the studio for nobody, listed under Archived in Admin → Learn. */
+  archived?: boolean;
   title: Localized;
   objective: Localized;
   materials: Localized;
@@ -159,6 +193,10 @@ export interface LearnChallenge {
   groupId: string;
   order: number;
   published: boolean;
+  /** Who may open it (ADR-0023); missing on items written before modes. */
+  access?: AccessMode;
+  /** Deleted, recoverable (ADR-0023). */
+  archived?: boolean;
   title: Localized;
   prompt: Localized;
   /** Challenges V2 reads it as the effort the person feels like, never as a skill rating: beginner is light, intermediate is to create, advanced is a challenge (ADR-0021). */
@@ -187,9 +225,9 @@ export interface LearnContent {
 
 export const emptyContent = (): LearnContent => ({ groups: [], exercises: [], challenges: [] });
 
-/** What the access rules and the editors need of an item: its place and whether it is published. */
-type ExerciseLike = Pick<LearnExercise, 'id' | 'collection' | 'groupId' | 'order' | 'published'>;
-type ChallengeLike = Pick<LearnChallenge, 'id' | 'groupId' | 'order' | 'published'>;
+/** What the access rules and the editors need of an item: its place, its mode and whether it is published. */
+type ExerciseLike = Pick<LearnExercise, 'id' | 'collection' | 'groupId' | 'order' | 'published' | 'access' | 'archived'>;
+type ChallengeLike = Pick<LearnChallenge, 'id' | 'groupId' | 'order' | 'published' | 'access' | 'archived'>;
 
 /** Content, or an outline of it (the admin editors get IDs, places and titles, not the items' text). */
 export interface ContentLike<E extends ExerciseLike = ExerciseLike, C extends ChallengeLike = ChallengeLike> {
@@ -249,13 +287,19 @@ export interface ContentOutline extends ContentLike<
   groups: Pick<LearnGroup, 'id' | 'collection' | 'order' | 'title'>[];
 }
 
+const modeFields = (item: { access?: AccessMode; archived?: boolean }) => ({ ...(item.access ? { access: item.access } : {}), ...(item.archived ? { archived: true } : {}) });
+
 export const outlineOf = (content: LearnContent): ContentOutline => ({
   groups: content.groups.map(({ id, collection, order, title }) => ({ id, collection, order, title })),
-  exercises: content.exercises.map(({ id, collection, groupId, order, published, title }) => ({ id, collection, groupId, order, published, title })),
-  challenges: content.challenges.map(({ id, groupId, order, published, title, level }) => ({ id, groupId, order, published, title, level })),
+  exercises: content.exercises.map(({ id, collection, groupId, order, published, title, ...rest }) => ({ id, collection, groupId, order, published, title, ...modeFields(rest) })),
+  challenges: content.challenges.map(({ id, groupId, order, published, title, level, ...rest }) => ({ id, groupId, order, published, title, level, ...modeFields(rest) })),
 });
 
-// ─── Access rules (in the plan catalog, edited in Admin → Plans) ─────────────
+// ─── The old access rules (in the plan catalog, ADR-0017) ────────────────────
+// Before ADR-0023 the catalog said, per plan and collection, which published
+// items open. They no longer decide anything an item's own mode says; they
+// are read only to give items written before modes the access they had
+// (accessModeOf in ./access.ts), and stay in the catalog for older releases.
 
 /** How a Selected list was made: shown to admins; the server enforces only the list. */
 export type SelectionOrigin = { by: 'first'; n: number; contentVersion: number | null } | { by: 'group'; groupId: string; contentVersion: number | null } | { by: 'pick' };

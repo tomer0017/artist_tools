@@ -1,14 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type APIRequestContext, type Browser } from '@playwright/test';
 
-// Learn's server side (ADR-0017), dark-launched: the main test server has
-// the synthetic Learn content published (scripts/e2e-server.ts,
-// src/test/learn-fixture.ts) and no plan includes a Learn module. So Free and
-// Pro open nothing and get no image, admins open everything (unpublished
-// items too), and signed-out visitors get 401. Every check here is on what
-// the server answers; the Learn screens (M5, ADR-0018) are in
-// e2e/learn-screens.spec.ts. Plan changes through Admin → Plans are in
-// e2e/entitlements.spec.ts.
+// Learn's server side (ADR-0017, ADR-0023): the main test server has the
+// synthetic Learn content published (scripts/e2e-server.ts,
+// src/test/learn-fixture.ts), written before access modes, and no plan's old
+// rules open any of it: every item is Admin only. So Free and Pro open
+// nothing and get no image, admins open everything (unpublished items too),
+// and signed-out visitors get 401. Every check here is on what the server
+// answers; the Learn screens (M5, ADR-0018) are in e2e/learn-screens.spec.ts.
+// Access modes set in Admin → Learn are in e2e/learn-admin.spec.ts.
 
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const COLLECTIONS = ['curriculum', 'color', 'challenges'] as const;
@@ -48,8 +48,8 @@ async function assetIds(request: APIRequestContext): Promise<{ references: strin
   return { references: [...pictures.keys()], thumbnails: [...pictures.values()], worksheets: [...worksheets] };
 }
 
-test.describe('Learn, dark-launched: no plan includes a Learn module', () => {
-  test('Free and Pro: lists are empty, every item and image is refused, and so is an export from an item', async ({ browser }) => {
+test.describe('Learn with every item Admin only (no plan’s old rules open any)', () => {
+  test('Free and Pro: lists are empty, every item and image is unknown to them, and so is an export from an item', async ({ browser }) => {
     const admin = await api(browser, 'admin');
     const assets = await assetIds(admin.request);
     // Six pictures (three references, a lesson's picture and its mistake picture, the baseline's picture) and one static worksheet.
@@ -65,22 +65,24 @@ test.describe('Learn, dark-launched: no plan includes a Learn module', () => {
         expect(list.headers()['cache-control']).toBe('private, no-store');
         expect((await list.json()).items).toEqual([]);
       }
-      for (const [id, feature] of Object.entries(PUBLISHED)) {
+      for (const id of Object.keys(PUBLISHED)) {
         const response = await request.get(`/api/learn/items/${id}`);
-        expect(response.status(), `${who} ${id}`).toBe(403);
+        expect(response.status(), `${who} ${id}`).toBe(404);
         const text = await response.text();
-        expect(JSON.parse(text)).toEqual({ error: 'locked', reason: 'module_off', feature });
+        expect(JSON.parse(text)).toEqual({ error: 'not_found' });
         expect(text).not.toContain('Secret');
       }
+      // The admin preview is for admins only: the same answer.
+      expect((await request.get('/api/learn/items/CH-901?preview=1')).status()).toBe(404);
       for (const id of [...UNPUBLISHED, 'CH-999', 'not-an-item', 'D-TEST-01.json']) expect((await request.get(`/api/learn/items/${id}`)).status(), `${who} ${id}`).toBe(404);
       for (const id of [...assets.references, ...assets.thumbnails, ...assets.worksheets]) {
         const response = await request.get(`/api/learn/assets/${id}`);
-        expect(response.status(), `${who} asset ${id}`).toBe(403);
+        expect(response.status(), `${who} asset ${id}`).toBe(404);
         expect(response.headers()['content-type']).toContain('application/json');
       }
       const exported = await request.post('/api/usage', { data: { tool: 'tool.grid', features: ['export.image'], learnItem: 'CH-901' } });
       expect(exported.status()).toBe(403);
-      expect(await exported.json()).toEqual({ error: 'not_included', features: [], learnItem: { id: 'CH-901', reason: 'module_off' } });
+      expect(await exported.json()).toEqual({ error: 'not_included', features: [], learnItem: { id: 'CH-901', reason: 'unavailable' } });
       // A teacher's own photo still saves as before.
       expect((await request.post('/api/usage', { data: { tool: 'tool.grid', features: ['export.image'] } })).status()).toBe(200);
       await context.close();
@@ -147,48 +149,41 @@ test.describe('Learn, dark-launched: no plan includes a Learn module', () => {
   });
 });
 
-test.describe('Admin → Learn and the Learn section of Admin → Plans', () => {
+test.describe('Admin → Learn and the Learn summary in Admin → Plans', () => {
   test.use({ storageState: 'e2e/.auth/admin.json' });
 
-  test('Admin → Learn shows the published content, its assets with their licences, and what each plan opens', async ({ page }) => {
+  test('Admin → Learn: every item in its table with its access (from the old rules until saved), pictures and history', async ({ page }) => {
     await page.goto('/admin/learn');
     await expect(page.getByRole('heading', { name: 'Learn content', level: 1 })).toBeVisible();
-    await expect(page.getByText('Live: version 1')).toBeVisible();
-    await expect(page.getByText('Drafts come from the import command on the server')).toBeVisible();
-    const access = page.getByRole('region', { name: /What each plan opens now/ });
-    await expect(access).toContainText('Free: nothing');
-    await expect(access).toContainText('Pro: nothing');
     const curriculum = page.getByRole('table', { name: 'Drawing curriculum' });
-    await expect(curriculum.getByRole('row')).toHaveCount(6);
-    await expect(curriculum.getByRole('row', { name: /D-TEST-03/ })).toContainText('Unpublished (admins only)');
-    await expect(page.getByRole('table', { name: 'Challenges' }).getByRole('row', { name: /CH-901/ }).getByRole('img', { name: 'Test picture wing' })).toBeVisible();
+    await expect(curriculum.locator('[data-learn-row]')).toHaveCount(5);
+    const draft = curriculum.locator('[data-learn-row="D-TEST-03"]');
+    await expect(draft.getByLabel('Access of D-TEST-03')).toHaveValue('admin');
+    await expect(draft).toContainText('from the old plan rules');
+    await expect(page.getByRole('table', { name: 'Challenges' }).locator('[data-learn-row="CH-901"] img')).toBeVisible();
     // The thumbnail really loaded through the authorized route.
-    expect(await page.getByRole('img', { name: 'Test picture wing' }).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
-    const assets = page.getByRole('region', { name: /Assets \(7\)/ });
-    await expect(assets.getByRole('listitem')).toHaveCount(7);
-    await expect(assets).toContainText('Synthetic sky');
-    await expect(assets).toContainText('Studio Companion test suite · own');
-    // Own work may have no source page (ADR-0019): said, not linked.
-    await expect(assets.getByRole('listitem').filter({ hasText: 'Synthetic worksheet' })).toContainText('Own work, no source page');
-    await expect(page.getByRole('heading', { name: 'Version history' })).toBeVisible();
+    expect(await page.locator('[data-learn-row="CH-901"] img').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
+    await expect(page.getByRole('region', { name: 'Summary' })).toContainText('Admin only 9');
+    // Search by ID, English or Hebrew title.
+    await page.getByRole('searchbox', { name: 'Search' }).fill('אתגר בדיקה one');
+    await expect(page.locator('[data-learn-row]')).toHaveCount(1);
+    await page.getByRole('searchbox', { name: 'Search' }).fill('');
+    await page.getByText('All pictures and sheets (7)').click();
+    await expect(page.getByText('Synthetic sky')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'History of the whole content' })).toBeVisible();
     const results = await new AxeBuilder({ page }).withTags(WCAG).analyze();
     expect(results.violations).toEqual([]);
   });
 
-  test('Admin → Plans: the three Learn modules in no plan, and Learn access None for both plans', async ({ page }) => {
+  test('Admin → Plans: Learn is only summed up there; the old modules are not settings any more', async ({ page }) => {
     await page.goto('/admin/plans');
     for (const label of ['Drawing curriculum', 'Color module', 'Challenges']) {
-      const row = page.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
-      await expect(row.getByLabel('Free', { exact: true })).not.toBeChecked();
-      await expect(row.getByLabel('Pro', { exact: true })).not.toBeChecked();
-      // On or off, like a tool: no quota.
-      await expect(row.getByRole('spinbutton')).toHaveCount(0);
+      await expect(page.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) })).toHaveCount(0);
     }
     const section = page.getByRole('region', { name: 'Learn access' });
-    for (const plan of ['Free', 'Pro']) for (const collection of ['Drawing curriculum', 'Color module', 'Challenges']) await expect(section.getByLabel(`${plan} · ${collection}: rule`)).toHaveValue('none');
-    await expect(section.getByLabel('The title only')).toBeChecked();
-    await expect(section.getByLabel('Effective access')).toContainText('Free will open: nothing');
-    await expect(section.getByLabel('Effective access')).toContainText('Pro will open: nothing');
+    await expect(section.getByRole('link', { name: 'Admin → Learn' })).toHaveAttribute('href', '/admin/learn');
+    await expect(section.getByLabel('Learn items by access')).toContainText('Admin only 9');
+    await expect(section.getByRole('combobox')).toHaveCount(0);
     const results = await new AxeBuilder({ page }).include('#learn-access').withTags(WCAG).analyze();
     expect(results.violations).toEqual([]);
   });

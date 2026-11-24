@@ -150,6 +150,8 @@ export interface ConfigVersionDoc<T = unknown> {
   updatedAt: Date;
   publishedBy: string | null;
   publishedAt: Date | null;
+  /** What this version changed against the one before (Learn: item IDs), so one item's history is a query (ADR-0023). Missing on versions written before. */
+  items?: string[];
 }
 
 export type LearnAssetType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
@@ -567,6 +569,7 @@ export type AuditEventType =
   | 'admin.config_discarded'
   | 'admin.config_published'
   | 'admin.learn_asset_added'
+  | 'admin.learn_item_changed'
   | 'admin.coupon_created'
   | 'admin.coupon_status_changed'
   | 'billing.checkout_started'

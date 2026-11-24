@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { LockReason } from '@/lib/learn/access';
-import type { LearnChallenge, LearnCollection, LearnExercise, LessonStep, Localized, UnitLevel } from '@/lib/learn/model';
+import type { AccessMode, LearnChallenge, LearnCollection, LearnExercise, LessonStep, Localized, UnitLevel } from '@/lib/learn/model';
 import type { LearnFeatureId } from '@/lib/plans';
 import { signInPath } from '@/lib/redirects';
 import { useAccount } from '@/components/shell/account';
@@ -32,8 +32,10 @@ export interface ListEntry {
   optional?: boolean;
   skill?: Localized;
   lesson?: boolean;
-  /** Admins only. */
+  /** Admins only: seen by learners (Free or Pro), the access mode, archived. */
   published?: boolean;
+  access?: AccessMode;
+  archived?: boolean;
   open: boolean;
   lock: LockReason | null;
   /** Locked, and Pro opens it (set only while this account is not on Pro). */
@@ -69,20 +71,21 @@ export interface ReferenceView {
 /** Any picture of an item (a reference, or a lesson's demonstration, step or mistake picture), with its thumbnail and size. */
 export type ImageView = ReferenceView;
 
-type Common = { id: string; groupId: string; order: number; title: Localized; references: ReferenceView[]; published?: boolean };
+type Common = { id: string; groupId: string; order: number; title: Localized; references: ReferenceView[]; published?: boolean; access?: AccessMode; archived?: boolean };
 export type OpenStep = Omit<LessonStep, 'image'> & { image?: ImageView };
 export type OpenExercise = Common &
-  Omit<LearnExercise, keyof Common | 'published' | 'mistake' | 'demo' | 'steps'> & {
+  Omit<LearnExercise, keyof Common | 'published' | 'access' | 'archived' | 'mistake' | 'demo' | 'steps'> & {
     kind: 'exercise';
     mistake: { mistake: Localized; fix: Localized; image?: ImageView };
     demo?: { image: ImageView; caption: Localized }[];
     steps?: OpenStep[];
   };
-export type OpenChallenge = Common & Omit<LearnChallenge, keyof Common | 'published'> & { kind: 'challenge'; collection: 'challenges' };
+export type OpenChallenge = Common & Omit<LearnChallenge, keyof Common | 'published' | 'access' | 'archived'> & { kind: 'challenge'; collection: 'challenges' };
 export type OpenItem = OpenExercise | OpenChallenge;
 
 export type ItemAnswer =
-  | { status: 'open'; item: OpenItem; contentVersion: number | null }
+  /** `preview`: an admin looking at a Blocked or archived item from Admin → Learn (ADR-0023). */
+  | { status: 'open'; item: OpenItem; contentVersion: number | null; preview?: boolean }
   | { status: 'locked'; reason: LockReason; feature: LearnFeatureId; item: ListEntry | null; /** Pro opens it (the page offers the upgrade). */ inPro?: boolean }
   | { status: 'not_found' };
 
@@ -144,20 +147,21 @@ export function useLearnList(collection: LearnCollection, enabled = true) {
   });
 }
 
-export function useLearnItem(id: string, enabled = true) {
+/** One item; `preview` asks for it even when Blocked or archived (admins only: the server ignores it for anyone else). */
+export function useLearnItem(id: string, enabled = true, preview = false) {
   const key = useLearnKey();
   return useQuery({
-    queryKey: ['learn', 'item', id, key],
+    queryKey: ['learn', 'item', id, key, preview],
     enabled,
     queryFn: async (): Promise<ItemAnswer> => {
-      const response = await learnFetch(`/api/learn/items/${id}`);
+      const response = await learnFetch(`/api/learn/items/${id}${preview ? '?preview=1' : ''}`);
       if (response.status === 404) return { status: 'not_found' };
       if (response.status === 403) {
         const body = (await response.json().catch(() => ({}))) as { reason?: LockReason; feature?: LearnFeatureId; item?: ListEntry; inPro?: boolean };
         return { status: 'locked', reason: body.reason ?? 'not_in_plan', feature: body.feature ?? 'learn.curriculum', item: body.item ?? null, inPro: body.inPro === true };
       }
-      const body = await json<{ item: OpenItem; contentVersion: number | null }>(response);
-      return { status: 'open', item: body.item, contentVersion: body.contentVersion };
+      const body = await json<{ item: OpenItem; contentVersion: number | null; preview?: boolean }>(response);
+      return { status: 'open', item: body.item, contentVersion: body.contentVersion, ...(body.preview ? { preview: true } : {}) };
     },
     staleTime: 10_000,
     refetchInterval: LEARN_REFRESH_MS,

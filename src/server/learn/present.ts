@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Db } from 'mongodb';
 import type { ItemState } from '@/lib/learn/access';
-import { isLesson, listPicture, type AssetRef, type LearnItem, type LessonStep, type Localized, type ToolPreset, type WorksheetSpec } from '@/lib/learn/model';
+import { isLesson, isPublicMode, listPicture, type AccessMode, type AssetRef, type LearnItem, type LessonStep, type Localized, type ToolPreset, type WorksheetSpec } from '@/lib/learn/model';
 import { collections, type LearnAssetDoc } from '@/server/db/collections';
 
 // What the Learn routes send (ADR-0017). An open item: everything for its
@@ -54,8 +54,20 @@ function stepView(step: LessonStep, assets: Map<string, LearnAssetDoc>) {
   };
 }
 
+/**
+ * What admins are told of an item's access (ADR-0023): its mode, and
+ * `published` as the course reads it (seen by learners: Free or Pro, not
+ * archived), so an admin's course has the numbers learners see.
+ */
+const adminFields = (item: LearnItem, mode: AccessMode | null) => ({
+  // An item without a mode of its own (written before modes) keeps its old flag, as before.
+  published: mode && item.access !== undefined ? isPublicMode(mode) && !item.archived : item.published && !item.archived,
+  ...(mode ? { access: mode } : {}),
+  ...(item.archived ? { archived: true } : {}),
+});
+
 /** The whole item for an account that may open it: its known fields, its pictures with their thumbnails and sizes. */
-export function fullItem(item: LearnItem, assets: Map<string, LearnAssetDoc>, admin: boolean) {
+export function fullItem(item: LearnItem, assets: Map<string, LearnAssetDoc>, admin: boolean, mode: AccessMode | null = null) {
   const common = {
     id: item.id,
     kind: item.kind,
@@ -63,7 +75,7 @@ export function fullItem(item: LearnItem, assets: Map<string, LearnAssetDoc>, ad
     groupId: item.groupId,
     order: item.order,
     title: text(item.title),
-    ...(admin ? { published: item.published } : {}),
+    ...(admin ? adminFields(item, mode) : {}),
     references: item.references.map((ref) => imageView(ref, assets)),
     tools: [...item.tools],
   };
@@ -108,7 +120,7 @@ export function fullItem(item: LearnItem, assets: Map<string, LearnAssetDoc>, ad
  * place, a challenge's level and the lessons it builds on, a lesson's skill
  * line and whether it is optional.
  */
-export function listEntry(item: LearnItem, state: ItemState, thumbnail: boolean, assets: Map<string, LearnAssetDoc>, admin: boolean) {
+export function listEntry(item: LearnItem, state: ItemState, thumbnail: boolean, assets: Map<string, LearnAssetDoc>, admin: boolean, mode: AccessMode | null = null) {
   const picture = listPicture(item);
   return {
     id: item.id,
@@ -120,7 +132,7 @@ export function listEntry(item: LearnItem, state: ItemState, thumbnail: boolean,
     ...(item.kind === 'challenge'
       ? { level: item.level, quick: item.quick, medium: item.medium, reference: item.reference, ...(item.lessons ? { lessons: [...item.lessons] } : {}) }
       : { ...(item.optional ? { optional: true } : {}), ...(item.skill ? { skill: text(item.skill) } : {}), ...(isLesson(item) ? { lesson: true } : {}) }),
-    ...(admin ? { published: item.published } : {}),
+    ...(admin ? adminFields(item, mode) : {}),
     open: state.status === 'open',
     lock: state.status === 'locked' ? state.reason : null,
     thumbnailAssetId: thumbnail && picture ? (assets.get(picture.assetId)?.thumbnailAssetId ?? null) : null,

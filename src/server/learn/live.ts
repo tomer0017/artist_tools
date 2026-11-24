@@ -1,65 +1,101 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Db } from 'mongodb';
-import { LEARN_FEATURE_IDS } from '@/lib/plans';
 import type { LearnSummary } from '@/lib/account';
-import { learnAccess, type ItemState, type LearnAccessView, type LearnViewer } from '@/lib/learn/access';
-import { LEARN_COLLECTIONS, LEARN_MODULE, NO_LEARN_ACCESS, type LearnContent, type LearnItem } from '@/lib/learn/model';
+import { isAccessMode, LEARN_COLLECTIONS, type AccessMode, type ContentLike, type LearnContent, type LearnItem } from '@/lib/learn/model';
+import { learnAccess, legacyLearnOf, type ItemState, type LearnAccessView, type LearnViewer } from '@/lib/learn/access';
 import type { PlanId } from '@/lib/plans';
+import { collections } from '@/server/db/collections';
 import type { Entitlements, PlanState } from '@/server/entitlements';
 import { getPublished } from '@/server/config/versions';
 import { learnContentSpec, publishedLearnContent } from './content';
 
-// The Learn decision for one request (ADR-0017): the account's fresh
-// entitlements (src/server/entitlements.ts, the only reader of plans) and the
-// published content, read on every request, through one resolver
-// (src/lib/learn/access.ts). Content that cannot be read refuses everything.
+// The Learn decision for one request (ADR-0017, ADR-0023): the account's
+// fresh entitlements (src/server/entitlements.ts, the only reader of plans)
+// and the published content, read on every request, through one resolver
+// (src/lib/learn/access.ts). Each item's own access mode decides; content
+// that cannot be read refuses everything.
 
 /** What the resolver needs from entitlements. */
 export function learnViewerOf(entitlements: Entitlements): LearnViewer {
-  const offered = new Set([...entitlements.offer.free, ...entitlements.offer.pro]);
   return {
     active: entitlements.accountActive,
     admin: entitlements.access === 'admin',
-    modules: LEARN_FEATURE_IDS.filter((f) => entitlements.features.includes(f)),
-    offered: LEARN_FEATURE_IDS.filter((f) => offered.has(f)),
-    access: entitlements.learn,
+    pro: entitlements.access === 'pro',
+    legacy: entitlements.legacyLearn,
   };
 }
 
 /**
  * What an active, non-admin account would get on `planId` as published: the
- * same resolver, fed the plan's own features and Learn rules. Used to say
- * what upgrading opens (a locked item that Pro opens, how many more lessons).
+ * same resolver, on that plan. Used to say what upgrading opens (a locked
+ * item that Pro opens, how many more lessons).
  */
-export function planLearnViewer(entitlements: Entitlements, plans: Partial<Record<PlanId, PlanState>>, planId: PlanId): LearnViewer {
-  const plan = plans[planId];
-  const offered = new Set([...entitlements.offer.free, ...entitlements.offer.pro]);
-  return {
-    active: true,
-    admin: false,
-    modules: plan?.active ? LEARN_FEATURE_IDS.filter((f) => plan.features.includes(f) && offered.has(f)) : [],
-    offered: LEARN_FEATURE_IDS.filter((f) => offered.has(f)),
-    access: plan?.active && plan.learn ? plan.learn : NO_LEARN_ACCESS(),
-  };
+export function planLearnViewer(_entitlements: Entitlements, plans: Partial<Record<PlanId, PlanState>>, planId: PlanId): LearnViewer {
+  return { active: true, admin: false, pro: planId === 'pro' && plans.pro?.active === true, legacy: legacyLearnOf(plans) };
+}
+
+type OutlineItem = { id: string; collection: 'curriculum' | 'color'; groupId: string; order: number; published: boolean; access?: AccessMode; archived?: boolean };
+type OutlineChallenge = Omit<OutlineItem, 'collection'>;
+
+/**
+ * Only what the summary needs of the published content (IDs, collections,
+ * modes): read with a projection, since the account summary is asked for
+ * often. Anything malformed is left out (never shown more than it says).
+ */
+export async function publishedOutline(db: Db): Promise<{ version: number | null; content: ContentLike<OutlineItem, OutlineChallenge> }> {
+  const doc = await collections(db).configVersions.findOne(
+    { kind: 'learn_content', status: 'published' },
+    {
+      projection: {
+        version: 1,
+        'document.exercises.id': 1,
+        'document.exercises.collection': 1,
+        'document.exercises.published': 1,
+        'document.exercises.access': 1,
+        'document.exercises.archived': 1,
+        'document.challenges.id': 1,
+        'document.challenges.published': 1,
+        'document.challenges.access': 1,
+        'document.challenges.archived': 1,
+      },
+    },
+  );
+  const document = (doc?.document ?? {}) as { exercises?: unknown[]; challenges?: unknown[] };
+  const valid = (raw: unknown): raw is Record<string, unknown> =>
+    typeof raw === 'object' && raw !== null && typeof (raw as { id?: unknown }).id === 'string' && typeof (raw as { published?: unknown }).published === 'boolean';
+  const modeOk = (raw: Record<string, unknown>) => raw.access === undefined || isAccessMode(raw.access);
+  const exercises: OutlineItem[] = (Array.isArray(document.exercises) ? document.exercises : [])
+    .filter(valid)
+    .filter((raw) => (raw.collection === 'curriculum' || raw.collection === 'color') && modeOk(raw))
+    .map((raw) => ({ id: raw.id as string, collection: raw.collection as 'curriculum' | 'color', groupId: '', order: 0, published: raw.published as boolean, access: raw.access as AccessMode | undefined, archived: raw.archived === true }));
+  const challenges: OutlineChallenge[] = (Array.isArray(document.challenges) ? document.challenges : [])
+    .filter(valid)
+    .filter(modeOk)
+    .map((raw) => ({ id: raw.id as string, groupId: '', order: 0, published: raw.published as boolean, access: raw.access as AccessMode | undefined, archived: raw.archived === true }));
+  return { version: doc?.version ?? null, content: { exercises, challenges } };
 }
 
 /**
- * What the studio shows of Learn for this account (ADR-0018): whether Learn
- * appears at all, and each collection as open, locked (offered by another
- * plan) or absent. A module no published plan offers is not shown, so Learn
- * stays invisible to everyone but admins until a module is published.
+ * What the studio shows of Learn for this account (ADR-0018, ADR-0023):
+ * whether Learn appears at all, and each collection as open (it opens at
+ * least one item), locked (it only lists Pro items for this account) or
+ * absent (nothing in it for this account). The key changes with the content
+ * version, so an edit or an access change reaches open Learn screens on
+ * their next check.
  */
-export function learnSummaryOf(entitlements: Entitlements): LearnSummary {
+export function learnSummaryOf(entitlements: Entitlements, outline: { version: number | null; content: ContentLike }): LearnSummary {
   const viewer = learnViewerOf(entitlements);
+  const view = learnAccess(viewer, outline.content);
   const modules = Object.fromEntries(
     LEARN_COLLECTIONS.map((collection) => {
-      const feature = LEARN_MODULE[collection];
-      const state = !viewer.active ? null : viewer.admin || viewer.modules.includes(feature) ? 'open' : viewer.offered.includes(feature) ? 'locked' : null;
+      const rows = view.list(collection);
+      const state = rows.length === 0 ? null : rows.some((row) => row.state.status === 'open') ? 'open' : 'locked';
       return [collection, state];
     }),
   ) as LearnSummary['modules'];
-  const key = createHash('sha256').update(JSON.stringify([modules, viewer.admin ? 'admin' : viewer.access])).digest('base64url').slice(0, 16);
+  const who = !viewer.active ? 'none' : viewer.admin ? 'admin' : viewer.pro ? 'pro' : 'free';
+  const key = createHash('sha256').update(JSON.stringify([modules, who, outline.version])).digest('base64url').slice(0, 16);
   return { visible: Object.values(modules).some((state) => state !== null), modules, key };
 }
 

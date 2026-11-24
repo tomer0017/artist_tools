@@ -792,7 +792,7 @@ test.describe('on a phone', () => {
   });
 });
 
-test.describe('Learn stays invisible to Free and Pro while no plan offers it', () => {
+test.describe('Learn stays invisible to Free and Pro while no item is Free or Pro', () => {
   for (const who of ['user', 'pro']) {
     test(`${who === 'user' ? 'Free' : 'Pro'}: no Learn on Home or in the top bar; its addresses lead Home; its history API keeps nothing`, async ({ browser }) => {
       const context = await browser.newContext({ storageState: auth(who) });
@@ -808,9 +808,10 @@ test.describe('Learn stays invisible to Free and Pro while no plan offers it', (
       // No Learn content anywhere in the page (its interface words come with every page, like all of the studio's).
       expect(await page.content()).not.toContain('Secret');
 
+      // Admin only (no plan's old rules open it, ADR-0023): unknown to them, so nothing is recorded.
       const record = await page.request.post('/api/learn/completions', { data: { itemId: 'CH-901' } });
-      expect(record.status()).toBe(403);
-      expect(await record.json()).toEqual({ error: 'locked', reason: 'module_off' });
+      expect(record.status()).toBe(404);
+      expect(await record.json()).toEqual({ error: 'not_found' });
       expect((await page.request.post('/api/learn/completions', { data: { itemId: 'CH-903' } })).status()).toBe(404);
       expect((await page.request.post('/api/learn/completions', { data: { itemId: 'not an item' } })).status()).toBe(400);
       expect((await page.request.post('/api/learn/completions', { data: { itemId: 'CH-901', userId: 'someone else' } })).status()).toBe(400);

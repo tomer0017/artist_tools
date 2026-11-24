@@ -9,10 +9,10 @@ import { assetsFor, listEntry } from '@/server/learn/present';
 import { learnJson, learnRequest } from '@/server/learn/request';
 
 // GET /api/learn/items?collection=curriculum|color|challenges (ADR-0017): a
-// collection's items as this account's lists may show them, in order. Open
-// items and locked ones (title, place, lock reason; a thumbnail only where
-// previews allow); a module that no plan offers lists nothing at all, and
-// unpublished items appear only to admins. Item content is never in a list:
+// collection's items as this account's lists may show them, in order (each
+// item's own access mode decides, ADR-0023). Open items and items Pro opens
+// (title, place, lock, thumbnail); Admin only items appear only to admins;
+// Blocked and archived ones to nobody. Item content is never in a list:
 // GET /api/learn/items/<id> sends it to accounts that may open it.
 
 export const dynamic = 'force-dynamic';
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       collection: query.data.collection,
       contentVersion: version,
       groups,
-      items: rows.map(({ item, state }) => ({ ...listEntry(item, state, view.thumbnail(item.id), assets, admin), ...(pro && state.status !== 'open' && pro.state(item.id).status === 'open' ? { inPro: true } : {}) })),
+      items: rows.map(({ item, state }) => ({ ...listEntry(item, state, view.thumbnail(item.id), assets, admin, view.mode(item.id)), ...(pro && state.status !== 'open' && pro.state(item.id).status === 'open' ? { inPro: true } : {}) })),
     });
   } catch (error) {
     if (error instanceof UnreadableConfigError) {

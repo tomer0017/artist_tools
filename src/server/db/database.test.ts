@@ -29,6 +29,7 @@ describe('migration', () => {
       plansUpdated: 0,
       usersBackfilled: 0,
       preferencesBackfilled: 0,
+      learnHistoryBackfilled: 0,
       catalog: { version: 1, status: 'ok', notes: [] },
     });
 

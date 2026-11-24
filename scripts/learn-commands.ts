@@ -4,15 +4,25 @@
 //   learn-status            read only: the published and draft content, every asset's file, what each plan opens
 //   learn-publish           publish the content draft (audited, actor "cli"); prints what it changes first
 //   learn-discard           discard the content draft
+//   learn-access status                          read only: every item's access mode and what Free and Pro open (ADR-0023)
+//   learn-access write-modes [--apply]           write each item's mode as it is decided now (access unchanged)
+//   learn-access set <mode> --all [--apply]      give every item (archived ones aside) one mode, e.g. free
+//   learn-access align-catalog [--apply]         the catalog's old Learn rules → All, so releases before modes follow each item's flag
+//   learn-export                                 read only: every content version and asset record as JSON (for a backup kept elsewhere)
+// Without --apply nothing is written: what would change is printed, checked
+// and the command exits 0 only if the change is safe.
 //
 // Content and images never go into the repository (it is public): the folder
 // is kept elsewhere, and the database and the asset directory, both backed
 // up, are their home.
 import { createHash } from 'node:crypto';
-import { LEARN_COLLECTIONS, COLLECTION_LABELS, itemsOf, ruleText, type LearnContent } from '@/lib/learn/model';
+import { accessModeOf, learnAccess, legacyLearnOf, type LegacyLearn } from '@/lib/learn/access';
+import { ACCESS_LABELS, ACCESS_MODES, LEARN_COLLECTIONS, LEARN_MODULE, COLLECTION_LABELS, isAccessMode, itemsOf, publishedFlagFor, ruleText, type LearnContent } from '@/lib/learn/model';
 import { PLAN_IDS, PLAN_NAMES, type PlanId } from '@/lib/plans';
-import { catalogSpec, defaultCatalog, learnSectionOf, planDocsFor, planOpens, readCatalog } from '@/server/config/catalog';
-import { discardDraft, getDraft, getPublished, publishDraft, listVersions } from '@/server/config/versions';
+import { catalogSpec, defaultCatalog, describeCatalogChanges, learnSectionOf, mergeKnown, planDocsFor, planOpens, readCatalog, type Catalog } from '@/server/config/catalog';
+import { discardDraft, getDraft, getPublished, publishDraft, listVersions, publishIfUnchanged } from '@/server/config/versions';
+import { getPlanStates } from '@/server/entitlements';
+import { setAccessMany, writeModes } from '@/server/learn/editor';
 import type { getDb } from '@/server/db/client';
 import { collections } from '@/server/db/collections';
 import { learnAssetsDir } from '@/server/env';
@@ -118,13 +128,10 @@ export async function learnPublish(db: Database): Promise<number> {
     return 1;
   }
   const live = await publishedLearnContent(db);
-  const catalog = await getPublished(db, catalogSpec);
-  const read = readCatalog(catalog?.document ?? defaultCatalog());
-  const rules = read.status === 'unreadable' ? {} : Object.fromEntries(PLAN_IDS.map((p) => [p, learnSectionOf(read.catalog).access[p]]));
   const parsed = learnContentSpec.schema.safeParse(draft.document);
   if (parsed.success) {
     console.log(`Publishing content draft version ${draft.version} would:`);
-    for (const change of describeContentChanges(live, parsed.data, rules)) console.log(`  - ${change}`);
+    for (const change of describeContentChanges(live, parsed.data)) console.log(`  - ${change}`);
   }
   const result = await publishDraft(db, learnContentSpec, 'cli');
   if (result.status === 'no_draft') {
@@ -136,12 +143,184 @@ export async function learnPublish(db: Database): Promise<number> {
     for (const issue of result.issues) console.log(`  - ${issue}`);
     return 1;
   }
-  console.log(`Content version ${result.version} is live (recorded in the activity log). Who opens what is still decided by the published plan catalog.`);
+  console.log(`Content version ${result.version} is live (recorded in the activity log). Who opens what is each item's access (Admin → Learn).`);
   return 0;
 }
 
 export async function learnDiscard(db: Database): Promise<number> {
   const discarded = await discardDraft(db, 'learn_content', 'cli');
   console.log(discarded ? 'Content draft discarded.' : 'There was no content draft.');
+  return 0;
+}
+
+// ─── Access modes (ADR-0023) ──────────────────────────────────────────────────
+
+const ACTOR = 'cli:learn-access';
+
+/** What a release before modes opens for a plan: published items its old rules open (module, then All or the list). */
+function olderReleaseOpens(content: LearnContent, legacy: LegacyLearn, planId: PlanId): Set<string> {
+  const plan = legacy[planId];
+  const opened = new Set<string>();
+  for (const item of itemsOf(content)) {
+    if (!item.published || !plan || !plan.modules.includes(LEARN_MODULE[item.collection])) continue;
+    const rule = plan.rules[item.collection];
+    if (rule.mode === 'all' || (rule.mode === 'selected' && rule.items.includes(item.id))) opened.add(item.id);
+  }
+  return opened;
+}
+
+const VIEWERS = { free: { active: true, admin: false, pro: false }, pro: { active: true, admin: false, pro: true }, admin: { active: true, admin: true, pro: true } } as const;
+
+/** Every item's state for Free, Pro and admins, as this release decides. */
+function statesOf(content: LearnContent, legacy: LegacyLearn): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [who, viewer] of Object.entries(VIEWERS)) {
+    const view = learnAccess({ ...viewer, legacy }, content);
+    for (const item of itemsOf(content)) out[`${who}:${item.id}`] = view.state(item.id).status;
+  }
+  return out;
+}
+
+function printModes(content: LearnContent, legacy: LegacyLearn) {
+  const view = learnAccess({ ...VIEWERS.admin, legacy }, content);
+  const counts: Record<string, number> = {};
+  for (const collection of LEARN_COLLECTIONS) {
+    const items = itemsOf(content).filter((i) => i.collection === collection);
+    if (items.length === 0) continue;
+    console.log(`  ${COLLECTION_LABELS[collection]}:`);
+    for (const mode of [...ACCESS_MODES, 'archived'] as const) {
+      const ids = items.filter((i) => (mode === 'archived' ? i.archived : !i.archived && view.mode(i.id) === mode)).map((i) => `${i.id}${i.access === undefined ? '*' : ''}`);
+      counts[mode] = (counts[mode] ?? 0) + ids.length;
+      if (ids.length) console.log(`    ${mode === 'archived' ? 'Archived' : ACCESS_LABELS[mode]} (${ids.length}): ${ids.join(', ')}`);
+    }
+  }
+  console.log(`  In all: ${[...ACCESS_MODES, 'archived'].map((m) => `${m} ${counts[m] ?? 0}`).join(', ')}${itemsOf(content).some((i) => i.access === undefined) ? '  (* no mode of its own yet: from the old plan rules)' : ''}`);
+}
+
+export async function learnAccessCommand(db: Database, args: string[]): Promise<number> {
+  const [sub, ...rest] = args;
+  const apply = rest.includes('--apply');
+  const published = await getPublished(db, learnContentSpec);
+  const content = await publishedLearnContent(db);
+  const legacy = legacyLearnOf(await getPlanStates(db));
+  console.log(`Learn content version ${published?.version ?? '—'} (${fingerprint(published?.document ?? null)}); ${itemsOf(content).length} items.`);
+
+  if (sub === 'status') {
+    printModes(content, legacy);
+    for (const planId of PLAN_IDS) {
+      const view = learnAccess({ ...VIEWERS[planId], legacy }, content);
+      const opens = LEARN_COLLECTIONS.flatMap((c) => view.opens(c));
+      const older = olderReleaseOpens(content, legacy, planId);
+      const more = [...older].filter((id) => !opens.includes(id));
+      console.log(`  ${PLAN_NAMES[planId]} opens ${opens.length}; a release before modes would open ${older.size}${more.length ? ` — MORE: ${more.join(', ')}` : ' (never more)'}`);
+    }
+    return 0;
+  }
+
+  if (sub === 'write-modes') {
+    const before = statesOf(content, legacy);
+    const next: LearnContent = structuredClone(content);
+    let written = 0;
+    for (const item of [...next.exercises, ...next.challenges]) {
+      if (item.access !== undefined) continue;
+      const collection = 'collection' in item ? item.collection : 'challenges';
+      item.access = accessModeOf({ id: item.id, collection, published: item.published }, legacy);
+      item.published = publishedFlagFor(item.access, item.archived === true);
+      written += 1;
+    }
+    const after = statesOf(next, legacy);
+    const differ = Object.keys(before).filter((key) => before[key] !== after[key]);
+    console.log(`Writing each item's mode: ${written} items get one.`);
+    printModes(next, legacy);
+    console.log(`  Access unchanged for Free, Pro and admins: ${differ.length === 0 ? 'yes' : `NO (${differ.slice(0, 10).join(', ')})`}`);
+    for (const planId of PLAN_IDS) {
+      const now = new Set(LEARN_COLLECTIONS.flatMap((c) => learnAccess({ ...VIEWERS[planId], legacy }, next).opens(c)));
+      const more = [...olderReleaseOpens(next, legacy, planId)].filter((id) => !now.has(id));
+      console.log(`  ${PLAN_NAMES[planId]}: a release before modes would open ${more.length ? `MORE: ${more.join(', ')}` : 'nothing more'}`);
+      if (more.length) return 1;
+    }
+    if (differ.length > 0 || written === 0) return written === 0 ? 0 : 1;
+    if (!apply) {
+      console.log('Dry run: nothing written. Run again with --apply.');
+      return 0;
+    }
+    const result = await writeModes(db, ACTOR, { legacy, note: 'Access modes written per item (ADR-0023); access unchanged' });
+    console.log(result.status === 'saved' ? `Content version ${result.version} is live: every item has its mode.` : `Not written: ${JSON.stringify(result)}`);
+    return result.status === 'saved' ? 0 : 1;
+  }
+
+  if (sub === 'set') {
+    const mode = rest[0];
+    const named = rest.slice(1).filter((arg) => !arg.startsWith('--') && rest[rest.indexOf(arg) - 1] !== '--note');
+    if (!isAccessMode(mode) || (!rest.includes('--all') && named.length === 0)) throw new Error('Usage: npm run db -- learn-access set <free|pro|admin|blocked> --all|<ID…> [--apply] [--note "…"]');
+    const known = new Set(itemsOf(content).map((i) => i.id));
+    const unknown = named.filter((id) => !known.has(id));
+    if (unknown.length > 0) throw new Error(`Not in the live content: ${unknown.join(', ')}`);
+    const ids = rest.includes('--all') ? itemsOf(content).filter((i) => !i.archived).map((i) => i.id) : named;
+    const view = learnAccess({ ...VIEWERS.admin, legacy }, content);
+    const changes = ids.filter((id) => view.mode(id) !== mode || itemsOf(content).find((i) => i.id === id)!.access === undefined);
+    console.log(`${rest.includes('--all') ? 'Giving every item (archived ones aside)' : `Giving ${ids.join(', ')}`} ${ACCESS_LABELS[mode]}: ${changes.length} change.`);
+    for (const id of changes) console.log(`  ${id}: ${ACCESS_LABELS[view.mode(id)!]} → ${ACCESS_LABELS[mode]}`);
+    if (changes.length === 0) return 0;
+    if (!apply) {
+      console.log('Dry run: nothing written. Run again with --apply.');
+      return 0;
+    }
+    const note = rest.includes('--note') ? rest[rest.indexOf('--note') + 1] : `${rest.includes('--all') ? 'Every item' : changes.join(', ')}: ${ACCESS_LABELS[mode]} (operator)`;
+    const result = await setAccessMany(db, ACTOR, { ids: changes, access: mode, legacy, note });
+    console.log(result.status === 'saved' ? `Content version ${result.version} is live.` : `Not written: ${JSON.stringify(result)}`);
+    return result.status === 'saved' ? 0 : 1;
+  }
+
+  if (sub === 'align-catalog') {
+    const live = await getPublished(db, catalogSpec);
+    const read = readCatalog(live?.document ?? defaultCatalog());
+    if (read.status !== 'ok') {
+      console.log(`The published catalog cannot be edited safely here (${read.status}).`);
+      return 1;
+    }
+    const section = learnSectionOf(read.catalog);
+    const all = { mode: 'all' as const };
+    const edited: Catalog = {
+      ...read.catalog,
+      learn: { ...section, access: { free: { ...section.access.free, curriculum: all, challenges: all }, pro: { ...section.access.pro, curriculum: all, challenges: all } } },
+    };
+    const changes = describeCatalogChanges(read.catalog, edited, content);
+    console.log(`Catalog version ${live?.version ?? '—'} (${fingerprint(live?.document ?? null)}): its old Learn rules decide nothing for items with a mode; a release before modes still reads them.`);
+    for (const change of changes) console.log(`  - ${change}`);
+    if (changes.length === 0) {
+      console.log('  Nothing to change.');
+      return 0;
+    }
+    // With the rules at All, a release before modes opens exactly the items whose flag says so (Free ones): never more than this one.
+    const aligned = legacyLearnOf({ free: { active: true, features: planDocsFor(edited).free.features, learn: planDocsFor(edited).free.learn }, pro: { active: true, features: planDocsFor(edited).pro.features, learn: planDocsFor(edited).pro.learn } });
+    for (const planId of PLAN_IDS) {
+      const now = new Set(LEARN_COLLECTIONS.flatMap((c) => learnAccess({ ...VIEWERS[planId], legacy }, content).opens(c)));
+      const more = [...olderReleaseOpens(content, aligned, planId)].filter((id) => !now.has(id));
+      console.log(`  ${PLAN_NAMES[planId]}: a release before modes would then open ${more.length ? `MORE: ${more.join(', ')}` : 'nothing more than this one'}`);
+      if (more.length) return 1;
+    }
+    if (!apply) {
+      console.log('Dry run: nothing written. Run again with --apply.');
+      return 0;
+    }
+    const result = await publishIfUnchanged(db, catalogSpec, mergeKnown(read.stored, edited), { version: live?.version ?? null }, ACTOR, 'Learn rules to All: each item’s access decides (ADR-0023)');
+    console.log(result.status === 'published' ? `Catalog version ${result.version} is live; plans are in step.` : `Not published: ${JSON.stringify(result)}`);
+    return result.status === 'published' ? 0 : 1;
+  }
+
+  throw new Error('Usage: npm run db -- learn-access status | write-modes [--apply] | set <mode> --all|<ID…> [--apply] | align-catalog [--apply]');
+}
+
+/**
+ * Every Learn content version (drafts included) and every asset's record, as
+ * JSON on standard output: a copy of what Admin → Learn edits, for a backup
+ * kept elsewhere (the asset files are copied separately). Read only.
+ */
+export async function learnExport(db: Database): Promise<number> {
+  const versions = await collections(db).configVersions.find({ kind: 'learn_content' }, { sort: { version: 1 } }).toArray();
+  const assets = await collections(db).learnAssets.find({}, { sort: { _id: 1 } }).toArray();
+  process.stdout.write(JSON.stringify({ exportedAt: new Date().toISOString(), versions, assets }));
+  process.stdout.write('\n');
   return 0;
 }

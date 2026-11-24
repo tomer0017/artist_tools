@@ -59,14 +59,14 @@ import { getDraft, getPublished, publishIfUnchanged } from '@/server/config/vers
 import { learnAccess } from '@/lib/learn/access';
 import { LEARN_COLLECTIONS, itemAssetIds, itemsOf } from '@/lib/learn/model';
 import { publishedLearnContent } from '@/server/learn/content';
-import { learnDiscard, learnImportCommand, learnPublish, learnStatus } from './learn-commands';
+import { learnAccessCommand, learnDiscard, learnExport, learnImportCommand, learnPublish, learnStatus } from './learn-commands';
 import { billingReconcile, paypalCheck, paypalSetup } from './paypal-commands';
 import { closeMongo, getDb } from '@/server/db/client';
 import { collections, toObjectId } from '@/server/db/collections';
 import { migrate } from '@/server/db/migrate';
 import { authConfig } from '@/server/env';
 import { getEntitlements, getPlanOffer } from '@/server/entitlements';
-import { learnSummaryOf, learnViewerOf } from '@/server/learn/live';
+import { learnSummaryOf, learnViewerOf, publishedOutline } from '@/server/learn/live';
 import { createMailer } from '@/server/mail/mailer';
 import { mailTemplates } from '@/server/mail/templates';
 import { runMaintenance } from '@/server/maintenance';
@@ -83,7 +83,7 @@ import {
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 
 const USAGE =
-  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-owner <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove | learn-import <folder> | learn-status | learn-publish | learn-discard | paypal-check | paypal-setup | billing-reconcile';
+  'Usage: npm run db -- migrate | list-users | find-user <email> | grant-admin <userId> | revoke-admin <userId> | set-owner <userId> | set-plan <userId> free|pro | reset-admin-mfa <userId> | maintenance | mail-test <email> [en|he] | create-tester <username> free|pro [he] | remove-tester <username> | login-test | entitlement-test [--publish-check [--hold <seconds>]] | catalog-status | temp-testers create|remove | learn-import <folder> | learn-status | learn-publish | learn-discard | learn-access status|write-modes|set <mode> --all|<ID…>|align-catalog [--apply] | learn-export | counts | paypal-check | paypal-setup | billing-reconcile';
 
 /** Emails are personal data: operators see enough to recognise an account, not the address. */
 const mask = (email: string) => {
@@ -306,6 +306,18 @@ async function main(command: string | undefined, arg: string | undefined, arg2: 
     case 'learn-discard':
       process.exitCode = await learnDiscard(db);
       return;
+    case 'learn-access':
+      process.exitCode = await learnAccessCommand(db, process.argv.slice(3));
+      return;
+    case 'learn-export':
+      process.exitCode = await learnExport(db);
+      return;
+    case 'counts': {
+      // Read only: how many documents each collection holds (before and after a release, nothing but Learn content should change).
+      const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name).sort();
+      for (const name of names) console.log(`${name}\t${await db.collection(name).countDocuments()}`);
+      return;
+    }
     case 'paypal-check':
       process.exitCode = await paypalCheck(db);
       return;
@@ -640,8 +652,8 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
       `${label}: "Mark as completed" is accepted only for an item open now (${recorded} accepted), and the history holds exactly those (${String(total)})${wrong.length ? ` — wrong: ${wrong.join('; ')}` : ''}`,
       wrong.length === 0 && total === recorded,
     );
-    // The studio shows Learn only to accounts some published plan offers a module to.
-    const shown = learnSummaryOf(entitlements).visible;
+    // The studio shows Learn only to accounts that can see at least one item.
+    const shown = learnSummaryOf(entitlements, await publishedOutline(db)).visible;
     const learnPage = await fetchRetrying(`${base}/app/learn`, { headers: { cookie }, redirect: 'manual' });
     await learnPage.arrayBuffer().catch(() => undefined);
     const location = learnPage.headers.get('location') ?? '';
@@ -649,8 +661,10 @@ async function entitlementTest(db: ReturnType<typeof getDb>, publishCheck: boole
       `${label}: the studio ${shown ? 'shows' : 'does not show'} Learn (/app/learn answers ${learnPage.status}${location ? ` → ${location}` : ''})`,
       shown ? learnPage.status === 200 : learnPage.status >= 300 && learnPage.status < 400 && /\/app$/.test(new URL(location, base).pathname),
     );
-    if (!entitlements.offer.free.concat(entitlements.offer.pro).some((f) => f.startsWith('learn.'))) {
-      check(`${label}: dark launch — no plan includes a Learn module, so no Learn item opens (${opened}) and no Learn image is served (${served})`, opened === 0 && served === 0);
+    // Each item's own access decides (ADR-0023): with no Free or Pro item, nothing opens and no image is served.
+    const adminView = learnAccess({ active: true, admin: true, pro: true, legacy: entitlements.legacyLearn }, content);
+    if (!itemsOf(content).some((item) => !item.archived && ['free', 'pro'].includes(adminView.mode(item.id) ?? ''))) {
+      check(`${label}: no item is Free or Pro, so no Learn item opens (${opened}) and no Learn image is served (${served})`, opened === 0 && served === 0);
     }
   };
 

@@ -22,9 +22,14 @@ export class BodyTooLarge extends Error {}
  * make the server buffer more than the limit.
  */
 export async function readBodyText(request: Request, maxBytes: number): Promise<string> {
+  return new TextDecoder().decode(await readBodyBytes(request, maxBytes));
+}
+
+/** The request body's bytes, refusing more than `maxBytes` as it streams in (see readBodyText). */
+export async function readBodyBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
   const declared = Number(request.headers.get('content-length') ?? '');
   if (Number.isFinite(declared) && declared > maxBytes) throw new BodyTooLarge();
-  if (!request.body) return '';
+  if (!request.body) return new Uint8Array(0);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -44,7 +49,7 @@ export async function readBodyText(request: Request, maxBytes: number): Promise<
     all.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(all);
+  return all;
 }
 
 /** JSON from a small request body: null when it is not JSON; BodyTooLarge when over `maxBytes` (default 16 KB). */

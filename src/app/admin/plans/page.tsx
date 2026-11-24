@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { signInMethods } from '@/server/account-management';
-import { emptyContent, outlineOf, type LearnContent } from '@/lib/learn/model';
+import { accessModeOf, legacyLearnOf } from '@/lib/learn/access';
+import { ACCESS_MODES, emptyContent, itemsOf, type AccessMode, type LearnContent } from '@/lib/learn/model';
 import { catalogFromPlans, catalogReadNotes, defaultCatalog, describeCatalogChanges, learnSectionOf, readCatalog, catalogSpec, type Catalog } from '@/server/config/catalog';
 import { UnreadableConfigError, getDraft, getPublished, listVersions } from '@/server/config/versions';
 import { learnContentSpec, publishedLearnContent } from '@/server/learn/content';
@@ -10,12 +11,12 @@ import { requireAdmin } from '@/server/session';
 import { AdminShell } from '../AdminShell';
 import { DraftBar, VersionHistory } from '../ConfigControls';
 import { publishedByLabel } from '../format';
-import { CatalogEditor, type CatalogForm } from './CatalogEditor';
+import { CatalogEditor, type CatalogForm, type LearnCounts } from './CatalogEditor';
 import { CatalogReadNotice } from './CatalogReadNotice';
 
 // Plans and features (docs/adr/0006): what each plan includes, quotas, and
-// features switched off, and which Learn items each plan opens (ADR-0017), as
-// versioned drafts an admin publishes. A version written by a newer release
+// features switched off, as versioned drafts an admin publishes. Learn access
+// is per item in Admin → Learn (ADR-0023); this page only sums it up. A version written by a newer release
 // is shown with what this release keeps without applying; one it cannot apply
 // in full is read-only here (ADR-0014).
 
@@ -47,11 +48,15 @@ export default async function AdminPlansPage() {
   // The published Learn content, for Selected lists and the items each plan gains and loses.
   let content: LearnContent = emptyContent();
   let contentNote: string | null = null;
+  let learnCounts: LearnCounts | null = null;
   try {
     content = await publishedLearnContent(db);
+    const legacy = legacyLearnOf(await getPlanStates(db));
+    learnCounts = Object.fromEntries([...ACCESS_MODES, 'archived'].map((k) => [k, 0])) as Record<AccessMode | 'archived', number>;
+    for (const item of itemsOf(content)) learnCounts[item.archived ? 'archived' : accessModeOf(item, legacy)] += 1;
   } catch (error) {
     if (!(error instanceof UnreadableConfigError)) throw error;
-    contentNote = `The published Learn content (version ${error.version}) cannot be read by this version of the app: Learn lists cannot be checked here.`;
+    contentNote = `The published Learn content (version ${error.version}) cannot be read by this version of the app.`;
   }
   const liveRead = readCatalog(published ? published.document : defaultCatalog());
   const draftRead = draft ? readCatalog(draft.document) : null;
@@ -91,7 +96,7 @@ export default async function AdminPlansPage() {
         key={draft ? `draft-${draft.version}` : `live-${published?.version ?? 0}`}
         catalog={toForm(working)}
         editable={draft !== null && blocked === null}
-        outline={outlineOf(content)}
+        learnCounts={learnCounts}
         contentVersion={contentVersion}
       />
       <VersionHistory

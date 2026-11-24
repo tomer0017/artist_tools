@@ -7,6 +7,7 @@ import { ObjectId, type Db } from 'mongodb';
 import { MONGO_STARTUP_TIMEOUT, MONGO_STOP_TIMEOUT, startTestMongo, type TestMongo } from '@/test/mongo';
 import { writeLearnFixture } from '@/test/learn-fixture';
 import { PLAN_FEATURES } from '@/lib/plans';
+import { NO_LEGACY } from '@/lib/learn/access';
 import { defaultLearnSection, type LearnSection } from '@/lib/learn/model';
 import { exportAccountData, deleteAccount } from '@/server/account-management';
 import { getAccountSummary } from '@/server/account';
@@ -18,7 +19,8 @@ import { getEntitlements } from '@/server/entitlements';
 import { learnContentSpec } from './content';
 import { MAX_COMPLETIONS, completionHistory, completionSummary, historyTitles, parseCursor, recordCompletion, removeCompletion } from './completions';
 import { importSeed } from './import';
-import { learnSummaryOf, liveLearn } from './live';
+import { setAccess } from './editor';
+import { learnSummaryOf, liveLearn, publishedOutline } from './live';
 import { fullItem } from './present';
 
 // Learn's personal history (ADR-0018) on a real database: a completion only
@@ -80,14 +82,16 @@ async function account(plan: 'free' | 'pro', role: 'user' | 'admin' = 'user') {
 describe('recording a completion', () => {
   it('only for an item open to the account at that moment, with the content version', async () => {
     const free = await account('free');
-    // Dark launch: locked (the module is in no plan), unknown and unpublished items: nothing is written.
-    expect(await recordCompletion(db, free, await getEntitlements(db, free), 'CH-901')).toEqual({ status: 'locked', reason: 'module_off' });
+    // No plan opens it (Admin only), unknown and unpublished items: nothing is written.
+    expect(await recordCompletion(db, free, await getEntitlements(db, free), 'CH-901')).toEqual({ status: 'not_found' });
     expect(await recordCompletion(db, free, await getEntitlements(db, free), 'CH-999')).toEqual({ status: 'not_found' });
     expect(await recordCompletion(db, free, await getEntitlements(db, free), 'CH-903')).toEqual({ status: 'not_found' });
 
     await freeOpensCh901();
     const recorded = await recordCompletion(db, free, await getEntitlements(db, free), 'CH-901', new Date('2026-11-20T09:00:00Z'));
     expect(recorded).toMatchObject({ status: 'recorded', completion: { itemId: 'CH-901', completedAt: '2026-11-20T09:00:00.000Z' } });
+    // A Pro item: locked for Free, and nothing is written.
+    expect((await setAccess(db, 'admin:test', { id: 'CH-902', access: 'pro', legacy: NO_LEGACY })).status).toBe('saved');
     expect(await recordCompletion(db, free, await getEntitlements(db, free), 'CH-902')).toEqual({ status: 'locked', reason: 'not_in_plan' });
     const docs = await collections(db).learnCompletions.find({ userId: free }).toArray();
     expect(docs.map((d) => [d.itemId, d.contentVersion])).toEqual([['CH-901', 1]]);
@@ -122,13 +126,11 @@ describe('recording a completion', () => {
     expect(new Set(all.map((c) => c.id)).size).toBe(53);
     expect(all.map((c) => c.completedAt)).toEqual([...all.map((c) => c.completedAt)].sort().reverse());
 
-    // Titles as lists name items: none while no plan offers the module, none for an unpublished or unknown item.
+    // Titles as lists name items: none for an item Free does not see, an unpublished or an unknown one.
     const free = await account('free');
     expect(await historyTitles(db, await getEntitlements(db, free), ['CH-901', 'D-TEST-03', 'CH-999'])).toEqual({ 'CH-901': null, 'D-TEST-03': null, 'CH-999': null });
-    // Once a plan offers the module, a locked item is named, as in its list.
-    const catalog = structuredClone(OWNER);
-    catalog.plans.pro.features.push('learn.challenges');
-    await publishCatalog(catalog);
+    // A Pro item is named, locked, as in its list.
+    expect((await setAccess(db, 'admin:test', { id: 'CH-901', access: 'pro', legacy: NO_LEGACY })).status).toBe('saved');
     expect(await historyTitles(db, await getEntitlements(db, free), ['CH-901', 'D-TEST-03'])).toEqual({
       'CH-901': { title: { en: 'Test challenge one', he: 'אתגר בדיקה one' }, kind: 'challenge' },
       'D-TEST-03': null,
@@ -195,33 +197,29 @@ describe('what an open item sends', () => {
 });
 
 describe('what the studio is told about Learn', () => {
-  it('nothing for Free and Pro while no plan offers a module; admins see it all', async () => {
+  it('nothing for Free and Pro while no item is Free or Pro; admins see every collection with items', async () => {
     const free = await account('free');
-    const summary = learnSummaryOf(await getEntitlements(db, free));
+    const summary = learnSummaryOf(await getEntitlements(db, free), await publishedOutline(db));
     expect(summary).toMatchObject({ visible: false, modules: { curriculum: null, color: null, challenges: null } });
-    const admin = learnSummaryOf(await getEntitlements(db, await account('free', 'admin')));
+    const admin = learnSummaryOf(await getEntitlements(db, await account('free', 'admin')), await publishedOutline(db));
     expect(admin).toMatchObject({ visible: true, modules: { curriculum: 'open', color: 'open', challenges: 'open' } });
     // The account copy the studio receives carries it.
     expect((await getAccountSummary(db, free))?.account.learn).toEqual(summary);
   });
 
-  it('a module one plan offers shows, locked, to the other; the key changes with the access', async () => {
+  it('a Pro item shows, locked, to Free and open to Pro; the key changes with every access change', async () => {
     const free = await account('free');
     const pro = await account('pro');
-    const before = learnSummaryOf(await getEntitlements(db, pro));
-    const catalog = structuredClone(OWNER);
-    catalog.plans.pro.features.push('learn.challenges');
-    await publishCatalog(catalog);
-    expect(learnSummaryOf(await getEntitlements(db, free))).toMatchObject({ visible: true, modules: { curriculum: null, color: null, challenges: 'locked' } });
-    const after = learnSummaryOf(await getEntitlements(db, pro));
+    const before = learnSummaryOf(await getEntitlements(db, pro), await publishedOutline(db));
+    expect((await setAccess(db, 'admin:test', { id: 'CH-901', access: 'pro', legacy: NO_LEGACY })).status).toBe('saved');
+    expect(learnSummaryOf(await getEntitlements(db, free), await publishedOutline(db))).toMatchObject({ visible: true, modules: { curriculum: null, color: null, challenges: 'locked' } });
+    const after = learnSummaryOf(await getEntitlements(db, pro), await publishedOutline(db));
     expect(after).toMatchObject({ visible: true, modules: { challenges: 'open' } });
     expect(after.key).not.toBe(before.key);
-    // A rule change alone (same modules) changes the key too, so open Learn screens ask again.
-    const learn = defaultLearnSection();
-    learn.access.pro.challenges = { mode: 'all' };
-    await publishCatalog({ ...catalog, learn });
-    const ruled = learnSummaryOf(await getEntitlements(db, pro));
-    expect(ruled.modules).toEqual(after.modules);
-    expect(ruled.key).not.toBe(after.key);
+    // Free now: open for Free too, and the key changes again, so open Learn screens ask again.
+    expect((await setAccess(db, 'admin:test', { id: 'CH-901', access: 'free', legacy: NO_LEGACY })).status).toBe('saved');
+    const freed = learnSummaryOf(await getEntitlements(db, free), await publishedOutline(db));
+    expect(freed.modules.challenges).toBe('open');
+    expect(learnSummaryOf(await getEntitlements(db, pro), await publishedOutline(db)).key).not.toBe(after.key);
   });
 });
