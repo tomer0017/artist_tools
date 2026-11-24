@@ -56,6 +56,9 @@ describe('his sign and his pointing', () => {
     expect(at.left).toBeGreaterThanOrEqual(8);
     expect(at.left + at.width).toBeLessThanOrEqual(fox.left + (fox.right - fox.left) * 0.16 + 1);
     expect(at.top).toBeGreaterThanOrEqual(52);
+    // Never below his floor: the Pro banner and the tool cards after the hero stay clear.
+    expect(at.top + Math.min(180, at.maxHeight ?? 180)).toBeLessThanOrEqual(212 + 2);
+    expect(at.maxHeight).toBe(212 + 2 - 52);
     // Hebrew: mirrored.
     const he = signPlacement({ left: 15, right: 100, top: 110, height: 100 }, 180, { width: 390, topLimit: 52, floor: 212 }, 'right');
     expect(he.left).toBeGreaterThanOrEqual(100 - 85 * 0.16 - 1);

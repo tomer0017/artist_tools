@@ -9,7 +9,7 @@ import type { CompanionTip } from '@/lib/companion/model';
 // keyboard; the stage places it beside his raised paw and announces it once.
 
 export const signButton =
-  'inline-flex min-h-[40px] items-center justify-center rounded-lg px-3 text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5a2b] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f7ecd6]';
+  'inline-flex min-h-[36px] items-center justify-center rounded-lg px-3 text-[14px] font-semibold sm:min-h-[40px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5a2b] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f7ecd6]';
 
 export interface SignProps {
   tip: Pick<CompanionTip, 'id' | 'title' | 'text' | 'action'>;
@@ -40,7 +40,7 @@ export const Sign = forwardRef<HTMLDivElement, SignProps>(function Sign({ tip, l
       style={style}
       data-below={below || undefined}
     >
-      <div className="relative rounded-xl border-[5px] border-[#8b5a2b] bg-[#f7ecd6] p-3 pe-9 text-[#3b2416] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_0_0_2px_#c79a62]">
+      <div className="relative flex min-h-0 w-full flex-col rounded-xl border-[4px] border-[#8b5a2b] bg-[#f7ecd6] p-2.5 pe-9 text-[#3b2416] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_0_0_2px_#c79a62] sm:border-[5px] sm:p-3 sm:pe-9">
         <span aria-hidden="true" className="absolute -top-1 start-3 h-2 w-2 rounded-full bg-[#5d3518]" />
         <span aria-hidden="true" className="absolute -top-1 end-3 h-2 w-2 rounded-full bg-[#5d3518]" />
         <button
@@ -52,13 +52,14 @@ export const Sign = forwardRef<HTMLDivElement, SignProps>(function Sign({ tip, l
           <X className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only">{t('sign.close')}</span>
         </button>
-        <div className="max-h-[min(42vh,260px)] overflow-y-auto">
-          {title && <p className="mb-1 text-[15px] font-bold leading-snug">{title}</p>}
-          <p className="text-[15px] leading-relaxed" data-sketchy-text>
+        {/* If a long tip does not fit beside him, its words scroll here; the buttons always show. */}
+        <div className="max-h-[min(42vh,260px)] min-h-0 flex-1 overflow-y-auto">
+          {title && <p className="mb-0.5 text-[14px] font-bold leading-snug sm:mb-1 sm:text-[15px]">{title}</p>}
+          <p className="text-[14px] leading-snug sm:text-[15px] sm:leading-relaxed" data-sketchy-text>
             {tip.text[locale]}
           </p>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2 sm:mt-3">
           {showAction && (
             <button type="button" onClick={onAction} className={`${signButton} bg-[#8b5a2b] text-[#fff8ec] hover:bg-[#6f4521]`} data-sketchy-action={tip.action.type}>
               {tip.action.label[locale]}

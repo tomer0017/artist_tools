@@ -256,6 +256,12 @@ unreadable catalog with the defaults: `plans` stays exactly as it is.
     ADR-0023 shows Free items as before and every other item (Pro, Admin
     only, Blocked, archived) to admins only: never more open. Roll forward
     to bring Pro items back; Admin → Learn there is the old read-only page.
+- ADR-0024 (Sketchy, the studio companion) adds the configuration kind
+  `companion` (settings, access, tips; versions like Learn's) and the
+  account field `users.companion` (hidden, audience). Releases before it
+  ignore both: rolling back simply hides Sketchy and Admin → Companion;
+  rolling forward brings him back exactly as configured. No plan, price or
+  billing data is involved.
 - **After any rollback, check the catalog** with the release now live (read
   only):
 

@@ -103,7 +103,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   const [faded, setFaded] = useState(true);
   const [visible, setVisible] = useState(true);
   const [tip, setTip] = useState<CompanionTip | null>(null);
-  const [signPos, setSignPos] = useState<{ left: number; top: number; width: number; below: boolean } | null>(null);
+  const [signPos, setSignPos] = useState<{ left: number; top: number; width: number; below: boolean; maxHeight: number | null } | null>(null);
   const [menu, setMenu] = useState<MenuView | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [roulette, setRoulette] = useState<{ mood?: Mood; classMode?: boolean } | null>(null);
@@ -737,7 +737,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
           onDismiss={() => closeSign(true)}
           onClose={() => closeSign(true)}
           below={signPos?.below === true}
-          style={signPos ? { left: signPos.left, top: signPos.top, width: signPos.width } : { left: -10000, top: 0, visibility: 'hidden' }}
+          style={signPos ? { left: signPos.left, top: signPos.top, width: signPos.width, ...(signPos.maxHeight ? { maxHeight: signPos.maxHeight, display: 'flex' } : {}) } : { left: -10000, top: 0, visibility: 'hidden' }}
         />
       )}
 

@@ -81,21 +81,23 @@ export function signPlacement(
   signHeight: number,
   stage: { width: number; topLimit: number; floor: number },
   facing: 'left' | 'right',
-): { left: number; top: number; width: number; below: boolean } {
+): { left: number; top: number; width: number; below: boolean; maxHeight: number | null } {
   const paw = (fox.right - fox.left) * 0.16;
   const room = facing === 'left' ? fox.left + paw - MARGIN : stage.width - (fox.right - paw) - MARGIN;
   if (room >= SIGN_MIN) {
     const width = Math.round(Math.min(SIGN_MAX, room));
     const left = facing === 'left' ? fox.left + paw - width : fox.right - paw;
+    // Between the top limit and his floor: what comes after the hero (the Pro banner, the tool cards) stays clear.
+    const available = Math.max(80, stage.floor + 2 - stage.topLimit);
+    const height = Math.min(signHeight, available);
     const want = fox.top + fox.height * 0.1 - 16;
-    // Its bottom stays near his floor: the content below him (tool cards) is never covered.
-    const top = Math.max(stage.topLimit, Math.min(want, stage.floor + 28 - signHeight));
-    return { left: Math.round(Math.max(MARGIN, left)), top: Math.round(top), width, below: false };
+    const top = Math.max(stage.topLimit, Math.min(want, stage.floor + 2 - height));
+    return { left: Math.round(Math.max(MARGIN, left)), top: Math.round(top), width, below: false, maxHeight: signHeight > available ? Math.round(available) : null };
   }
   const width = Math.round(Math.min(SIGN_MAX + 20, stage.width - 2 * MARGIN));
   const center = (fox.left + fox.right) / 2;
   const left = Math.min(Math.max(MARGIN, center - width / 2), stage.width - width - MARGIN);
-  return { left: Math.round(left), top: Math.round(stage.floor + 6), width, below: true };
+  return { left: Math.round(left), top: Math.round(stage.floor + 6), width, below: true, maxHeight: null };
 }
 
 /** The angle (degrees, 0 = ahead, 90 = straight down) from his shoulder to a target, for pointing. */
