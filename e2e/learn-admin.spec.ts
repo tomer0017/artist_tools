@@ -153,6 +153,14 @@ test('add a challenge and a lesson, edit them, and learners see every save at on
   expect(added.body.item.demo).toHaveLength(1);
   // Its picture is served to Free (it opens the lesson).
   expect(await status(free.page, `/api/learn/assets/${added.body.item.demo[0].image.assetId}`)).toBe(200);
+
+  // Edit the lesson: its Hebrew title and "Done when", live for Free on the next request; its picture stays.
+  await fill(lesson, 'Title', 'Ovals in boxes', 'אליפסות בתוך ריבועים');
+  await fill(lesson, 'Done when', 'The oval touches all four sides.', 'האליפסה נוגעת בארבע הצלעות.');
+  await save(page, /^Saved D-LESSON-02$/);
+  const edited = (await itemOf(free.page, 'D-LESSON-02')).body.item;
+  expect(edited).toMatchObject({ title: { he: 'אליפסות בתוך ריבועים' }, success: { en: 'The oval touches all four sides.' } });
+  expect(edited.demo[0].image.assetId).toBe(added.body.item.demo[0].image.assetId);
   for (const v of [admin, free]) await v.context.close();
 });
 
