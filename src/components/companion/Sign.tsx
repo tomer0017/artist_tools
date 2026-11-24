@@ -40,7 +40,7 @@ export const Sign = forwardRef<HTMLDivElement, SignProps>(function Sign({ tip, l
       style={style}
       data-below={below || undefined}
     >
-      <div className="relative flex min-h-0 w-full flex-col rounded-xl border-[4px] border-[#8b5a2b] bg-[#f7ecd6] p-2.5 pe-9 text-[#3b2416] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_0_0_2px_#c79a62] sm:border-[5px] sm:p-3 sm:pe-9">
+      <div className="relative flex min-h-0 w-full flex-col rounded-xl border-[4px] border-[#98612f] bg-[#f7ecd6] bg-[url(/sketchy/parchment.webp)] bg-cover p-2.5 pe-9 text-[#3b2416] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_0_0_2px_#edc68c,0_0_0_1px_#5d3518] sm:border-[5px] sm:p-3 sm:pe-9">
         <span aria-hidden="true" className="absolute -top-1 start-3 h-2 w-2 rounded-full bg-[#5d3518]" />
         <span aria-hidden="true" className="absolute -top-1 end-3 h-2 w-2 rounded-full bg-[#5d3518]" />
         <button

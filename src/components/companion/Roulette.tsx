@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { useLocale, useTranslations } from 'use-intl';
-import { Dices, Feather, Layers, Mountain, Sparkles, X } from 'lucide-react';
+import { Dices, Feather, Layers, Mountain, Palette, Sparkles, X } from 'lucide-react';
 import { MOODS, PLAYGROUND_KEYS, effortOf, poolOf, readIds, reelOf, spin, withSpin, type Mood } from '@/lib/learn/roulette';
 import { itemPath } from '@/lib/learn/routes';
 import { useLearnItem, useLearnList, type ListEntry } from '@/components/learn/data';
@@ -40,7 +40,7 @@ function writeLocal(key: string, value: unknown) {
   }
 }
 
-const short = (text: string, max = 15) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+const short = (text: string, max = 24) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
 export interface RouletteProps {
   open: boolean;
@@ -76,6 +76,9 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
       setPicked(null);
       setEmpty(false);
       setSaid('');
+      setSpinning(false);
+      setReel([]);
+      setRotation(0);
     }
     return () => window.clearTimeout(timer.current);
   }, [open, initialMood]);
@@ -135,9 +138,9 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content
-          className="fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-3xl border border-border bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom-4 sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[min(560px,calc(100vw-32px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6"
+          className="fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-3xl border border-[#a18a66]/50 bg-[radial-gradient(ellipse_at_50%_38%,#40301f_0%,#242124_44%,#19191c_100%)] p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom-4 sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[min(640px,calc(100vw-32px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6"
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             (event.currentTarget as HTMLElement).querySelector<HTMLElement>('[data-roulette-spin]')?.focus();
@@ -193,11 +196,11 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
             </div>
           </fieldset>
 
-          <div className="relative mx-auto mt-3 flex w-full max-w-[420px] items-end justify-center">
-            <div className="relative h-[min(64vw,260px)] w-[min(64vw,260px)]">
+          <div className="relative mx-auto mt-3 flex w-full max-w-[480px] items-end justify-center py-3">
+            <div className="relative h-[min(64vw,320px)] w-[min(64vw,320px)] drop-shadow-[0_0_24px_#e99b2430]">
               {/* the pointer */}
               <svg viewBox="0 0 24 24" className="absolute left-1/2 top-[-6px] z-10 h-7 w-7 -translate-x-1/2 drop-shadow" aria-hidden="true">
-                <path d="M12 22 L3 4 Q12 0 21 4 Z" fill="#f7ecd6" stroke="#5d3518" strokeWidth="1.6" strokeLinejoin="round" />
+                <path d="M12 22 L3 4 Q12 0 21 4 Z" fill="#fff0c3" stroke="#f5a623" strokeWidth="1.6" strokeLinejoin="round" />
               </svg>
               <div
                 className="h-full w-full"
@@ -205,12 +208,12 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
                 aria-hidden="true"
                 data-roulette-wheel
               >
-                <Wheel entries={wheel} locale={locale} />
+                <Wheel entries={wheel} locale={locale} rotation={rotation} spinning={spinning} />
               </div>
-              <div className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-[#5d3518] bg-[#f7ecd6] shadow-md" aria-hidden="true" />
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border-[3px] border-[#986329] bg-[radial-gradient(circle_at_35%_25%,#fff2c9,#dfb268)] shadow-[0_2px_8px_#311a12]" aria-hidden="true"><Palette className="h-6 w-6 text-[#744316]" /></div>
             </div>
-            <div className="-ms-6 mb-[-6px] shrink-0" aria-hidden="true">
-              <Sketchy ref={fox} height={110} facing={locale === 'he' ? 'right' : 'left'} reducedMotion={reducedMotion} />
+            <div className="relative -ms-10 mb-[-5px] w-[clamp(92px,24vw,160px)] shrink-0 [&>div]:!h-auto [&>div]:!w-full [&>div]:aspect-[248/292]" aria-hidden="true">
+              <Sketchy ref={fox} height={180} initial="point" facing={locale === 'he' ? 'right' : 'left'} reducedMotion={reducedMotion} />
             </div>
           </div>
 
@@ -228,7 +231,7 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
               type="button"
               onClick={onSpin}
               disabled={spinning || list.isPending || list.isError}
-              className="inline-flex min-h-[48px] min-w-[10rem] items-center justify-center gap-2 rounded-2xl bg-primary px-6 text-base font-bold text-primary-foreground shadow-md transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+              className="inline-flex min-h-[48px] min-w-[14rem] items-center justify-center gap-2 rounded-full border border-[#ffe09a] bg-gradient-to-b from-[#ffd86b] via-[#ffb51f] to-[#d8880d] px-8 text-base font-bold text-primary-foreground shadow-[0_5px_24px_#e9a12435,inset_0_1px_0_#fff3ca] transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               data-roulette-spin
             >
               <Dices className={`h-5 w-5 ${spinning ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
@@ -242,7 +245,7 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
           )}
 
           {picked && (
-            <article ref={result} className="mt-4 rounded-2xl border border-primary/40 bg-primary/5 p-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300 motion-reduce:animate-none" data-roulette-result={picked.id}>
+            <article ref={result} className="mt-4 min-w-0 scroll-m-4 break-words rounded-2xl border border-[#e7b759]/65 bg-[linear-gradient(120deg,#59402555,#211e20_70%)] p-4 sm:p-5 animate-in fade-in-0 slide-in-from-bottom-2 duration-300 motion-reduce:animate-none" data-roulette-result={picked.id}>
               <div className="mb-1 flex flex-wrap items-center gap-1.5">
                 {groupTitle.get(picked.groupId) && <span className="text-xs font-semibold uppercase tracking-wider text-foreground">{groupTitle.get(picked.groupId)}</span>}
                 {effortOf(picked) && <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-foreground">{tl(`challenges.levels.${picked.level!}`)}</span>}
@@ -286,8 +289,8 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
   );
 }
 
-/** The wheel: one wedge per challenge on it, its title along the radius. */
-function Wheel({ entries, locale }: { entries: ListEntry[]; locale: 'en' | 'he' }) {
+/** Dynamic challenge wedges, with counter-rotated labels that remain upright. */
+function Wheel({ entries, locale, rotation, spinning }: { entries: ListEntry[]; locale: 'en' | 'he'; rotation: number; spinning: boolean }) {
   const n = Math.max(entries.length, 1);
   const slice = 360 / n;
   const point = (deg: number, r: number) => {
@@ -296,7 +299,8 @@ function Wheel({ entries, locale }: { entries: ListEntry[]; locale: 'en' | 'he' 
   };
   return (
     <svg viewBox="-104 -104 208 208" className="h-full w-full drop-shadow-xl">
-      <circle r="103" fill="#5d3518" />
+      <circle r="103" fill="#a66a27" stroke="#edbe6b" strokeWidth="1.5" />
+      <circle r="100" fill="#5d3518" />
       {entries.length === 0 && <circle r="98" fill="#f3dfbd" />}
       {entries.map((entry, i) => {
         const a0 = i * slice;
@@ -306,23 +310,32 @@ function Wheel({ entries, locale }: { entries: ListEntry[]; locale: 'en' | 'he' 
         return (
           <g key={`${entry.id}-${i}`}>
             <path d={n === 1 ? 'M0 -98 A98 98 0 1 1 -0.01 -98 Z' : `M0 0 L${point(a0, 98)} A98 98 0 0 1 ${point(a1, 98)} Z`} fill={color} stroke="#5d3518" strokeWidth="1" />
-            <text
-              transform={`rotate(${mid - 90}) translate(58 0)`}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize="8.4"
-              fontWeight="700"
-              fill={DARK_TEXT.has(color) ? '#3b2416' : '#fff8ec'}
-              direction={locale === 'he' ? 'rtl' : 'ltr'}
-            >
-              {short(entry.title[locale])}
-            </text>
+            <g transform={`translate(${point(mid, 64)})`}>
+              <g style={{ transform: `rotate(${-rotation}deg)`, transition: spinning ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.8, 0.1, 1)` : 'none' }}>
+                <text textAnchor="middle" dominantBaseline="central" fontSize="7.1" fontWeight="700"
+                  fill={DARK_TEXT.has(color) ? '#3b2416' : '#fff8ec'} direction={locale === 'he' ? 'rtl' : 'ltr'}>
+                  {labelLines(entry.title[locale]).map((line, row, lines) => <tspan key={row} x="0" y={(row - (lines.length - 1) / 2) * 9}>{line}</tspan>)}
+                </text>
+              </g>
+            </g>
           </g>
         );
       })}
       {entries.map((_, i) => (
-        <circle key={i} cx={point(i * slice, 99).split(' ')[0]} cy={point(i * slice, 99).split(' ')[1]} r="2.4" fill="#f6d49a" />
+        <circle key={i} cx={point(i * slice, 99).split(' ')[0]} cy={point(i * slice, 99).split(' ')[1]} r="2.5" fill="#fff1bc" stroke="#ffcb6e" strokeWidth=".6" style={{ filter: 'drop-shadow(0 0 2px #ffd16c)' }} />
       ))}
     </svg>
   );
+}
+
+/** Short, upright labels stay inside each wedge, including after a spin. */
+function labelLines(title: string): string[] {
+  const words = short(title).split(/\s+/);
+  const lines: string[] = [];
+  for (const word of words) {
+    if (lines.length && `${lines[lines.length - 1]} ${word}`.length <= 10) lines[lines.length - 1] += ` ${word}`;
+    else lines.push(word.length > 10 ? `${word.slice(0, 9)}…` : word);
+  }
+  if (lines.length > 3) return [...lines.slice(0, 2), `${lines[2].slice(0, 8)}…`];
+  return lines;
 }

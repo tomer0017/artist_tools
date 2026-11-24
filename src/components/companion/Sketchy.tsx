@@ -1,11 +1,12 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useLayoutEffect } from 'react';
 import type { AnimationId } from '@/lib/companion/model';
 import type { ClipParams } from './clips';
-import { SketchyEngine } from './engine';
-import { SketchyRig, VIEWBOX } from './rig';
+import { RasterEngine } from './raster-engine';
+import { VIEWBOX } from './rig';
+import { RasterRig } from './raster-rig';
 
-// Sketchy on screen (ADR-0024): the puppet (./rig.tsx) driven by its engine
-// (./engine.ts). The director (the stage that owns him) plays clips through
+// Sketchy on screen: the approved raster artwork and articulated pose engine.
+// Public control and anchor interfaces remain compatible with ADR-0024. The director (the stage that owns him) plays clips through
 // the handle; he faces left or right by a mirror, never by redrawing.
 
 export interface SketchyHandle {
@@ -32,12 +33,13 @@ export interface SketchyProps {
 
 export const Sketchy = forwardRef<SketchyHandle, SketchyProps>(function Sketchy({ height, facing, reducedMotion, idleLife = true, paused = false, initial = 'idle', className }, ref) {
   const box = useRef<HTMLDivElement>(null);
-  const engine = useRef<SketchyEngine | null>(null);
+  const engine = useRef<RasterEngine | null>(null);
+  const [pose, setPose] = useState<AnimationId>(initial);
+  useLayoutEffect(() => { engine.current?.renderNow(); }, [pose]);
 
   useEffect(() => {
-    const svg = box.current?.querySelector('svg');
-    if (!svg) return;
-    const e = new SketchyEngine(svg, { reducedMotion, idleLife });
+    if (!box.current) return;
+    const e = new RasterEngine(box.current, { reducedMotion, idleLife }, setPose);
     engine.current = e;
     e.play(initial);
     return () => {
@@ -75,7 +77,7 @@ export const Sketchy = forwardRef<SketchyHandle, SketchyProps>(function Sketchy(
 
   return (
     <div ref={box} className={className} style={{ width: height * ASPECT, height, transform: facing === 'left' ? 'scaleX(-1)' : undefined }} data-facing={facing}>
-      <SketchyRig style={{ width: '100%', height: '100%', overflow: 'visible' }} />
+      <RasterRig pose={pose} style={{ width: '100%', height: '100%', overflow: 'visible' }} />
     </div>
   );
 });

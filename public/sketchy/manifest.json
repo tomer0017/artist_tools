@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "width": 300,
+  "height": 360,
+  "states": [
+    "idle",
+    "walk",
+    "run",
+    "jump",
+    "sit",
+    "rest",
+    "wave",
+    "laugh",
+    "think",
+    "curious",
+    "celebrate",
+    "point",
+    "draw",
+    "holdSign"
+  ]
+}
