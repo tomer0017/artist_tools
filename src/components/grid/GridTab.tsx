@@ -17,6 +17,7 @@ import { buildGridPdf, gridPrintDetail, gridPrintLayout } from '@/lib/print/grid
 import { GRID_PDF_BUTTON } from '@/lib/print/ui';
 import { activeControls, resolveSketch } from '@/lib/sketch/settings';
 import PrepareWorksheets from '@/components/worksheets/PrepareWorksheets';
+import { takeWorksheetsRequest } from '@/components/companion/actions';
 import { canvasTextRenderer, loadImage, rasterizeReference, renderPdfPreview } from '@/lib/print/gridPdfBrowser';
 import type { gridEn } from '@/i18n/messages/tools/grid';
 
@@ -66,6 +67,12 @@ export default function GridTab() {
   }, [initGridImageFromReference]);
 
   const activeImage = gridImage;
+  // Sketchy's "Make practice sheets" (ADR-0024) opens the worksheets at once when there is a photo here.
+  useEffect(() => {
+    if (activeImage && canWorksheets && takeWorksheetsRequest()) setWorksheetsOpen(true);
+    // Only when the tool opens (or its photo arrives).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeImage !== null && activeImage !== undefined]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const exportCanvasRef = useRef<HTMLCanvasElement>(null);

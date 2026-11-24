@@ -33,6 +33,8 @@ import { useToolAllowed } from '@/components/shell/account';
 const CompareArt = lazy(() => import('@/features/compare-art/CompareArt'));
 // Learn (ADR-0018) is loaded only when it is opened: most accounts never see it.
 const LearnView = lazy(() => import('@/components/learn/LearnView'));
+// Sketchy across the studio (ADR-0024): celebrations away from Home, and the tool used last.
+const CompanionHost = lazy(() => import('@/components/companion/CompanionHost'));
 
 const queryClient = new QueryClient();
 
@@ -162,6 +164,9 @@ function Workspace() {
       <OnboardingHost />
       <ToolIntroHost />
       <ToolOpenTracker />
+      <Suspense fallback={null}>
+        <CompanionHost />
+      </Suspense>
       {!isMobile && <TopNav />}
       <ReturnBar />
       {/* min-w-0 on every tool root: a flex item otherwise grows to its

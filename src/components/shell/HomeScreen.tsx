@@ -1,3 +1,4 @@
+import { Suspense, lazy, useRef } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Lock } from 'lucide-react';
 import { useTranslations } from 'use-intl';
@@ -17,17 +18,23 @@ import type { TabId } from '@/types/project';
 
 const ART = '/images/home/';
 
+// Sketchy, the studio companion (ADR-0024): loaded after Home, only for accounts he is shown to.
+const CompanionStage = lazy(() => import('@/components/companion/CompanionStage'));
+
 const HERO_FADE = 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 30%, #000 62%, #000 88%, transparent 100%)';
 
 export default function HomeScreen() {
   const isMobile = useIsMobile();
   const t = useTranslations('studio');
   const tl = useTranslations('landing');
+  const content = useRef<HTMLDivElement>(null);
+  const hero = useRef<HTMLElement>(null);
+  const companion = useAccount()?.account.companion?.show === true;
   return (
     <div className="flex-1 overflow-y-auto overscroll-contain bg-background">
-      <div className="mx-auto w-full max-w-6xl pb-8">
+      <div ref={content} className="relative mx-auto w-full max-w-6xl pb-8">
         {/* Hero */}
-        <section className="relative overflow-hidden px-4 pb-5 pt-3 md:px-6 md:pb-8 md:pt-8 lg:px-8">
+        <section ref={hero} className="relative overflow-hidden px-4 pb-5 pt-3 md:px-6 md:pb-8 md:pt-8 lg:px-8">
           <div
             className="pointer-events-none absolute inset-y-0 end-0 w-[64%] md:w-[55%] rtl:-scale-x-100"
             style={{ maskImage: HERO_FADE, WebkitMaskImage: HERO_FADE }}
@@ -50,7 +57,7 @@ export default function HomeScreen() {
 
           <div className="relative">
             {isMobile && (
-              <div className="mb-5 flex items-center justify-between gap-3">
+              <div className="mb-5 flex items-center justify-between gap-3" data-sketchy-top="">
                 <BrandMark />
                 <div className="flex items-center gap-2">
                   <UpgradeButton compact />
@@ -58,7 +65,7 @@ export default function HomeScreen() {
                 </div>
               </div>
             )}
-            <h1 className="text-[28px] font-bold leading-[1.1] tracking-tight text-foreground md:text-[40px] lg:text-[46px]">
+            <h1 className="text-[28px] font-bold leading-[1.1] tracking-tight text-foreground md:text-[40px] lg:text-[46px]" data-sketchy-avoid="">
               {tl('heroLine1')}
               <span className="relative block w-fit text-primary">
                 {tl('heroLine2')}
@@ -68,7 +75,7 @@ export default function HomeScreen() {
                 </svg>
               </span>
             </h1>
-            <p className="mt-4 max-w-[17rem] text-sm leading-relaxed text-foreground/80 md:mt-5 md:max-w-sm md:text-base">
+            <p className="mt-4 max-w-[17rem] text-sm leading-relaxed text-foreground/80 md:mt-5 md:max-w-sm md:text-base" data-sketchy-avoid="">
               {tl('heroLead')}
             </p>
           </div>
@@ -97,6 +104,11 @@ export default function HomeScreen() {
           {t('privacy')}
         </p>
         <AccountLine />
+        {companion && (
+          <Suspense fallback={null}>
+            <CompanionStage screen="home" containerRef={content} floorRef={hero} />
+          </Suspense>
+        )}
       </div>
     </div>
   );
@@ -119,6 +131,7 @@ function ToolCard({ id, lead, eager }: { id: keyof typeof TOOLS; lead: boolean; 
     // screen reader says is what is on the card.
     <Link
       href={pathForView(id)}
+      data-tool-card={id}
       className="group flex h-full items-stretch gap-3 rounded-2xl border border-border bg-card p-2 pe-2.5 shadow-sm transition-colors hover:border-primary/50 active:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:gap-5 md:p-2.5 md:pe-4 lg:flex-col lg:gap-0 lg:p-0"
     >
       <div className={`relative aspect-[4/3] w-[38%] max-w-[260px] shrink-0 self-center overflow-hidden rounded-xl bg-secondary ${lead ? 'lg:aspect-[21/9]' : 'lg:aspect-[16/9]'} lg:w-full lg:max-w-none lg:rounded-b-none lg:rounded-t-2xl`}>

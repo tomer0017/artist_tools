@@ -31,14 +31,14 @@ export default defineConfig({
         },
       ]
     : [
-        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity|google-only|username-accounts|entitlements|learn-admin/ },
+        { name: "chromium", use: { ...devices["Desktop Chrome"], ...signedIn }, testIgnore: /visual-parity|google-only|username-accounts|entitlements|learn-admin|companion-admin/ },
         // Safari/WebKit on iPhone — the mobile navigation, touch and sign-in checks.
         {
           name: "iphone-webkit",
           use: { ...devices["iPhone 13"], ...signedIn },
-          testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch|color|grid|worksheets|study|learn-screens)\.spec\.ts/,
+          testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch|color|grid|worksheets|study|learn-screens|companion)\.spec\.ts/,
           // (username-accounts.spec.ts and entitlements.spec.ts run on the staging-like servers below.)
-          testIgnore: /username-accounts|entitlements|learn-admin/,
+          testIgnore: /username-accounts|entitlements|learn-admin|companion-admin/,
           grep: /mobile/,
         },
         // The public sign-in as staging runs it: Google, open to everyone, and
@@ -91,6 +91,15 @@ export default defineConfig({
           grep: /mobile/,
           fullyParallel: false,
           dependencies: ["learn-admin"],
+        },
+        // Admin → Companion (ADR-0024) on the same server, last: it changes
+        // Sketchy's live configuration (switches him off and on, adds tips).
+        {
+          name: "companion-admin",
+          use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:8082" },
+          testMatch: /companion-admin\.spec\.ts/,
+          fullyParallel: false,
+          dependencies: ["learn-admin-iphone"],
         },
       ],
   // Always a fresh build and a freshly seeded database: never a leftover

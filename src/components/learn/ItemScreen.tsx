@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'use-intl';
@@ -286,6 +286,14 @@ function Actions({ item }: { item: OpenItem }) {
   const sheets = useWorksheets(item);
   const photo = useOwnPhotoInput(sheets.usePhoto);
   const [saved, toggleSaved] = useSavedChallenges();
+  // Sketchy's class roulette sends ?sheets=1: the practice sheets open at once, as if "Prepare worksheets" were pressed (ADR-0024).
+  const wantSheets = useSearchParams()?.get('sheets') === '1';
+  const askedSheets = useRef(false);
+  useEffect(() => {
+    if (!wantSheets || askedSheets.current || !sheets.generated || !sheets.canWorksheets) return;
+    askedSheets.current = true;
+    void sheets.prepare();
+  }, [wantSheets, sheets]);
   // The Skill filter of "Another one" needs the course's units (ignored without them).
   const course = useLearnList('curriculum', item.kind === 'challenge' && summary.modules.curriculum !== null);
   const entries = course.data?.items;

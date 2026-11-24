@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, lazy, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'use-intl';
@@ -19,6 +19,9 @@ import { LearnHeader, LockBadge, buttonPrimary, buttonSecondary, useLocalized } 
 // Experienced artists can open any lesson or go straight to the challenges.
 // Class mode, for teachers, sits at the bottom. No progress bars, streaks or
 // badges.
+
+// Sketchy, the studio companion (ADR-0024), beside the Learn home's title where there is room.
+const CompanionStage = lazy(() => import('@/components/companion/CompanionStage'));
 
 /** Whether a collection is locked for this account: only Pro items are in it for them (ADR-0023), so Pro has it ("Part of Pro"). */
 export function useModuleLock(collection: LearnCollection): null | 'pro' | 'plan' {
@@ -50,6 +53,8 @@ export default function LearnHome() {
   const completions = useCompletions(!classMode.on);
   const [none, setNone] = useState(false);
   const courseAction = useCourseStart(!classMode.on);
+  const page = useRef<HTMLDivElement>(null);
+  const companion = useAccount()?.account.companion?.show === true;
 
   const pick = (quickOnly: boolean) => {
     const id = pickChallenge(challenges.data?.items ?? [], {
@@ -63,7 +68,7 @@ export default function LearnHome() {
   };
 
   return (
-    <>
+    <div ref={page} className="relative">
       <LearnHeader title={t('title')} lead={t('lead')} />
       <div className="grid gap-4 md:grid-cols-2">
         {showCourse && (
@@ -150,6 +155,11 @@ export default function LearnHome() {
         </h2>
         <ClassModeSwitch />
       </section>
-    </>
+      {companion && (
+        <Suspense fallback={null}>
+          <CompanionStage screen="learn" containerRef={page} floorSelector="header" />
+        </Suspense>
+      )}
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'use-intl';
 import { BillingCard } from '@/components/account/BillingCard';
 import { ProBanner, proOfferFor } from '@/components/billing/pro';
 import { DataCard, DevicesCard, NameEditor, PreferencesCard, SignInMethodsCard } from '@/components/account/ProfileSections';
+import { CompanionCard } from '@/components/account/CompanionCard';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatMoney } from '@/lib/money';
 import { featureRows, hasAllTools, isDefaultSplit, type FeatureId } from '@/lib/plans';
@@ -289,6 +290,7 @@ export default function ProfileScreen() {
 
         <BillingCard account={account} onChanged={state.refresh} />
         <PreferencesCard account={account} onChanged={state.refresh} />
+        <CompanionCard account={account} />
         <SignInMethodsCard account={account} onChanged={state.refresh} />
         <DevicesCard />
 

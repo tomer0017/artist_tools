@@ -10,6 +10,7 @@ import type { LearnReturn } from '@/hooks/useLearnReturn';
 import { lessonNumbers, neighbours } from '@/lib/learn/course';
 import { itemPath, learnPath } from '@/lib/learn/routes';
 import { useLearnSummary } from '@/components/shell/account';
+import { emitCompanion } from '@/components/companion/state';
 import { assetUrl, localDay, undoCompletion, useCompletionChanges, useCompletions, useLearnList, type ImageView, type ListEntry, type OpenExercise } from './data';
 import { useClassMode } from './ClassMode';
 import { Credits, StepToolLink, ToolShortcuts, useWorksheets } from './ItemParts';
@@ -68,6 +69,7 @@ export default function LessonCard({ item, back }: { item: OpenExercise; back: {
     setFailed(false);
     try {
       const { completion } = await mark.mutateAsync(item.id);
+      emitCompanion({ type: 'completed', itemId: item.id, kind: 'lesson' });
       toast(t('marked', { title: loc(item.title) }), {
         position: 'top-center',
         duration: 6000,

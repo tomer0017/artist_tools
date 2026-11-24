@@ -13,6 +13,12 @@ describe('clearing this device’s work', () => {
     localStorage.setItem('theme', 'dark');
     clearDeviceWork();
     for (const key of [...Object.values(PLAYGROUND_KEYS), TIMER_KEY]) expect(localStorage.getItem(key)).toBeNull();
+    // What Sketchy remembers on this device goes too (ADR-0024).
+    localStorage.setItem('studio-companion:abc', '{}');
+    sessionStorage.setItem('studio-companion-last-tool', 'grid');
+    clearDeviceWork();
+    expect(localStorage.getItem('studio-companion:abc')).toBeNull();
+    expect(sessionStorage.getItem('studio-companion-last-tool')).toBeNull();
     // Preferences that are not anyone's work stay, as before.
     expect(localStorage.getItem(FILTERS_KEY)).toBe('{}');
     expect(localStorage.getItem('theme')).toBe('dark');

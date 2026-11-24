@@ -25,6 +25,24 @@ export interface LearnSummary {
 }
 
 /**
+ * Sketchy, the studio companion (ADR-0024), as far as the account needs it:
+ * whether he shows for this person, their own choices, and a key that
+ * changes whenever what they get of him may have changed (the studio then
+ * asks /api/companion again). His settings and tips come from that route.
+ */
+export interface CompanionSummary {
+  /** He appears: switched on, open to this account, and not hidden by the person. */
+  show: boolean;
+  /** Open to this account (whether or not the person hid him): the account page offers to show him again. */
+  available: boolean;
+  /** The person hid him (their account, every device). */
+  hidden: boolean;
+  /** What the person said about themselves, for his suggestions. */
+  audience: 'artist' | 'student' | 'teacher' | null;
+  key: string;
+}
+
+/**
  * What the signed-in person may see about their own account: identity, role,
  * plan and what it includes, preferences and sign-in methods. Built by the
  * server from the database (src/server/account.ts); the studio only displays
@@ -58,6 +76,8 @@ export interface AccountSummary {
   asOf: string;
   /** Learn in the studio (ADR-0018). */
   learn: LearnSummary;
+  /** Sketchy, the studio companion (ADR-0024). */
+  companion: CompanionSummary;
   /** Tools whose first-visit introduction this person has dismissed (on any device). */
   introsSeen: ToolId[];
   locale: Locale;

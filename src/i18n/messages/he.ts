@@ -7,6 +7,7 @@ import { compareHe } from './tools/compare';
 import { commonHe } from './tools/common';
 import { worksheetsHe } from './tools/worksheets';
 import { learnHe } from './learn';
+import { companionHe } from './companion';
 
 // Hebrew messages. Same keys as English (the type enforces it). Phrasing is
 // gender-neutral: actions are nouns or infinitives ("כניסה", "ליצור חשבון"),
@@ -23,6 +24,7 @@ export const he: Messages = {
   toolsCommon: commonHe,
   worksheets: worksheetsHe,
   learn: learnHe,
+  companion: companionHe,
   meta: {
     siteDescription: 'ערכת כלים לציירים: מדידה, לימוד ערכים, ערבוב צבעים ורשת להעברת ציור.',
     pricingTitle: 'מסלולים · Studio Companion',

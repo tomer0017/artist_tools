@@ -11,6 +11,7 @@ import { itemPath, learnPath } from '@/lib/learn/routes';
 import { useAccount, useHasFeature } from '@/components/shell/account';
 import { TOOLS } from '@/components/shell/tools';
 import PrepareWorksheets from '@/components/worksheets/PrepareWorksheets';
+import { emitCompanion } from '@/components/companion/state';
 import { LearnRequestError, assetUrl, localDay, referenceDataUrl, useCompletionChanges, useCompletions, useLearnList, type ImageView, type OpenItem } from './data';
 import { useClassMode } from './ClassMode';
 import { ReplaceDialog, useToolHandoff } from './handoff';
@@ -137,6 +138,7 @@ export function MarkDone({ itemId }: { itemId: string }) {
       onSuccess: ({ completion }) => {
         setUndoable(completion.id);
         setStatus('marked');
+        emitCompanion({ type: 'completed', itemId, kind: itemId.startsWith('CH-') ? 'challenge' : 'lesson' });
       },
       onError: () => setStatus('failed'),
     });

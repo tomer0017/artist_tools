@@ -44,8 +44,14 @@ export function LearnHeader({
       )}
       <ClassModeBanner />
       {eyebrow}
-      <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground md:text-3xl">{title}</h1>
-      {lead && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">{lead}</p>}
+      <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground md:text-3xl" data-sketchy-avoid="">
+        {title}
+      </h1>
+      {lead && (
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base" data-sketchy-avoid="">
+          {lead}
+        </p>
+      )}
       {children}
     </header>
   );

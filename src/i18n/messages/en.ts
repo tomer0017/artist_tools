@@ -6,6 +6,7 @@ import { compareEn } from './tools/compare';
 import { commonEn } from './tools/common';
 import { worksheetsEn } from './tools/worksheets';
 import { learnEn } from './learn';
+import { companionEn } from './companion';
 
 // English messages: the source of truth for every key. Other languages must
 // provide exactly the same keys (enforced by the type in ./types and by the
@@ -23,6 +24,8 @@ export const en = {
   worksheets: worksheetsEn,
   // Learn's screens (src/components/learn, ADR-0018).
   learn: learnEn,
+  // Sketchy, the studio companion (src/components/companion, ADR-0024).
+  companion: companionEn,
   meta: {
     siteDescription: "A painter's toolkit for measuring, value studies, color mixing, and grid drawing.",
     pricingTitle: 'Plans · Studio Companion',

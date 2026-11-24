@@ -158,6 +158,10 @@ await setOwner(db, ownerId, 'cli');
 // accounts Learn opens for until a plan includes it; one per test that keeps
 // a history or class mode, since tests run in parallel.
 for (const name of ['learner', 'learner-history', 'learner-tools', 'learner-sheets', 'learner-he', 'teacher', 'learner-mobile', 'learner-lesson', 'learner-playground']) await seedSignedInUser(db, name, 'admin');
+// Sketchy, the studio companion (e2e/companion.spec.ts, ADR-0024): one account per test that changes
+// something of its own (hidden, who they are); admins where Learn must be open (the roulette, a completion).
+for (const name of ['sketchy', 'sketchy-menu', 'sketchy-tools', 'sketchy-hide', 'sketchy-he', 'sketchy-mobile', 'sketchy-motion', 'sketchy-about']) await seedSignedInUser(db, name, 'user');
+for (const name of ['sketchy-roulette', 'sketchy-celebrate', 'sketchy-class']) await seedSignedInUser(db, name, 'admin');
 await seedSignedInUser(db, 'signout', 'user');
 // Accounts the admin specs change (plan, role); nothing else relies on them.
 await seedSignedInUser(db, 'target', 'user');

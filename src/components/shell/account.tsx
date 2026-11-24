@@ -36,7 +36,7 @@ const RETURN_CHECK_MS = 10_000;
 const CHANNEL = 'studio-account';
 
 /** Whether two copies of the account differ in what it may use (worth telling the other tabs). */
-const accessKey = (a: StudioAccount) => JSON.stringify([a.role, a.access, a.plan, [...a.features].sort(), a.offer, a.quotas, a.learn?.key ?? null]);
+const accessKey = (a: StudioAccount) => JSON.stringify([a.role, a.access, a.plan, [...a.features].sort(), a.offer, a.quotas, a.learn?.key ?? null, a.companion?.key ?? null, a.companion?.show ?? null]);
 
 /**
  * Holds the account the server rendered the studio with, and keeps it current,

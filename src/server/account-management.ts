@@ -168,6 +168,8 @@ export async function exportAccountData(db: Db, userId: ObjectId, now = new Date
       language: user.locale ?? null,
       currency: user.currency ?? null,
       toolIntroductionsSeen: user.introsSeen ?? [],
+      // Sketchy, the studio companion (ADR-0024): hidden or shown, and who the person said they are.
+      companion: { hidden: user.companion?.hidden === true, audience: user.companion?.audience ?? null },
     },
     marketingEmail: {
       consent: user.marketingConsent === true,

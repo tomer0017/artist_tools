@@ -14,6 +14,7 @@ const TABS = [
   { id: 'analytics', href: '/admin/analytics', label: 'Analytics' },
   { id: 'plans', href: '/admin/plans', label: 'Plans' },
   { id: 'learn', href: '/admin/learn', label: 'Learn' },
+  { id: 'companion', href: '/admin/companion', label: 'Companion' },
   { id: 'pricing', href: '/admin/pricing', label: 'Pricing' },
   { id: 'coupons', href: '/admin/coupons', label: 'Coupons' },
   { id: 'billing', href: '/admin/billing', label: 'Billing' },

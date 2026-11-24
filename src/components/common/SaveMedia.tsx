@@ -23,12 +23,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import Link from 'next/link';
 import { Download, ExternalLink, Image as ImageIcon, Lock, Printer, Share2, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'use-intl';
 import { useAccount } from '@/components/shell/account';
+import { emitCompanion } from '@/components/companion/state';
 import { pathForView } from '@/components/shell/tools';
 import type { ToolId } from '@/lib/account';
 import { authorizeUse, type FeatureDecision } from '@/lib/features-client';
@@ -152,6 +154,13 @@ export function SaveMediaProvider({ children }: { children: ReactNode }) {
       return null;
     });
   }, []);
+
+  // Something was made and its sheet closed: Sketchy celebrates it (ADR-0024).
+  const shown = useRef<ActiveMedia | null>(null);
+  useEffect(() => {
+    if (shown.current && !active) emitCompanion({ type: 'saved', tool: shown.current.tool });
+    shown.current = active;
+  }, [active]);
 
   // Safety net: revoke on unmount if a sheet is still open.
   useEffect(() => {

@@ -44,6 +44,8 @@ export interface UserDoc {
   lastLoginAt?: Date | null;
   /** Tools whose first-visit introduction the person dismissed (TabId values). */
   introsSeen?: string[];
+  /** Sketchy, the studio companion (ADR-0024): hidden by the person, and who they said they are (artist, student, teacher). */
+  companion?: { hidden?: boolean; audience?: 'artist' | 'student' | 'teacher' | null; updatedAt?: Date };
   /** Marketing email consent is opt-in and recorded separately from sign-up; history in `consent_events`. */
   marketingConsent: boolean;
   marketingConsentAt?: Date | null;
@@ -135,7 +137,7 @@ export interface PlanDoc {
   updatedAt: Date;
 }
 
-export type ConfigKind = 'catalog' | 'pricing' | 'learn_content';
+export type ConfigKind = 'catalog' | 'pricing' | 'learn_content' | 'companion';
 
 /** One version of admin-managed configuration (src/server/config/versions.ts). */
 export interface ConfigVersionDoc<T = unknown> {
@@ -570,6 +572,7 @@ export type AuditEventType =
   | 'admin.config_published'
   | 'admin.learn_asset_added'
   | 'admin.learn_item_changed'
+  | 'admin.companion_changed'
   | 'admin.coupon_created'
   | 'admin.coupon_status_changed'
   | 'billing.checkout_started'
