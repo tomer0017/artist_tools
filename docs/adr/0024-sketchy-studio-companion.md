@@ -152,3 +152,37 @@ choice in Admin → Companion.
 - Rolling back to a release before Sketchy hides him (the configuration and
   the account field stay, ignored); rolling forward brings him back as
   configured.
+
+## Amendment (2026-11-24): the official artwork, one floating Sketchy
+
+The founder's official character art replaced the SVG rig (`0cbe3e8`:
+`public/sketchy/*.webp`, 14 poses, behind the same `play`/`look` API). After
+testing it on desktop and iPhone, the founder asked for these fixes:
+
+- **Rendering** (`raster-mesh.ts`): premultiplied alpha end to end (texture
+  upload and canvas). Safari on iPhone drew the non-premultiplied canvas with
+  pale fringes on every soft edge. The canvas now holds as many pixels as it
+  shows, so the browser never rescales it, and the sprites are mipmapped in a
+  512 × 512 texture. The shader uses highp where the GPU has it. Every pose is
+  preloaded before he first moves. A change of pose fades for 170 ms instead of
+  snapping. Without WebGL, the still picture of the pose shows.
+- **Motion** (`raster-engine.ts`): walking and running swing the legs ±15° /
+  ±21° in opposite phase at a stride cycle matched to the speed he crosses the
+  screen (`strideCycle`), so his feet do not slide. His gaze eases toward the
+  pointer and his head turns with it rigidly: the face is never warped. On a
+  touch screen he glances toward a tap.
+- **One floating Sketchy** (`Stage.tsx`, `presence.ts`): he first stands in
+  the hero (or on the Learn home's cards). Once that spot scrolls half out of
+  view he runs into a corner of the scrolling area (the reading direction's
+  end, above a phone's bottom bar). He returns when his spot is in full view
+  again. Exactly one Sketchy is ever drawn: the stage, the roulette and a
+  celebration claim him with priorities, and only the top claim renders him.
+  While the roulette is open he stands only beside its wheel, and he comes
+  back once when it closes. Only his head and body take a tap.
+- **Signs**: the board is held on the post in his paw (its bottom on the post,
+  its inner edge just past his cheek; `holdPoints`). Closing a sign with ✕ or
+  Escape just closes it. Only "Not now" starts the admin's snooze: closing used
+  to silence him for the whole snooze (24 hours by default), which is why no
+  signs appeared on desktop. Pace, cooldown and daily cap are unchanged.
+  Clicking him opens his menu at once whatever the pace. Admin → Companion's
+  preview shows any tip at once and scrolls into view.

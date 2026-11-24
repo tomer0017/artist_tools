@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'use-intl';
 import { X } from 'lucide-react';
 import type { CompanionTip } from '@/lib/companion/model';
@@ -30,6 +30,18 @@ export const Sign = forwardRef<HTMLDivElement, SignProps>(function Sign({ tip, l
   const t = useTranslations('companion');
   const title = tip.title?.[locale]?.trim();
   const showAction = actionable && tip.action.type !== 'none';
+  // Words that have to scroll (little room beside him) can be scrolled from the keyboard too.
+  const words = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
+  useLayoutEffect(() => {
+    const el = words.current;
+    if (!el) return;
+    const check = () => setScrolls(el.scrollHeight > el.clientHeight + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [tip, locale]);
   return (
     <div
       ref={ref}
@@ -53,7 +65,13 @@ export const Sign = forwardRef<HTMLDivElement, SignProps>(function Sign({ tip, l
           <span className="sr-only">{t('sign.close')}</span>
         </button>
         {/* If a long tip does not fit beside him, its words scroll here; the buttons always show. */}
-        <div className="max-h-[min(42vh,260px)] min-h-0 flex-1 overflow-y-auto">
+        <div
+          ref={words}
+          tabIndex={scrolls ? 0 : undefined}
+          role={scrolls ? 'region' : undefined}
+          aria-label={scrolls ? (title ?? t('region')) : undefined}
+          className="max-h-[min(42vh,260px)] min-h-0 flex-1 overflow-y-auto rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5a2b]"
+        >
           {title && <p className="mb-0.5 text-[14px] font-bold leading-snug sm:mb-1 sm:text-[15px]">{title}</p>}
           <p className="text-[14px] leading-snug sm:text-[15px] sm:leading-relaxed" data-sketchy-text>
             {tip.text[locale]}

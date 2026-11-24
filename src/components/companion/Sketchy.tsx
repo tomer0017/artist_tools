@@ -1,23 +1,27 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useLayoutEffect } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import type { AnimationId } from '@/lib/companion/model';
 import type { ClipParams } from './clips';
 import { RasterEngine } from './raster-engine';
-import { VIEWBOX } from './rig';
 import { RasterRig } from './raster-rig';
+import { WIDTH_RATIO } from './geometry';
 
-// Sketchy on screen: the approved raster artwork and articulated pose engine.
-// Public control and anchor interfaces remain compatible with ADR-0024. The director (the stage that owns him) plays clips through
-// the handle; he faces left or right by a mirror, never by redrawing.
+// Sketchy on screen: the approved raster artwork and its articulated pose
+// engine (raster-engine.ts, raster-mesh.ts). Public control and anchor
+// interfaces remain those of ADR-0024: the director (the stage, the roulette,
+// a celebration) plays clips through the handle; he faces left or right by a
+// mirror, never by redrawing. Only one is on screen at a time (presence.ts).
 
 export interface SketchyHandle {
   play: (id: AnimationId, opts?: { params?: ClipParams; onEnd?: () => void; restart?: boolean }) => void;
+  /** Where to look, in his own frame (x forward, y down, each -1…1); null: ahead. */
   look: (target: { x: number; y: number } | null) => void;
-  /** Where one of his anchor points is on screen (the sign's top while he holds it; his front shoulder). */
+  /** Where one of his anchor points is on screen (the top of the sign's post while he holds it; his front shoulder). */
   anchor: (name: 'signTop' | 'shoulder') => DOMRect | null;
   clip: () => AnimationId;
 }
 
-export const ASPECT = VIEWBOX.w / VIEWBOX.h;
+/** His box's width for its height. */
+export const ASPECT = WIDTH_RATIO;
 
 export interface SketchyProps {
   /** Height in CSS pixels (the width follows). */
@@ -25,7 +29,7 @@ export interface SketchyProps {
   facing: 'left' | 'right';
   reducedMotion: boolean;
   idleLife?: boolean;
-  /** Stop drawing (hidden page, off screen); he carries on where he was. */
+  /** Stop drawing (hidden page); he carries on where he was. */
   paused?: boolean;
   initial?: AnimationId;
   className?: string;
@@ -34,8 +38,11 @@ export interface SketchyProps {
 export const Sketchy = forwardRef<SketchyHandle, SketchyProps>(function Sketchy({ height, facing, reducedMotion, idleLife = true, paused = false, initial = 'idle', className }, ref) {
   const box = useRef<HTMLDivElement>(null);
   const engine = useRef<RasterEngine | null>(null);
+  // The still picture and the SVG anchors follow the pose; the canvas is drawn by the engine directly.
   const [pose, setPose] = useState<AnimationId>(initial);
-  useLayoutEffect(() => { engine.current?.renderNow(); }, [pose]);
+  useLayoutEffect(() => {
+    engine.current?.renderNow();
+  }, [pose]);
 
   useEffect(() => {
     if (!box.current) return;

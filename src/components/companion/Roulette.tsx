@@ -7,6 +7,7 @@ import { MOODS, PLAYGROUND_KEYS, effortOf, poolOf, readIds, reelOf, spin, withSp
 import { itemPath } from '@/lib/learn/routes';
 import { useLearnItem, useLearnList, type ListEntry } from '@/components/learn/data';
 import { Sketchy, type SketchyHandle } from './Sketchy';
+import { PRIORITY, useSketchyPresence } from './presence';
 
 // Sketchy's challenge roulette (ADR-0024): a wheel of the challenges this
 // account may open, read from the Learn API every time it opens (so a
@@ -69,6 +70,8 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
   const [said, setSaid] = useState('');
   const fox = useRef<SketchyHandle>(null);
   const timer = useRef(0);
+  // While the roulette is open he stands only beside its wheel: the stage's Sketchy steps aside (presence.ts).
+  const ownsFox = useSketchyPresence('roulette', PRIORITY.roulette, open);
 
   useEffect(() => {
     if (open) {
@@ -213,7 +216,7 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
               <div className="pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border-[3px] border-[#986329] bg-[radial-gradient(circle_at_35%_25%,#fff2c9,#dfb268)] shadow-[0_2px_8px_#311a12]" aria-hidden="true"><Palette className="h-6 w-6 text-[#744316]" /></div>
             </div>
             <div className="relative -ms-10 mb-[-5px] w-[clamp(92px,24vw,160px)] shrink-0 [&>div]:!h-auto [&>div]:!w-full [&>div]:aspect-[248/292]" aria-hidden="true">
-              <Sketchy ref={fox} height={180} initial="point" facing={locale === 'he' ? 'right' : 'left'} reducedMotion={reducedMotion} />
+              {ownsFox && <Sketchy ref={fox} height={180} initial="point" facing={locale === 'he' ? 'right' : 'left'} reducedMotion={reducedMotion} />}
             </div>
           </div>
 

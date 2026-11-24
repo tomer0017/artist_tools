@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import { Sketchy, type SketchyHandle } from './Sketchy';
+import { PRIORITY, useSketchyPresence } from './presence';
 import { stageOnScreen, useCompanionEvents, useReducedMotion, type CompanionEvent } from './state';
 
 // A moment of joy away from Home (ADR-0024): after a save in a tool, or a
@@ -18,6 +19,8 @@ export function Celebration({ enabled, celebrate, jump }: { enabled: boolean; ce
   const [shown, setShown] = useState<{ text: string; at: number } | null>(null);
   const fox = useRef<SketchyHandle>(null);
   const timer = useRef(0);
+  // Never a second Sketchy: shown only while nothing above it (the roulette) has him (presence.ts).
+  const owns = useSketchyPresence('celebration', PRIORITY.celebration, shown !== null);
 
   const onEvent = useCallback(
     (event: CompanionEvent) => {
@@ -38,7 +41,7 @@ export function Celebration({ enabled, celebrate, jump }: { enabled: boolean; ce
     return () => window.cancelAnimationFrame(id);
   }, [shown, celebrate, jump]);
 
-  if (!shown) return null;
+  if (!shown || !owns) return null;
   return (
     <div
       className="pointer-events-none fixed z-[45] flex items-end gap-2 animate-in fade-in-0 slide-in-from-bottom-4 duration-300 motion-reduce:animate-none"

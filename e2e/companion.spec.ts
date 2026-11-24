@@ -25,11 +25,21 @@ async function box(locator: Locator) {
 const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
-/** The middle part of his body (the sign may hold its post in his outer paw, never cover him). */
+/**
+ * His face and body in the official artwork (the sign is held up on the post in his paw, beside
+ * his head, never over them): the middle of his box, shifted toward the side he faces away from.
+ */
 async function body(page: Page) {
-  const b = await box(page.locator('[data-sketchy-fox]'));
-  return { x: b.x + b.width * 0.3, y: b.y + b.height * 0.15, width: b.width * 0.4, height: b.height * 0.7 };
+  const where = page.locator('[data-sketchy-fox]');
+  const b = await box(where);
+  const left = (await where.locator('[data-facing]').getAttribute('data-facing')) === 'left';
+  return { x: b.x + b.width * (left ? 0.36 : 0.26), y: b.y + b.height * 0.15, width: b.width * 0.38, height: b.height * 0.7 };
 }
+
+/** Every Sketchy drawn on the page (the root of his artwork), in a dialog or not. */
+const drawn = (page: Page) => page.locator('[data-sketchy-art]');
+/** Home's scrolling area. */
+const homeScroller = (page: Page) => page.locator('main .overflow-y-auto').first();
 
 test.describe('Sketchy on Home', () => {
   test.use({ storageState: auth('sketchy'), locale: 'en-US' });
@@ -204,12 +214,13 @@ test.describe('in Hebrew', () => {
 test.describe('on a phone', () => {
   test.use({ storageState: auth('sketchy-mobile'), locale: 'en-US' });
 
-  test('mobile: smaller, beside the text, and his menu does not cover him or the bottom bar', async ({ page, isMobile }) => {
+  test('mobile: as big as the room beside the text allows, and his menu does not cover him or the bottom bar', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     await page.goto('/app');
     await expect(fox(page)).toBeVisible({ timeout: 15_000 });
     const f = await box(page.locator('[data-sketchy-fox]'));
-    expect(f.height).toBeLessThan(120);
+    expect(f.height).toBeGreaterThanOrEqual(80);
+    expect(f.height).toBeLessThanOrEqual(125);
     const lead = await box(page.locator('[data-sketchy-avoid]').last());
     expect(f.x).toBeGreaterThanOrEqual(lead.x + lead.width - 1);
     await expect(sign(page)).toBeVisible({ timeout: 20_000 });
@@ -222,19 +233,133 @@ test.describe('on a phone', () => {
 });
 
 test.describe('less motion', () => {
-  test.use({ storageState: auth('sketchy-motion'), locale: 'en-US', reducedMotion: 'reduce' });
+  // Playwright takes reduced motion as a context option (a top-level `reducedMotion` is silently ignored).
+  test.use({ storageState: auth('sketchy-motion'), locale: 'en-US', contextOptions: { reducedMotion: 'reduce' } });
 
   test('he appears without walking, and keeps still', async ({ page }) => {
     await page.goto('/app');
     const where = page.locator('[data-sketchy-fox]');
     await expect(where).toBeVisible({ timeout: 15_000 });
+    // Still poses may follow one another (a wave, then his sign); no joint ever turns, and he never moves.
+    const turns = () => where.locator('[data-part]').evaluateAll((els) => els.map((e) => /rotate\((-?[\d.]+)/.exec(e.getAttribute('transform') ?? '')?.[1] ?? '0.00'));
     await page.waitForTimeout(2500);
     const before = await where.getAttribute('style');
-    const svg = page.locator('[data-sketchy-fox] svg [data-part="legFront"]');
-    const pose = await svg.getAttribute('transform');
-    await page.waitForTimeout(1200);
+    for (let i = 0; i < 6; i++) {
+      expect((await turns()).every((a) => Number(a) === 0)).toBe(true);
+      await page.waitForTimeout(200);
+    }
     expect(await where.getAttribute('style')).toBe(before);
-    expect(await svg.getAttribute('transform')).toBe(pose);
     await expect(sign(page)).toBeVisible({ timeout: 20_000 });
+  });
+});
+
+test.describe('exactly one Sketchy', () => {
+  test.use({ storageState: auth('sketchy-roulette'), locale: 'en-US' });
+
+  test('with the roulette open he is only beside its wheel, and comes back once when it closes', async ({ page }) => {
+    await page.goto('/app');
+    await expect(fox(page)).toBeVisible({ timeout: 15_000 });
+    await expect(drawn(page)).toHaveCount(1);
+    await fox(page).click();
+    await page.locator('[data-menu-entry="challenge"]').click();
+    const roulette = page.getByRole('dialog', { name: 'Sketchy’s challenge roulette' });
+    await expect(roulette).toBeVisible();
+    await expect(roulette.locator('[data-sketchy-art]')).toHaveCount(1);
+    await expect(drawn(page)).toHaveCount(1);
+    await expect(page.locator('[data-sketchy-fox]')).toHaveCount(0);
+    await roulette.locator('[data-roulette-spin]').click();
+    await expect(roulette.locator('[data-roulette-result]')).toBeVisible({ timeout: 10_000 });
+    await expect(drawn(page)).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(roulette).toHaveCount(0);
+    await expect(page.locator('[data-sketchy-fox]')).toHaveCount(1);
+    await expect(drawn(page)).toHaveCount(1);
+  });
+
+  test('a sign closed with ✕ just closes: only "Not now" keeps him quiet for a while', async ({ page }) => {
+    // He has met this person before and not said hello today: he greets them on a sign.
+    const me = (await (await page.request.get('/api/me?check=1')).json()) as { user: { id: string } };
+    const key = `studio-companion:${me.user.id}`;
+    await page.addInitScript((k) => window.localStorage.setItem(k, JSON.stringify({ shown: {}, day: '', count: 0, lastTipAt: 0, snoozeUntil: 0, metAt: 1, greetedDay: null })), key);
+    await page.goto('/app');
+    await expect(sign(page)).toBeVisible({ timeout: 25_000 });
+    await sign(page).locator('[data-sketchy-close]').click();
+    await expect(sign(page)).toHaveCount(0);
+    const memory = (await page.evaluate((k) => JSON.parse(window.localStorage.getItem(k) ?? '{}'), key)) as { snoozeUntil: number; greetedDay: string | null };
+    expect(memory.snoozeUntil).toBe(0);
+    expect(memory.greetedDay).not.toBeNull();
+  });
+});
+
+test.describe('floating while the page scrolls', () => {
+  test.use({ storageState: auth('sketchy-tools'), locale: 'en-US' });
+
+  test('he floats in the corner once his spot scrolls away, takes a tap there, and goes back to it at the top', async ({ page }) => {
+    await page.goto('/app');
+    await expect(fox(page)).toBeVisible({ timeout: 15_000 });
+    await homeScroller(page).evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+    const docked = page.locator('[data-sketchy-dock] [data-sketchy-fox]');
+    await expect(docked).toBeVisible({ timeout: 10_000 });
+    await expect(drawn(page)).toHaveCount(1);
+    const viewport = page.viewportSize()!;
+    // Settled in his corner (he runs in from the side).
+    await expect.poll(async () => { const b = await box(docked); return b.x + b.width <= viewport.width && b.y + b.height <= viewport.height; }, { timeout: 8_000 }).toBe(true);
+    await fox(page).click();
+    const menu = page.locator('[data-sketchy-menu]');
+    await expect(menu).toBeVisible();
+    const m = await box(menu);
+    expect(m.y).toBeGreaterThanOrEqual(0);
+    expect(m.y + m.height).toBeLessThanOrEqual(viewport.height);
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await homeScroller(page).evaluate((el) => el.scrollTo({ top: 0 }));
+    await expect(page.locator('[data-sketchy-fox][data-sketchy-place="hero"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-sketchy-dock]')).toHaveCount(0);
+    await expect(drawn(page)).toHaveCount(1);
+  });
+
+  test('mobile: floating above the bottom bar, big enough to read his face', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'phones only');
+    await page.goto('/app');
+    await expect(fox(page)).toBeVisible({ timeout: 15_000 });
+    await homeScroller(page).evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+    const docked = page.locator('[data-sketchy-dock] [data-sketchy-fox]');
+    await expect(docked).toBeVisible({ timeout: 10_000 });
+    const bar = await box(page.getByRole('navigation').last());
+    await expect.poll(async () => { const b = await box(docked); return b.x + b.width <= page.viewportSize()!.width + 1; }, { timeout: 8_000 }).toBe(true);
+    const f = await box(docked);
+    expect(f.height).toBeGreaterThanOrEqual(112);
+    expect(f.y + f.height).toBeLessThanOrEqual(bar.y + 1);
+    await expect(drawn(page)).toHaveCount(1);
+  });
+});
+
+test.describe('walking and looking', () => {
+  test.use({ storageState: auth('sketchy-menu'), locale: 'en-US' });
+
+  test('walks in with his walk animation, his legs moving as he goes, drawn live (WebGL)', async ({ page }) => {
+    await page.goto('/app');
+    const where = page.locator('[data-sketchy-fox]');
+    await expect(where.locator('svg[data-pose="walk"]')).toBeAttached({ timeout: 15_000 });
+    const leg = where.locator('[data-part="legFront"]');
+    const first = await leg.getAttribute('transform');
+    await page.waitForTimeout(200);
+    expect(await leg.getAttribute('transform')).not.toBe(first);
+    await expect.poll(() => where.locator('[data-raster-fallback]').evaluate((el) => getComputedStyle(el).visibility), { timeout: 5_000 }).toBe('hidden');
+  });
+
+  test('his head and eyes follow the mouse', async ({ page }) => {
+    await page.goto('/app');
+    await expect(sign(page)).toBeVisible({ timeout: 20_000 });
+    const f = await box(page.locator('[data-sketchy-fox]'));
+    const head = page.locator('[data-sketchy-fox] [data-part="head"]');
+    const tilt = async () => Number(/rotate\((-?[\d.]+)/.exec((await head.getAttribute('transform')) ?? '')?.[1] ?? 'NaN');
+    await page.mouse.move(f.x + f.width / 2, Math.max(1, f.y - 400));
+    await page.waitForTimeout(700);
+    const up = await tilt();
+    await page.mouse.move(f.x + f.width / 2, f.y + f.height + 400);
+    await page.waitForTimeout(700);
+    const down = await tilt();
+    expect(down - up).toBeGreaterThan(5);
   });
 });

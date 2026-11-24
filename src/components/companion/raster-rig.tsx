@@ -5,6 +5,18 @@ import type { AnimationId } from '@/lib/companion/model';
 type Joint = { path: string; pivot: [number, number] };
 export type RasterPart = 'tail' | 'legBack' | 'legFront' | 'head' | 'armFront';
 type Rig = Record<RasterPart, Joint> & { eyes?: [number, number, number, number][] };
+
+/** The frame every pose is drawn in (sprite pixels); he faces right in it. */
+export const SPRITE = { w: 300, h: 360 } as const;
+/** Hip to sole, roughly, for matching his steps to the ground he covers (sprite pixels). */
+export const LEG = 78;
+/**
+ * Where the live sign meets him while he holds it (holdSign, sprite pixels): the top of the
+ * post above his paw, and the line just beside his cheek where the board begins (covering
+ * what is left of the printed board in the artwork).
+ */
+export const SIGN_HOLD = { post: { x: 235, y: 190 }, inner: 199 } as const;
+
 const rect = (x: number, y: number, w: number, h: number) => `M${x} ${y}h${w}v${h}h${-w}Z`;
 const standing: Rig = {
  tail: { path:'M0 180 H125 L139 224 L150 305 H0Z',pivot:[143,280] },
@@ -31,15 +43,21 @@ export const RASTER_RIGS: Record<AnimationId,Rig> = {
  holdSign:{...standing,head:{path:rect(50,0,205,179),pivot:[177,175]},tail:{path:'M0 180 H113 L138 238 L139 310 H0Z',pivot:[139,282]},armFront:{path:'M228 184 H286 V268 H237 L228 226Z',pivot:[237,217]},eyes:[[169,120,13,17],[209,113,11,16]]},
 };
 
+/**
+ * The official artwork of one pose: the WebGL canvas draws it moving (raster-mesh.ts); the still
+ * picture underneath shows until then, and stays on devices without WebGL. The empty SVG keeps
+ * the stage's anchors and each joint's current turn (read by tests), mirrored with him.
+ */
 export function RasterRig({ pose, style }: {pose: AnimationId; style?: React.CSSProperties}) {
  return <div style={{...style,position:'relative'}} data-sketchy-art="official-raster-v1">
-  <img data-raster-fallback src={`/sketchy/${pose}.webp`} alt="" aria-hidden="true" style={{position:'absolute',width:'100%',height:'100%',objectFit:'contain'}} />
-  <canvas data-raster-canvas width="600" height="720" aria-hidden="true" style={{position:'absolute',width:'100%',height:'100%'}} />
-  <svg viewBox="0 0 300 360" style={{position:'absolute',width:'100%',height:'100%',overflow:'visible'}} aria-hidden="true" data-pose={pose}>
+  <img data-raster-fallback src={`/sketchy/${pose}.webp`} alt="" aria-hidden="true" draggable={false} style={{position:'absolute',width:'100%',height:'100%',objectFit:'contain'}} />
+  {/* The sprite's own proportions, centred like the still picture (never stretched to the box). */}
+  <canvas data-raster-canvas aria-hidden="true" style={{position:'absolute',top:0,left:'50%',height:'100%',aspectRatio:`${SPRITE.w} / ${SPRITE.h}`,transform:'translateX(-50%)'}} />
+  <svg viewBox={`0 0 ${SPRITE.w} ${SPRITE.h}`} style={{position:'absolute',width:'100%',height:'100%',overflow:'visible'}} aria-hidden="true" data-pose={pose}>
    <g data-raster-body>
     {(['tail','legBack','legFront','head','armFront'] as const).map(part=><g key={part} data-part={part}/>)}
     <rect data-anchor="shoulder" x="216" y="202" width="1" height="1" fill="transparent"/>
-    <rect data-anchor="signTop" x="258" y="170" width="1" height="1" fill="transparent"/>
+    <rect data-anchor="signTop" x={SIGN_HOLD.post.x} y={SIGN_HOLD.post.y} width="1" height="1" fill="transparent"/>
    </g>
   </svg>
  </div>;

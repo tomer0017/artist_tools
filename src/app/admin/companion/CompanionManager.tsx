@@ -310,7 +310,7 @@ export function CompanionManager({
         </section>
 
         <div className="space-y-5">
-          <CompanionPreview request={preview} onPlay={play} size={settings.size} reducedMotion={false} />
+          <CompanionPreview request={preview} onPlay={play} size={settings.size} reducedMotion={false} tips={liveTips} onTip={showTip} />
 
           {/* ── Access ── */}
           <section aria-label="Access" className={CARD}>

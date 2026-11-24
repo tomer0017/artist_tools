@@ -105,9 +105,13 @@ export default function HomeScreen() {
         </p>
         <AccountLine />
         {companion && (
-          <Suspense fallback={null}>
-            <CompanionStage screen="home" containerRef={content} floorRef={hero} />
-          </Suspense>
+          <>
+            {/* Room to scroll the last lines above Sketchy where he floats. */}
+            <div aria-hidden="true" className="h-28 md:h-16" data-sketchy-room="" />
+            <Suspense fallback={null}>
+              <CompanionStage screen="home" containerRef={content} floorRef={hero} />
+            </Suspense>
+          </>
         )}
       </div>
     </div>
