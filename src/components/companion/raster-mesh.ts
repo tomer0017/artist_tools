@@ -199,7 +199,9 @@ export class RasterMesh {
     private canvas: HTMLCanvasElement,
     private onReady: () => void,
   ) {
-    const gl = canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: true, preserveDrawingBuffer: false });
+    // Chrome can re-composite this layer when the HTML sign mounts while drawing
+    // is paused/reduced. Retain the last frame: the still fallback is already hidden.
+    const gl = canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: true, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL unavailable');
     this.gl = gl;
     const shader = (type: number, source: string) => {

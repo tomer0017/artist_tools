@@ -6,8 +6,6 @@ import { Dices, Feather, Layers, Mountain, Palette, Sparkles, X } from 'lucide-r
 import { MOODS, PLAYGROUND_KEYS, effortOf, poolOf, readIds, reelOf, spin, withSpin, type Mood } from '@/lib/learn/roulette';
 import { itemPath } from '@/lib/learn/routes';
 import { useLearnItem, useLearnList, type ListEntry } from '@/components/learn/data';
-import { Sketchy, type SketchyHandle } from './Sketchy';
-import { PRIORITY, useSketchyPresence } from './presence';
 
 // Sketchy's challenge roulette (ADR-0024): a wheel of the challenges this
 // account may open, read from the Learn API every time it opens (so a
@@ -15,7 +13,7 @@ import { PRIORITY, useSketchyPresence } from './presence';
 // at once), filtered by mood (Challenges V2's efforts), category and "quick".
 // The pick is made first by the same rules as the Challenges playground
 // (src/lib/learn/roulette.ts: never a locked one, not the last few spun),
-// then the wheel turns to land on it while Sketchy watches and cheers. In
+// then the wheel turns to land on it. Sketchy stays in the Home hero. In
 // class mode it offers the challenge's practice sheets (when the account has
 // Worksheets and the challenge has a picture or asks for one's own photo).
 
@@ -70,13 +68,11 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
   const [picked, setPicked] = useState<ListEntry | null>(null);
   const [empty, setEmpty] = useState(false);
   const [said, setSaid] = useState('');
-  const fox = useRef<SketchyHandle>(null);
   const timer = useRef(0);
   const sheet = useRef<HTMLDivElement>(null);
   // After a spin the mood and category fold away (the result comes first); they open again on request.
   const [options, setOptions] = useState(false);
-  // While the roulette is open he stands only beside its wheel: the stage's Sketchy steps aside (presence.ts).
-  const ownsFox = useSketchyPresence('roulette', PRIORITY.roulette, open);
+  // The only character remains in Home’s hero; the modal contains the existing wheel and controls.
 
   useEffect(() => {
     if (open) {
@@ -135,7 +131,6 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
     }
     setSpinning(true);
     setSaid(t('spinning'));
-    fox.current?.play('curious');
     // Turn on the next frame so the new wedges are drawn first.
     window.requestAnimationFrame(() =>
       window.requestAnimationFrame(() => {
@@ -153,7 +148,6 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
     setPicked(pick);
     setSaid(t('landed', { title: pick.title[locale] }));
     setOptions(false);
-    fox.current?.play('celebrate', { onEnd: () => fox.current?.play('idle') });
     // The result is right under the title (the wheel shrinks beside "Spin again"): the sheet shows it from its top.
     window.requestAnimationFrame(() => sheet.current?.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' }));
   };
@@ -263,7 +257,7 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
           )}
 
           {/* Phones: a slot machine of the challenges, the pick stopping on its pay line. Larger screens: the wheel
-              (after a spin, a small wheel beside "Spin again", below the result). One Sketchy beside either. */}
+              (after a spin, a small wheel beside "Spin again", below the result). No second character is mounted in the modal. */}
           <div className={resultMode ? 'mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-4' : 'flex flex-col items-center'}>
             <div className={resultMode ? 'relative flex items-end justify-center gap-1 sm:shrink-0' : 'relative mx-auto mt-3 flex w-full max-w-[480px] items-end justify-center gap-1 py-3'}>
               <Slot entries={slotStrip} index={slotIndex} animate={slot.animate} landed={resultMode} locale={locale} />
@@ -281,9 +275,6 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
                   <Wheel entries={wheel} locale={locale} rotation={rotation} spinning={spinning} />
                 </div>
                 <div className={`pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[#986329] bg-[radial-gradient(circle_at_35%_25%,#fff2c9,#dfb268)] shadow-[0_2px_8px_#311a12] ${resultMode ? 'h-8 w-8 border-2' : 'h-12 w-12 border-[3px]'}`} aria-hidden="true"><Palette className={`text-[#744316] ${resultMode ? 'h-4 w-4' : 'h-6 w-6'}`} /></div>
-              </div>
-              <div className={`relative w-[clamp(64px,19vw,88px)] shrink-0 [&>div]:!h-auto [&>div]:!w-full [&>div]:aspect-[248/292] ${resultMode ? 'sm:-ms-3 sm:mb-[-3px] sm:w-[clamp(46px,12vw,64px)]' : 'sm:-ms-10 sm:mb-[-5px] sm:w-[clamp(92px,24vw,160px)]'}`} aria-hidden="true">
-                {ownsFox && <Sketchy ref={fox} height={180} initial="point" facing={locale === 'he' ? 'right' : 'left'} reducedMotion={reducedMotion} />}
               </div>
             </div>
 

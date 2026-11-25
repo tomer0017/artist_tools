@@ -1,3 +1,4 @@
+import { ArtScene, ART_SCENES, type ArtSceneId } from './ArtScene';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useLocale, useTranslations } from 'use-intl';
 import { dayOf, mayOffer, pickTip, remember, snooze, type Context, type Memory } from '@/lib/companion/brain';
@@ -136,6 +137,9 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [roulette, setRoulette] = useState<{ mood?: Mood; classMode?: boolean } | null>(null);
   const [said, setSaid] = useState('');
+  const [art, setArt] = useState<ArtSceneId | null>(null);
+  const nextArtAt = useRef(Date.now() + 90_000);
+  const artIndex = useRef(0);
 
   const fox = useRef<SketchyHandle>(null);
   const foxBox = useRef<HTMLDivElement>(null);
@@ -235,6 +239,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   /** Whatever he was doing on his own ends here. */
   const interrupt = useCallback(() => {
     deeds.current += 1;
+    setArt(null);
     if (phase.current === 'acting') phase.current = 'idle';
   }, []);
   /** Back to standing quietly. */
@@ -309,6 +314,14 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     return () => io.disconnect();
   }, [arrived, owns]);
   const shown = pageShown && inView;
+
+  useEffect(() => {
+    if (art && (reduced || !settings.idleLife ||
+      (art === 'dream' ? !allowed('rest') || !allowed('sit') : art === 'machine' ? !allowed('point') || !can.companion('roulette') || can.challenges !== 'open' : !allowed('draw') || !allowed('sit')))) {
+      interrupt();
+      settle();
+    }
+  }, [art, reduced, settings.idleLife, allowed, can, interrupt, settle]);
 
   // ── suggestions ────────────────────────────────────────────────────────────
   const contextFor = useCallback(
@@ -501,6 +514,14 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     return true;
   }, [account, allowed, clearTimers, interrupt, play, reduced, savePrefs, wait, walkTo]);
 
+  const finishArt = useCallback(() => {
+    setArt(null);
+    if (phase.current === 'acting') phase.current = 'idle';
+    posture.current = 'stand';
+    fox.current?.play('idle');
+    nextActAt.current = Date.now() + PAUSE.max;
+  }, []);
+
   // ── what he does on his own, one thing at a time, each to its end ──────────
   const act = useCallback(async () => {
     const g = geoRef.current;
@@ -509,6 +530,24 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     const still = () => deed === deeds.current && alive.current && phase.current === 'acting';
     phase.current = 'acting';
     posture.current = 'stand';
+    // Rare, complete scenes; existing animation toggles and capability gates still apply.
+    if (screen === 'home' && !reduced && settings.idleLife && Date.now() >= nextArtAt.current) {
+      const permitted = ART_SCENES.filter(id => id === 'machine'
+        ? allowed('point') && can.companion('roulette') && can.challenges === 'open'
+        : id === 'dream' ? allowed('rest') && allowed('sit')
+        : allowed('draw') && allowed('sit'));
+      nextArtAt.current = Date.now() + Math.max(180_000, settings.wanderEverySec * 1000);
+      if (permitted.length) {
+        const id = permitted[artIndex.current++ % permitted.length];
+        const image = new Image();
+        image.src = `/sketchy/art/${id}.webp`;
+        try { await image.decode(); } catch { finishArt(); return; }
+        if (!still()) return;
+        fox.current?.play('idle');
+        setArt(id);
+        return;
+      }
+    }
     const choices: [Activity, number][] = [
       ['sit', 2],
       ['draw', 2],
@@ -549,7 +588,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
     posture.current = 'stand';
     fox.current?.play('idle');
     nextActAt.current = Date.now() + between(PAUSE.min, PAUSE.max);
-  }, [choose, play, settings.wander, wait, walkTo]);
+  }, [choose, play, settings.wander, settings.wanderEverySec, settings.idleLife, wait, walkTo, screen, reduced, allowed, can, finishArt]);
 
   /** His hello on this visit: the introduction, a celebration of what just happened, or the day's greeting. */
   const greet = useCallback(
@@ -829,6 +868,15 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   if (!geo || x === null) return <div aria-hidden="true" className="hidden" data-sketchy-stage="waiting" />;
 
   const top = geo.floor - geo.height;
+  const roomLeft = Math.min(...geo.spots) - geo.width / 2;
+  const roomRight = Math.max(...geo.spots) + geo.width / 2;
+  const artAspect = art === 'portrait' ? 1.5 : 1;
+  const artCaption = art === 'dream' ? 0 : 32;
+  const artWidth = Math.min((geo.height - artCaption) * artAspect, roomRight - roomLeft);
+  const artHeight = artWidth / artAspect + artCaption;
+  const artLeft = Math.max(roomLeft, Math.min(x - artWidth / 2, roomRight - artWidth));
+  const artAction = art === 'machine' ? () => { finishArt(); openRoulette({mood:'surprise'}); }
+    : can.companion('guide') ? () => { finishArt(); openMenu(art === 'portrait' ? 'improve' : 'tip'); } : undefined;
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" data-sketchy-stage={screen} data-sketchy-compact={geo.compact || undefined} data-sketchy-motion={reduced ? 'reduced' : 'full'}>
       {owns && (
@@ -839,6 +887,7 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
             transform: `translate3d(${Math.round(x - geo.width / 2)}px, ${Math.round(top)}px, 0)`,
             transition: `transform ${moveMs}ms linear, opacity 320ms ease`,
             opacity: faded ? 0 : 1,
+            visibility: art ? 'hidden' : undefined,
             width: geo.width,
             height: geo.height,
           }}
@@ -856,8 +905,14 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
             data-sketchy-button=""
           />
           <div className="pointer-events-none absolute inset-0">
-            <Sketchy ref={fox} height={geo.height} facing={facing} reducedMotion={reduced} idleLife={settings.idleLife} paused={!shown} initial="idle" />
+            <Sketchy ref={fox} height={geo.height} facing={facing} reducedMotion={reduced} idleLife={settings.idleLife} paused={!shown || art !== null || roulette !== null} initial="idle" />
           </div>
+        </div>
+      )}
+
+      {owns && art && !menu && !tip && !roulette && (
+        <div className="absolute" style={{left:artLeft,top:geo.floor-artHeight,width:artWidth,height:artHeight}}>
+          <ArtScene key={art} id={art} locale={locale} paused={!shown} reducedMotion={reduced} onEnd={finishArt} onAction={artAction} onInspect={onFoxClick}/>
         </div>
       )}
 

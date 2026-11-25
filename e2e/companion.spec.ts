@@ -51,6 +51,17 @@ test.describe('Sketchy on Home', () => {
     await expect(sign(page)).toBeVisible({ timeout: 20_000 });
     await expect(sign(page)).toHaveAttribute('data-sketchy-sign', 'T-001');
     await expect(sign(page).getByText('Hi, I’m Sketchy!')).toBeVisible();
+    // A React sign transition must not expose a discarded transparent WebGL frame in Chrome.
+    const pixels = await page.locator('[data-sketchy-fox] canvas').evaluate((canvas: HTMLCanvasElement) => {
+      const gl = canvas.getContext('webgl');
+      if (!gl) return -1;
+      const data = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      let visible = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 32) visible++;
+      return visible;
+    });
+    expect(pixels).toBeGreaterThan(100);
     const s = await box(sign(page));
     expect(overlaps(s, await box(page.getByRole('navigation').first()))).toBe(false);
     expect(overlaps(s, await box(page.locator('[data-tool-card="measure"]')))).toBe(false);
@@ -146,14 +157,13 @@ test.describe('the roulette', () => {
 test.describe('celebrations', () => {
   test.use({ storageState: auth('sketchy-celebrate'), locale: 'en-US' });
 
-  test('a completed challenge gets a cheer in the corner, which never takes a tap', async ({ page }) => {
+  test('a completed challenge never creates a floating character outside Home', async ({ page }) => {
     await page.goto('/app/learn/challenges/CH-901');
     await page.locator('[data-mark-done="ready"]').click();
     const cheer = page.locator('[data-sketchy-celebration]');
-    await expect(cheer).toBeVisible({ timeout: 10_000 });
-    await expect(cheer.getByRole('status')).toHaveText('Challenge complete! Bravo!');
-    expect(await cheer.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
-    await expect(cheer).toHaveCount(0, { timeout: 8_000 });
+    await page.waitForTimeout(500);
+    await expect(cheer).toHaveCount(0);
+    await expect(drawn(page)).toHaveCount(0);
   });
 });
 
@@ -257,7 +267,7 @@ test.describe('less motion', () => {
 test.describe('exactly one Sketchy', () => {
   test.use({ storageState: auth('sketchy-roulette'), locale: 'en-US' });
 
-  test('with the roulette open he is only beside its wheel, and comes back once when it closes', async ({ page }) => {
+  test('the roulette never duplicates or moves the character out of Home', async ({ page }) => {
     await page.goto('/app');
     await expect(fox(page)).toBeVisible({ timeout: 15_000 });
     await expect(drawn(page)).toHaveCount(1);
@@ -265,9 +275,9 @@ test.describe('exactly one Sketchy', () => {
     await page.locator('[data-menu-entry="challenge"]').click();
     const roulette = page.getByRole('dialog', { name: 'Sketchy’s challenge roulette' });
     await expect(roulette).toBeVisible();
-    await expect(roulette.locator('[data-sketchy-art]')).toHaveCount(1);
+    await expect(roulette.locator('[data-sketchy-art]')).toHaveCount(0);
     await expect(drawn(page)).toHaveCount(1);
-    await expect(page.locator('[data-sketchy-fox]')).toHaveCount(0);
+    await expect(page.locator('[data-sketchy-fox]')).toHaveCount(1);
     await roulette.locator('[data-roulette-spin]').click();
     await expect(roulette.locator('[data-roulette-result]')).toBeVisible({ timeout: 10_000 });
     await expect(drawn(page)).toHaveCount(1);
@@ -277,7 +287,7 @@ test.describe('exactly one Sketchy', () => {
     await expect(drawn(page)).toHaveCount(1);
   });
 
-  test('his suggestion has a real button: "Spin a challenge" opens the roulette, with only the roulette\'s Sketchy', async ({ page }) => {
+  test('his suggestion has a real button: "Spin a challenge" opens the roulette, without a second Sketchy', async ({ page }) => {
     // He has met this person before and not said hello today: the day's greeting is on his sign.
     const me = (await (await page.request.get('/api/me?check=1')).json()) as { user: { id: string } };
     await page.addInitScript((k) => window.localStorage.setItem(k, JSON.stringify({ shown: { 'T-003': 1, 'T-027': 1 }, day: '', count: 0, lastTipAt: 0, snoozeUntil: 0, metAt: 1, greetedDay: null, rev: 2 })), `studio-companion:${me.user.id}`);
@@ -291,7 +301,7 @@ test.describe('exactly one Sketchy', () => {
     const roulette = page.getByRole('dialog', { name: 'Sketchy’s challenge roulette' });
     await expect(roulette).toBeVisible();
     await expect(drawn(page)).toHaveCount(1);
-    await expect(roulette.locator('[data-sketchy-art]')).toHaveCount(1);
+    await expect(roulette.locator('[data-sketchy-art]')).toHaveCount(0);
   });
 
   test('mobile: after a spin the challenge and its button are on screen at once, no scrolling', async ({ page, isMobile }) => {
