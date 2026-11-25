@@ -193,14 +193,14 @@ export async function ensurePlan(db: Db, client: PayPalClient, currency: Currenc
     sibling?.productId ??
     (
       await client.request<{ id: string }>('POST', '/v1/catalogs/products', {
-        body: { name: 'Studio Companion Pro', description: 'Studio Companion Pro, billed monthly.', type: 'SERVICE' },
+        body: { name: 'SketchyArtLab Pro', description: 'SketchyArtLab Pro, billed monthly.', type: 'SERVICE' },
         requestId: `studio-pro-product-${client.environment}`,
       })
     ).id;
   const plan = await client.request<{ id: string; status?: string }>('POST', '/v1/billing/plans', {
     body: {
       product_id: productId,
-      name: `Studio Companion Pro, monthly (${currency})`,
+      name: `SketchyArtLab Pro, monthly (${currency})`,
       description: 'Renews every month until cancelled. Each subscription keeps the price agreed at checkout.',
       status: 'ACTIVE',
       billing_cycles: [
@@ -364,7 +364,7 @@ export async function startCheckout(db: Db, client: PayPalClient, input: Checkou
         // The agreed price, held by this subscription alone: later prices and rates never change it.
         plan: { billing_cycles: [{ sequence: 1, total_cycles: 0, pricing_scheme: { fixed_price: { value: minorToValue(quote.amountMinor), currency_code: quote.currency } } }] },
         application_context: {
-          brand_name: 'Studio Companion',
+          brand_name: 'SketchyArtLab',
           shipping_preference: 'NO_SHIPPING',
           user_action: 'SUBSCRIBE_NOW',
           return_url: `${base}/subscribe/return?checkout=${session._id}`,
@@ -692,7 +692,7 @@ export async function stopRenewal(db: Db, client: PayPalClient, userId: ObjectId
   try {
     // First the latest payments, so the paid-through date is complete, then the cancellation.
     await syncSubscription(db, client, sub.providerSubscriptionId, { now, actor });
-    const cancelled = await cancelAtPayPal(client, sub.providerSubscriptionId, 'Renewal stopped by the customer in Studio Companion');
+    const cancelled = await cancelAtPayPal(client, sub.providerSubscriptionId, 'Renewal stopped by the customer in SketchyArtLab');
     const after = await syncSubscription(db, client, sub.providerSubscriptionId, { now, actor });
     if (!cancelled || after.providerStatus !== 'CANCELLED') return { ok: false, reason: 'failed' };
     await recordAudit(db, { type: 'billing.cancelled', userId, actor, metadata: { provider: PROVIDER, paidThrough: after.paidThrough?.toISOString() ?? null } });

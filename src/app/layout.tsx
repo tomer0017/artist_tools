@@ -13,11 +13,18 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     // Absolute URLs for alternates (hreflang) and social cards.
     metadataBase: new URL(authConfig().baseURL),
-    title: 'Studio Companion',
+    title: 'SketchyArtLab',
+    applicationName: 'SketchyArtLab',
     description,
-    authors: [{ name: 'Studio Companion' }],
-    openGraph: { title: 'Studio Companion', description, type: 'website' },
-    twitter: { card: 'summary', title: 'Studio Companion', description },
+    authors: [{ name: 'SketchyArtLab' }],
+    // Icons come from src/app (favicon.ico in public/, icon.png, apple-icon.png),
+    // the social card from src/app/opengraph-image.png, the manifest from
+    // src/app/manifest.ts: all made from the official logo by scripts/brand/logo.mjs.
+    // The name under the icon on an iPhone home screen. `capable: false` keeps
+    // it opening in Safari, as before (Next.js would otherwise make it full screen).
+    appleWebApp: { capable: false, title: 'SketchyArtLab' },
+    openGraph: { title: 'SketchyArtLab', siteName: 'SketchyArtLab', description, type: 'website' },
+    twitter: { card: 'summary_large_image', title: 'SketchyArtLab', description },
   };
 }
 
@@ -27,6 +34,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // The studio's dark background (hsl(240 6% 10%)), for the browser's own bars.
+  themeColor: '#18181b',
 };
 
 // The display serif of Pro surfaces only (the gilded-frame look: plans, checkout,

@@ -258,7 +258,7 @@ describe('stopping renewal', () => {
     const result = await stopRenewal(db, paypal, userId, `user:${userId}`, at(10));
     expect(result).toEqual({ ok: true, paidThrough: addMonth(NOW) });
     expect(paypal.subscriptions.get(id)!.status).toBe('CANCELLED');
-    expect(paypal.calls.find((c) => c.path.endsWith('/cancel'))!.body).toEqual({ reason: 'Renewal stopped by the customer in Studio Companion' });
+    expect(paypal.calls.find((c) => c.path.endsWith('/cancel'))!.body).toEqual({ reason: 'Renewal stopped by the customer in SketchyArtLab' });
     expect(await subOf(userId)).toMatchObject({ status: 'canceled', cancelAtPeriodEnd: true, paidThrough: addMonth(NOW), nextBillingAt: null });
     expect(await planOf(userId, at(-0.01, addMonth(NOW)))).toBe('pro');
     expect(await planOf(userId, at(0.01, addMonth(NOW)))).toBe('free');

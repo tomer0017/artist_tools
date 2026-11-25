@@ -28,7 +28,7 @@ describe('authConfig', () => {
       emailPassword: false,
       usernamePassword: false,
       adminMfaRequired: false,
-      mail: { transport: 'disabled', from: 'Studio Companion <no-reply@studio-companion.invalid>', smtp: null },
+      mail: { transport: 'disabled', from: 'SketchyArtLab <no-reply@studio-companion.invalid>', smtp: null },
     });
     withEnv({ ...BASE, GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
     expect(authConfig().google).toBeNull();
@@ -106,11 +106,11 @@ describe('authConfig', () => {
   });
 
   it('sends real email through the provider only when every SMTP detail and a real sender are set', () => {
-    const SMTP = { MAIL_TRANSPORT: 'smtp', SMTP_HOST: ' smtp.example.com ', SMTP_PORT: '587', SMTP_USER: 'apikey', SMTP_PASSWORD: 'provider-secret', MAIL_FROM: 'Studio Companion <hello@example.com>' };
+    const SMTP = { MAIL_TRANSPORT: 'smtp', SMTP_HOST: ' smtp.example.com ', SMTP_PORT: '587', SMTP_USER: 'apikey', SMTP_PASSWORD: 'provider-secret', MAIL_FROM: 'SketchyArtLab <hello@example.com>' };
     withEnv({ ...BASE, ...SMTP, APP_ENV: 'production', AUTH_EMAIL_PASSWORD: 'on' });
     expect(authConfig()).toMatchObject({
       emailPassword: true,
-      mail: { transport: 'smtp', from: 'Studio Companion <hello@example.com>', smtp: { host: 'smtp.example.com', port: 587, user: 'apikey', password: 'provider-secret' } },
+      mail: { transport: 'smtp', from: 'SketchyArtLab <hello@example.com>', smtp: { host: 'smtp.example.com', port: 587, user: 'apikey', password: 'provider-secret' } },
     });
     for (const missing of ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD'] as const) {
       withEnv({ ...BASE, ...SMTP, [missing]: '' });
@@ -121,7 +121,7 @@ describe('authConfig', () => {
       expect(() => authConfig()).toThrow("SMTP_PORT must be the provider's submission port");
     }
     // The placeholder sender, or none, would be refused by any provider.
-    for (const from of [undefined, 'Studio Companion <no-reply@studio-companion.invalid>', 'not an address', 'Studio <hello@localhost>']) {
+    for (const from of [undefined, 'SketchyArtLab <no-reply@studio-companion.invalid>', 'not an address', 'Studio <hello@localhost>']) {
       withEnv({ ...BASE, ...SMTP, MAIL_FROM: from });
       expect(() => authConfig()).toThrow('MAIL_TRANSPORT=smtp needs MAIL_FROM');
     }
@@ -154,7 +154,7 @@ describe('authConfig', () => {
       SMTP_PORT: '465',
       SMTP_USER: 'apikey',
       SMTP_PASSWORD: 'provider-secret',
-      MAIL_FROM: 'Studio Companion <hello@example.com>',
+      MAIL_FROM: 'SketchyArtLab <hello@example.com>',
     });
     expect(authConfig()).toMatchObject({ signups: { mode: 'open' }, mail: { transport: 'smtp', smtp: { port: 465 } } });
   });

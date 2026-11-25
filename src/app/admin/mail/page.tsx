@@ -14,7 +14,7 @@ import { dateTime } from '../format';
 // MAIL_TRANSPORT=outbox, which the configuration refuses in production; 404
 // for everyone who is not an admin.
 
-export const metadata: Metadata = { title: 'Test mail · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Test mail · SketchyArtLab admin', robots: { index: false, follow: false } };
 
 export const dynamic = 'force-dynamic';
 

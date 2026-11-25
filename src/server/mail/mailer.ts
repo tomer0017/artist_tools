@@ -68,7 +68,7 @@ export function smtpFailure(error: unknown) {
 }
 
 interface MailerOptions {
-  /** The sender, e.g. `Studio Companion <hello@example.com>` (MAIL_FROM). */
+  /** The sender, e.g. `SketchyArtLab <hello@example.com>` (MAIL_FROM). */
   from?: string;
   smtp?: SmtpSettings | null;
   /** Opens the SMTP connection (nodemailer, unless a test supplies its own). */

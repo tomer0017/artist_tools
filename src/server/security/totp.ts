@@ -82,7 +82,7 @@ export function verifyTotp(secretBase32: string, code: string, now: number, notA
 }
 
 /** The link authenticator apps understand (also encoded in the QR code). */
-export function otpauthUri(secretBase32: string, account: string, issuer = 'Studio Companion'): string {
+export function otpauthUri(secretBase32: string, account: string, issuer = 'SketchyArtLab'): string {
   const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}`;
   const params = new URLSearchParams({ secret: secretBase32, issuer, algorithm: 'SHA1', digits: String(TOTP_DIGITS), period: String(TOTP_PERIOD_SECONDS) });
   return `otpauth://totp/${label}?${params.toString()}`;

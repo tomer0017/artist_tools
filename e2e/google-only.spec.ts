@@ -18,7 +18,7 @@ test.describe('signed out', () => {
 
   test('the sign-in page offers Continue with Google, and a username form for invited testers, with no registration, email or reset', async ({ page }) => {
     await page.goto('/sign-in');
-    await expect(page.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign in to SketchyArtLab' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeEnabled();
     await expect(page.getByText(/your free account is created automatically/)).toBeVisible();
     const form = page.getByRole('form', { name: 'Sign in with a username' });
@@ -35,7 +35,7 @@ test.describe('signed out', () => {
 
   test('in Hebrew the actions read המשך עם Google and כניסה עם שם משתמש', async ({ page }) => {
     await page.goto('/he/sign-in');
-    await expect(page.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'כניסה ל-SketchyArtLab' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'המשך עם Google' })).toBeEnabled();
     await expect(page.getByRole('form', { name: 'כניסה עם שם משתמש' }).getByLabel('שם משתמש')).toBeVisible();
     await expect(page.locator('input:not([type="hidden"])')).toHaveCount(2);

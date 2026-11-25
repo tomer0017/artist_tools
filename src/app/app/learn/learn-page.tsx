@@ -11,7 +11,7 @@ import { requireStudioAccount } from '@/server/studio-account';
 // Learn's content is never in a page: the Learn view asks the Learn API, which
 // authorizes every request (src/app/api/learn).
 
-export const learnMetadata: Metadata = { title: 'Learn · Studio Companion', robots: { index: false, follow: false } };
+export const learnMetadata: Metadata = { title: 'Learn · SketchyArtLab', robots: { index: false, follow: false } };
 
 export async function LearnPage({ path }: { path: string }) {
   const { account } = await requireStudioAccount(path);

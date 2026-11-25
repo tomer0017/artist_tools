@@ -61,7 +61,7 @@ const authSchema = z
     message: 'SMTP_PORT must be the provider\'s submission port, e.g. 465 or 587',
   })
   .refine((env) => env.MAIL_TRANSPORT !== 'smtp' || senderAddress(env.MAIL_FROM) !== null, {
-    message: 'MAIL_TRANSPORT=smtp needs MAIL_FROM, a sender address the provider accepts, e.g. "Studio Companion <hello@example.com>"',
+    message: 'MAIL_TRANSPORT=smtp needs MAIL_FROM, a sender address the provider accepts, e.g. "SketchyArtLab <hello@example.com>"',
   })
   // Public registration means real people: their sign-in links are emailed
   // to them, never kept in the outbox where admins can read them.
@@ -153,7 +153,7 @@ export function authConfig() {
     adminMfaRequired: env.ADMIN_MFA_REQUIRED === 'on',
     mail: {
       transport: (env.MAIL_TRANSPORT ?? 'disabled') as MailTransport,
-      from: env.MAIL_FROM?.trim() || 'Studio Companion <no-reply@studio-companion.invalid>',
+      from: env.MAIL_FROM?.trim() || 'SketchyArtLab <no-reply@studio-companion.invalid>',
       /** Set only with MAIL_TRANSPORT=smtp. */
       smtp:
         env.MAIL_TRANSPORT === 'smtp'

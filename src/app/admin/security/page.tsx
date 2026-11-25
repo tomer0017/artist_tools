@@ -16,7 +16,7 @@ import { TrustedDevices } from './TrustedDevices';
 // admin page or action, except on a device trusted after a code (listed here,
 // each can be forgotten). Required for all admins only if ADMIN_MFA_REQUIRED=on.
 
-export const metadata: Metadata = { title: 'Security · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Security · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminSecurityPage() {

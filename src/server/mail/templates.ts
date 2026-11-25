@@ -25,24 +25,24 @@ const firstName = (name: string | null | undefined) => (name ?? '').trim().split
 const STRINGS = {
   en: {
     hello: (name: string) => (name ? `Hi ${name},` : 'Hi,'),
-    sign: '— Studio Companion',
+    sign: '— SketchyArtLab',
     buttonFallback: 'If the button does not work, copy this link into your browser:',
     notYou: 'If you did not ask for this, you can ignore this email: nothing changes until the link is used.',
     verify: {
       subject: 'Confirm your email address',
-      body: ['Please confirm that this is your email address to finish creating your Studio Companion account. The link works for 24 hours.'],
+      body: ['Please confirm that this is your email address to finish creating your SketchyArtLab account. The link works for 24 hours.'],
       action: 'Confirm my email',
       footer: 'If you did not create an account, ignore this email and no account will be activated.',
     },
     reset: {
       subject: 'Reset your password',
-      body: ['Someone (hopefully you) asked to reset the password for your Studio Companion account. The link works for 30 minutes and only once.', 'Resetting your password signs you out on every device.'],
+      body: ['Someone (hopefully you) asked to reset the password for your SketchyArtLab account. The link works for 30 minutes and only once.', 'Resetting your password signs you out on every device.'],
       action: 'Choose a new password',
     },
     existing: {
-      subject: 'You already have a Studio Companion account',
+      subject: 'You already have a SketchyArtLab account',
       how: { both: 'with your password or with Google', google: 'with Google', password: 'with your password' },
-      body: (how: string) => `Someone tried to create a new Studio Companion account with this email address, but you already have one. You sign in ${how}.`,
+      body: (how: string) => `Someone tried to create a new SketchyArtLab account with this email address, but you already have one. You sign in ${how}.`,
       withPassword: 'Forgot your password? You can reset it from the sign-in page.',
       withoutPassword: 'To add a password, sign in with Google and add one on your account page.',
       action: 'Sign in',
@@ -50,22 +50,22 @@ const STRINGS = {
     },
     changed: {
       subject: 'Your password was changed',
-      body: ['The password for your Studio Companion account was just changed, and every device was signed out.'],
+      body: ['The password for your SketchyArtLab account was just changed, and every device was signed out.'],
       action: 'Sign in',
       footer: 'If you did not do this, reset your password now from the sign-in page and contact support.',
     },
     added: {
       subject: 'A password was added to your account',
-      body: ['You can now sign in to Studio Companion with your email address and password, as well as with Google.'],
+      body: ['You can now sign in to SketchyArtLab with your email address and password, as well as with Google.'],
       footer: 'If you did not do this, sign in with Google, remove the password on your account page and contact support.',
     },
     google: {
       subject: 'Google sign-in was connected to your account',
-      body: ['You can now sign in to Studio Companion with Google, as well as with your password.'],
+      body: ['You can now sign in to SketchyArtLab with Google, as well as with your password.'],
       footer: 'If you did not do this, sign in, disconnect Google on your account page and change your password.',
     },
     deleted: {
-      subject: 'Your Studio Companion account was deleted',
+      subject: 'Your SketchyArtLab account was deleted',
       body: [
         'Your account and the personal data stored with it have been deleted, as you asked. Images you worked on never left your devices.',
         'Backups that still contain your account expire within 14 days.',
@@ -73,31 +73,31 @@ const STRINGS = {
       footer: 'If you did not ask for this, contact support right away.',
     },
     test: {
-      subject: 'Studio Companion: email delivery test',
-      body: ['This is a test message from the Studio Companion server. If it reached you, account emails (address confirmations and password resets) can reach this inbox too.'],
+      subject: 'SketchyArtLab: email delivery test',
+      body: ['This is a test message from the SketchyArtLab server. If it reached you, account emails (address confirmations and password resets) can reach this inbox too.'],
       footer: 'Sent by an operator check. No account was created or changed.',
     },
   },
   he: {
     hello: (name: string) => (name ? `שלום ${name},` : 'שלום,'),
-    sign: '— Studio Companion',
+    sign: '— SketchyArtLab',
     buttonFallback: 'אם הכפתור לא עובד, אפשר להעתיק את הקישור הזה לדפדפן:',
     notYou: 'אם הבקשה לא הגיעה מכם, אפשר להתעלם מההודעה: שום דבר לא משתנה בלי שימוש בקישור.',
     verify: {
       subject: 'אישור כתובת האימייל',
-      body: ['כדי לסיים ליצור את החשבון ב-Studio Companion, צריך לאשר שזו כתובת האימייל שלכם. הקישור בתוקף ל-24 שעות.'],
+      body: ['כדי לסיים ליצור את החשבון ב-SketchyArtLab, צריך לאשר שזו כתובת האימייל שלכם. הקישור בתוקף ל-24 שעות.'],
       action: 'אישור כתובת האימייל',
       footer: 'אם לא יצרתם חשבון, אפשר להתעלם מההודעה, ושום חשבון לא יופעל.',
     },
     reset: {
       subject: 'איפוס הסיסמה',
-      body: ['התקבלה בקשה לאפס את הסיסמה של החשבון ב-Studio Companion. הקישור עובד פעם אחת, למשך 30 דקות.', 'איפוס הסיסמה מנתק את החשבון מכל המכשירים.'],
+      body: ['התקבלה בקשה לאפס את הסיסמה של החשבון ב-SketchyArtLab. הקישור עובד פעם אחת, למשך 30 דקות.', 'איפוס הסיסמה מנתק את החשבון מכל המכשירים.'],
       action: 'בחירת סיסמה חדשה',
     },
     existing: {
-      subject: 'כבר יש לכם חשבון ב-Studio Companion',
+      subject: 'כבר יש לכם חשבון ב-SketchyArtLab',
       how: { both: 'בסיסמה או עם Google', google: 'עם Google', password: 'בסיסמה' },
-      body: (how: string) => `מישהו ניסה ליצור חשבון חדש ב-Studio Companion עם כתובת האימייל הזאת, אבל כבר יש לכם חשבון. הכניסה אליו היא ${how}.`,
+      body: (how: string) => `מישהו ניסה ליצור חשבון חדש ב-SketchyArtLab עם כתובת האימייל הזאת, אבל כבר יש לכם חשבון. הכניסה אליו היא ${how}.`,
       withPassword: 'שכחתם את הסיסמה? אפשר לאפס אותה בדף הכניסה.',
       withoutPassword: 'כדי להוסיף סיסמה, יש להיכנס עם Google ולהוסיף אותה בדף החשבון.',
       action: 'כניסה',
@@ -105,28 +105,28 @@ const STRINGS = {
     },
     changed: {
       subject: 'הסיסמה הוחלפה',
-      body: ['הסיסמה של החשבון ב-Studio Companion הוחלפה עכשיו, והחשבון נותק מכל המכשירים.'],
+      body: ['הסיסמה של החשבון ב-SketchyArtLab הוחלפה עכשיו, והחשבון נותק מכל המכשירים.'],
       action: 'כניסה',
       footer: 'אם לא עשיתם את זה, כדאי לאפס את הסיסמה עכשיו מדף הכניסה ולפנות לתמיכה.',
     },
     added: {
       subject: 'נוספה סיסמה לחשבון',
-      body: ['מעכשיו אפשר להיכנס ל-Studio Companion עם כתובת האימייל והסיסמה, וגם עם Google.'],
+      body: ['מעכשיו אפשר להיכנס ל-SketchyArtLab עם כתובת האימייל והסיסמה, וגם עם Google.'],
       footer: 'אם לא עשיתם את זה, יש להיכנס עם Google, להסיר את הסיסמה בדף החשבון ולפנות לתמיכה.',
     },
     google: {
       subject: 'כניסה עם Google חוברה לחשבון',
-      body: ['מעכשיו אפשר להיכנס ל-Studio Companion עם Google, וגם עם הסיסמה.'],
+      body: ['מעכשיו אפשר להיכנס ל-SketchyArtLab עם Google, וגם עם הסיסמה.'],
       footer: 'אם לא עשיתם את זה, יש להיכנס, לנתק את Google בדף החשבון ולהחליף את הסיסמה.',
     },
     deleted: {
-      subject: 'החשבון ב-Studio Companion נמחק',
+      subject: 'החשבון ב-SketchyArtLab נמחק',
       body: ['החשבון והמידע האישי שנשמר איתו נמחקו, לבקשתכם. התמונות שעבדתם עליהן מעולם לא יצאו מהמכשירים שלכם.', 'גיבויים שעדיין מכילים את החשבון נמחקים תוך 14 יום.'],
       footer: 'אם לא ביקשתם את זה, כדאי לפנות לתמיכה מיד.',
     },
     test: {
-      subject: 'Studio Companion: בדיקת שליחת אימייל',
-      body: ['זו הודעת בדיקה מהשרת של Studio Companion. אם היא הגיעה אליכם, גם הודעות החשבון (אישורי כתובת ואיפוסי סיסמה) יכולות להגיע לתיבה הזו.'],
+      subject: 'SketchyArtLab: בדיקת שליחת אימייל',
+      body: ['זו הודעת בדיקה מהשרת של SketchyArtLab. אם היא הגיעה אליכם, גם הודעות החשבון (אישורי כתובת ואיפוסי סיסמה) יכולות להגיע לתיבה הזו.'],
       footer: 'נשלחה בבדיקה של מפעיל המערכת. שום חשבון לא נוצר ולא השתנה.',
     },
   },
@@ -154,7 +154,7 @@ function render(
   const html = `<!doctype html><html lang="${locale}" dir="${dir}"><body style="margin:0;background:#f5f5f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#1c1917">
 <div dir="${dir}" style="max-width:520px;margin:0 auto;padding:24px 16px;text-align:${dir === 'rtl' ? 'right' : 'left'}">
 <div style="background:#ffffff;border-radius:16px;padding:24px">
-<p style="font-size:15px;font-weight:700;margin:0 0 16px">Studio Companion</p>
+<p style="font-size:15px;font-weight:700;margin:0 0 16px">SketchyArtLab</p>
 <p style="font-size:15px;line-height:1.5">${escapeHtml(hello)}</p>
 ${paragraphs.map((p) => `<p style="font-size:15px;line-height:1.5">${escapeHtml(p)}</p>`).join('\n')}
 ${button}

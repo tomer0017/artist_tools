@@ -50,7 +50,7 @@ test.describe.serial('admin two-factor verification', () => {
     await page.getByRole('button', { name: 'Set up two-factor verification' }).click();
 
     await expect(page.getByRole('img', { name: 'QR code for your authenticator app' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open in an authenticator app' })).toHaveAttribute('href', /^otpauth:\/\/totp\/Studio%20Companion:admin-mfa%40e2e\.test\?secret=[A-Z2-7]+&issuer=Studio\+Companion/);
+    await expect(page.getByRole('link', { name: 'Open in an authenticator app' })).toHaveAttribute('href', /^otpauth:\/\/totp\/SketchyArtLab:admin-mfa%40e2e\.test\?secret=[A-Z2-7]+&issuer=SketchyArtLab/);
     setupKey = (await page.getByTestId('mfa-setup-key').innerText()).replace(/\s/g, '');
     expect(setupKey).toMatch(/^[A-Z2-7]{32}$/);
 

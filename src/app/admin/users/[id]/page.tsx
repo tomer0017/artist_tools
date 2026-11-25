@@ -24,7 +24,7 @@ import { SUBSCRIPTION_STATUS_LABELS, dateOnly, dateTime, sourceLong, sourceShort
 // secrets, password hashes or Google's full account id. The owner's account
 // shows no controls to any other admin (the server refuses them anyway).
 
-export const metadata: Metadata = { title: 'Account · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Account · SketchyArtLab admin', robots: { index: false, follow: false } };
 
 // Depends on who is signed in: always rendered per request, never cached.
 export const dynamic = 'force-dynamic';

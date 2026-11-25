@@ -151,7 +151,7 @@ export const LicenceSchema = z
   .object({
     kind: z.enum(['own', 'commissioned', 'cc0', 'public-domain', 'licensed']),
     // The page of the original. Own and commissioned work (a diagram drawn for
-    // Studio Companion, ADR-0019) may have none; every other kind needs it.
+    // SketchyArtLab, ADR-0019) may have none; every other kind needs it.
     source: z.string().url().max(500).refine((url) => url.startsWith('https://'), 'must be an https address').nullable(),
     author: z.string().trim().min(1).max(200),
     title: z.string().trim().min(1).max(300),

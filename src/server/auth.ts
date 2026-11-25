@@ -288,7 +288,7 @@ export function createAuth(deps: AuthDeps) {
   }
 
   return betterAuth({
-    appName: 'Studio Companion',
+    appName: 'SketchyArtLab',
     baseURL: deps.baseURL,
     secret: deps.secret,
     database: mongodbAdapter(deps.db, { client: deps.client, usePlural: true }),

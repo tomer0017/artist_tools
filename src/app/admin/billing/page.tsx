@@ -21,7 +21,7 @@ import { BillingAccessForm, CheckWithPayPal, RefundDecision } from './BillingCon
 // runs, exactly as verified provider events recorded them. Nothing on this
 // page changes billing, and no payment provider is connected yet.
 
-export const metadata: Metadata = { title: 'Billing · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Billing · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 const money = (amountMinor: number | null | undefined, currency: string | null | undefined) =>

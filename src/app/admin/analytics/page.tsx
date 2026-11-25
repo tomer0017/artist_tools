@@ -11,7 +11,7 @@ import { Tile, moneyList } from '../figures';
 // features used, weekly retention, plans and (once billing is live) revenue.
 // First-party data only, test accounts left out, no artwork anywhere.
 
-export const metadata: Metadata = { title: 'Analytics · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Analytics · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 const shortDay = (day: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
@@ -74,7 +74,7 @@ export default async function AdminAnalyticsPage() {
     <AdminShell active="analytics">
       <h1 className="mt-6 text-2xl font-bold tracking-tight text-foreground">Analytics</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-        From Studio Companion&apos;s own records only; {r.accounts.testExcluded} test {r.accounts.testExcluded === 1 ? 'account is' : 'accounts are'} left
+        From SketchyArtLab&apos;s own records only; {r.accounts.testExcluded} test {r.accounts.testExcluded === 1 ? 'account is' : 'accounts are'} left
         out. Days are UTC. Tool use is counted once per account, tool and day; artwork is never recorded.
       </p>
 

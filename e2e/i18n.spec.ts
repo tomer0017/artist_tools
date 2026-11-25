@@ -57,9 +57,9 @@ test.describe('Hebrew public pages', () => {
     await expect(page.getByRole('region', { name: 'חינמי', exact: true })).toContainText('זמין עכשיו');
     // Remembered: an unprefixed page now opens in Hebrew too.
     await page.goto('/sign-in');
-    await expect(page.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'כניסה ל-SketchyArtLab' })).toBeVisible();
     await page.getByRole('group', { name: 'בחירת שפה' }).getByRole('button', { name: 'English' }).click();
-    await expect(page.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Sign in to SketchyArtLab' })).toBeVisible({ timeout: 15_000 });
     await expectDirection(page, 'en', 'ltr');
   });
 

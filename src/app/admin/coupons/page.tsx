@@ -10,7 +10,7 @@ import { CouponForm, CouponStatusButton } from './CouponControls';
 // Discount codes for paid plans: defined here now, redeemed at checkout once
 // paid plans launch (Phase 4). Never deleted, only switched off.
 
-export const metadata: Metadata = { title: 'Coupons · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Coupons · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminCouponsPage() {

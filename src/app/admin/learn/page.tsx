@@ -23,7 +23,7 @@ import type { GroupOption, LearnRow, LessonOption } from './types';
 // history below can bring any earlier state back. An imported draft (from
 // the server's import command) is reviewed and published here first.
 
-export const metadata: Metadata = { title: 'Learn · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Learn · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 const bytes = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`);

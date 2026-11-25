@@ -20,7 +20,7 @@ import { CatalogReadNotice } from './CatalogReadNotice';
 // is shown with what this release keeps without applying; one it cannot apply
 // in full is read-only here (ADR-0014).
 
-export const metadata: Metadata = { title: 'Plans · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Plans · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 // Read by readCatalog, so every field is present (the optional types come

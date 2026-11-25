@@ -10,7 +10,7 @@ import { dateTime } from '../format';
 // addresses, query strings or request bodies. Groups not seen for 30 days
 // disappear on their own.
 
-export const metadata: Metadata = { title: 'Errors · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Errors · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminErrorsPage() {

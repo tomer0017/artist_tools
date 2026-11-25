@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     return new NextResponse(JSON.stringify(data, null, 2), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="studio-companion-account-${day}.json"`,
+        'Content-Disposition': `attachment; filename="sketchyartlab-account-${day}.json"`,
         'Cache-Control': 'no-store',
       },
     });

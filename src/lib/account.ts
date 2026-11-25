@@ -61,7 +61,7 @@ export interface AccountSummary {
   createdAt: string;
   lastLoginAt: string | null;
   plan: { assigned: PlanId; effective: PlanId };
-  /** Time-limited access given by Studio Companion (a promotion, trial or support), while it lasts. */
+  /** Time-limited access given by SketchyArtLab (a promotion, trial or support), while it lasts. */
   grant: { planId: PlanId; endsAt: string } | null;
   /** Features with a usage quota on this plan, and what is left of it now. */
   quotas: { feature: FeatureId; limit: number; period: 'day' | 'month'; left: number }[];
