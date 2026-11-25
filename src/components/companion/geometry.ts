@@ -22,6 +22,8 @@ export interface Measured {
 }
 
 export interface Geometry {
+  /** Actual free Hero area, independent of walking spot count. */
+  activity: { left: number; right: number; top: number };
   /** His height and width (CSS px). */
   height: number;
   width: number;
@@ -58,6 +60,7 @@ export function geometryOf(m: Measured, sizePercent: number): Geometry | null {
   if (room > width * 2.6) fromEnd.push(EDGE + width / 2 + room - width * 0.2);
   const toX = (d: number) => (m.rtl ? d : m.width - d);
   return {
+    activity: { left: m.rtl ? EDGE : m.textEnd + GAP, right: m.rtl ? m.width - m.textEnd - GAP : m.width - EDGE, top: m.topLimit },
     height,
     width,
     floor: m.floor,

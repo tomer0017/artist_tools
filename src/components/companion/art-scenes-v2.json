@@ -1,0 +1,218 @@
+{
+  "sunflowers": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 420,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      4,
+      5,
+      6,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/sunflowers.webp",
+    "action": "tip",
+    "label": [
+      "Sunflowers",
+      "חמניות"
+    ]
+  },
+  "flower-crown": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 420,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      4,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/flower-crown.webp",
+    "action": "tip",
+    "label": [
+      "Flower-crown portrait",
+      "דיוקן עם זר פרחים"
+    ]
+  },
+  "pearl": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 460,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/pearl.webp",
+    "action": "tip",
+    "label": [
+      "Girl with a Pearl Earring",
+      "נערה עם עגיל פנינה"
+    ]
+  },
+  "mona-lisa": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 650,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/mona-lisa.webp",
+    "action": "tip",
+    "label": [
+      "Mona Lisa",
+      "מונה ליזה"
+    ]
+  },
+  "scream": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 360,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      6,
+      7,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/scream.webp",
+    "action": "tip",
+    "label": [
+      "The Scream",
+      "הצעקה"
+    ]
+  },
+  "american-gothic": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 500,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/american-gothic.webp",
+    "action": "tip",
+    "label": [
+      "American Gothic",
+      "אמריקן גותיק"
+    ]
+  },
+  "portrait-process": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 500,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/portrait-process.webp",
+    "action": "tip",
+    "label": [
+      "Painting a self-portrait",
+      "ציור דיוקן עצמי"
+    ]
+  },
+  "art-slots": {
+    "frames": 9,
+    "aspect": 1.7777777777777777,
+    "foxHeight": 0.7777777777777778,
+    "beat": 380,
+    "sequence": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      4,
+      5,
+      4,
+      5,
+      6,
+      7,
+      8,
+      8,
+      8
+    ],
+    "src": "/sketchy/art/v2/art-slots.webp",
+    "action": "roulette",
+    "label": [
+      "Art slot machine",
+      "מכונת האמנות"
+    ]
+  }
+}

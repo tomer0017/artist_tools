@@ -16,3 +16,16 @@ describe('hero art sequences',()=>{
   await act(async()=>{await vi.advanceTimersByTimeAsync(20_000)});expect(view.container.querySelector('[data-art-frame]')).toHaveAttribute('data-art-frame','5');expect(end).not.toHaveBeenCalled();
  });
 });
+
+it('does not finish twice after pause/resume, and restarts when scene id changes',async()=>{
+ vi.useFakeTimers();const end=vi.fn();
+ const view=render(<ArtScene id="sunflowers" locale="en" paused={false} reducedMotion={false} onEnd={end}/>);
+ await act(async()=>{await vi.advanceTimersByTimeAsync(20_000)});
+ view.rerender(<ArtScene id="sunflowers" locale="en" paused reducedMotion={false} onEnd={end}/>);
+ view.rerender(<ArtScene id="sunflowers" locale="en" paused={false} reducedMotion={false} onEnd={end}/>);
+ await act(async()=>{await vi.advanceTimersByTimeAsync(1000)});expect(end).toHaveBeenCalledOnce();
+ view.rerender(<ArtScene id="pearl" locale="en" paused={false} reducedMotion={false} onEnd={end}/>);
+ expect(view.container.querySelector('[data-art-frame]')).toHaveAttribute('data-art-frame','0');
+ await act(async()=>{await vi.advanceTimersByTimeAsync(SCENES.pearl.beat+100)});
+ expect(view.container.querySelector('[data-art-frame]')).toHaveAttribute('data-art-frame','1');
+});

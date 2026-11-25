@@ -1,0 +1,167 @@
+{
+  "width": 640,
+  "height": 360,
+  "standingFoxHeight": 280,
+  "scenes": {
+    "sunflowers": {
+      "height": 288,
+      "floor": 314,
+      "beat": 420,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        4,
+        5,
+        6,
+        5,
+        6,
+        7,
+        8,
+        8,
+        8
+      ]
+    },
+    "flower-crown": {
+      "height": 294,
+      "floor": 321,
+      "beat": 420,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        4,
+        5,
+        6,
+        7,
+        8,
+        8,
+        8
+      ]
+    },
+    "pearl": {
+      "height": 285,
+      "floor": 318,
+      "beat": 460,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        5,
+        6,
+        7,
+        8,
+        8,
+        8
+      ]
+    },
+    "mona-lisa": {
+      "height": 249,
+      "floor": 309,
+      "beat": 650,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        5,
+        6,
+        7,
+        8,
+        8,
+        8
+      ]
+    },
+    "scream": {
+      "height": 291,
+      "floor": 323,
+      "beat": 360,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        6,
+        7,
+        8,
+        8
+      ]
+    },
+    "american-gothic": {
+      "height": 254,
+      "floor": 318,
+      "beat": 500,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        8,
+        8
+      ]
+    },
+    "portrait-process": {
+      "height": 292,
+      "floor": 322,
+      "beat": 500,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        8,
+        8
+      ]
+    },
+    "art-slots": {
+      "height": 300,
+      "floor": 322,
+      "beat": 380,
+      "sequence": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        4,
+        5,
+        4,
+        5,
+        6,
+        7,
+        8,
+        8,
+        8
+      ]
+    }
+  }
+}
