@@ -259,7 +259,9 @@ export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelec
   );
 
   // ── his room in the hero ───────────────────────────────────────────────────
-  useLayoutEffect(() => {
+  // Measured once the page is in place: a layout effect would run before the container (an ancestor)
+  // has its ref when Home and his stage mount together (coming back to Home), and he would never appear.
+  useEffect(() => {
     const container = containerRef.current;
     const floor = floorRef.current;
     if (!container || !floor) return;
