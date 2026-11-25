@@ -1,38 +1,27 @@
 import type { AnimationId } from '@/lib/companion/model';
 import { CLIPS, type ClipParams } from './clips';
-import { LEG, RASTER_RIGS, SPRITE, type RasterPart } from './raster-rig';
+import { RASTER_RIGS, SPRITE, WALK, type RasterPart } from './raster-rig';
 import type { EngineOptions } from './engine';
 import { RasterMesh, type MeshMotion } from './raster-mesh';
 
 // ─── Sketchy's motion over the official artwork ───────────────────────────────
 // The director's contract of the original engine (play, look, pause, clip
 // timing, completion callbacks) over the raster poses: each joint of the pose
-// turns a little about its pivot (raster-rig.tsx), the body breathes and bobs,
-// the eyes follow a target smoothly and the head turns with them (rigidly: the
-// face itself is never warped). Walking and running swing the legs at the
-// rhythm of the ground he covers (strideCycle), so his feet do not slide.
+// turns a little about its pivot (raster-rig.tsx), the body breathes, the eyes
+// follow a target smoothly and the head turns with them (rigidly: the face
+// itself is never warped). Walking is the founder's side-view cycle, frame by
+// frame, at the pace of the ground he covers (walkSpeed), so his feet stay put.
 
 type PlayOptions = { params?: ClipParams; onEnd?: () => void; restart?: boolean };
 const TAU = Math.PI * 2;
 const rotate = (angle: number, x: number, y: number, dy = 0) => `translate(0 ${dy.toFixed(2)}) rotate(${angle.toFixed(2)} ${x} ${y})`;
 
-/** How far each leg swings from the drawn stride toward the other (degrees). */
-export const SWING = { walk: 16, run: 20 } as const;
-/** His natural rhythm: seconds per stride cycle (two steps), calm when walking. */
-export const CADENCE = { walk: 1, run: 0.64 } as const;
-
-/** Ground one stride cycle covers when he is `heightCss` tall (CSS pixels): each step a planted foot moves back about 2·LEG·sin(swing). */
-const strideLength = (clip: 'walk' | 'run', heightCss: number) => 4 * LEG * Math.sin((SWING[clip] * Math.PI) / 180) * (heightCss / SPRITE.h);
-
-/** Seconds per stride cycle (two steps) for walking or running at `pxPerSec`, so his feet do not slide. */
-export function strideCycle(clip: 'walk' | 'run', pxPerSec: number, heightCss: number): number {
-  return Math.min(1.6, Math.max(0.42, strideLength(clip, heightCss) / Math.max(1, pxPerSec)));
-}
-
-/** How fast he crosses the screen at his natural rhythm (CSS pixels a second), `percent` the admin's speed. */
-export function gaitSpeed(clip: 'walk' | 'run', heightCss: number, percent = 100): number {
-  return (strideLength(clip, heightCss) / CADENCE[clip]) * (percent / 100);
-}
+/** Ground one walking cycle covers, in sprite pixels: a planted foot moves back about 20 px each frame. */
+export const WALK_STRIDE = 160;
+/** Seconds per walking cycle at the admin's speed (100: the cycle as drawn, 8 × 120 ms). */
+export const walkCycle = (percent = 100) => ((WALK.frames * WALK.frameMs) / 1000) * (100 / Math.max(10, percent));
+/** How fast he crosses the screen when `heightCss` tall (CSS pixels a second), matched to his steps. */
+export const walkSpeed = (heightCss: number, percent = 100) => (WALK_STRIDE * (heightCss / SPRITE.h)) / walkCycle(percent);
 
 const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
 
@@ -186,7 +175,7 @@ export class RasterEngine {
     const now = performance.now();
     const elapsed = ((this.pausedAt ?? now) - this.started) / 1000;
     const stride = this.id === 'walk' || this.id === 'run';
-    const cycle = stride ? (this.playOptions.params?.cycle ?? clip.duration) : clip.duration;
+    const cycle = stride ? (this.playOptions.params?.cycle ?? walkCycle(this.id === 'run' ? 160 : 100)) : clip.duration;
     const t = reduced ? clip.stillAt : clip.loop ? elapsed % cycle : Math.min(elapsed, cycle);
     const phase = (t / cycle) * TAU;
     const s = Math.sin(phase);
@@ -208,22 +197,10 @@ export class RasterEngine {
     if (!reduced)
       switch (this.id) {
         case 'walk':
-        case 'run': {
-          // Two identical steps a cycle: from the drawn stride (contact, body low) the legs swing
-          // toward each other (passing, body high) and back. Never past the drawing, so no limp;
-          // the arm and the tail sway once a cycle.
-          const run = this.id === 'run';
-          const swing = SWING[this.id];
-          const step = (1 - Math.cos(2 * phase)) / 2;
-          rotations.legBack = -swing * step;
-          rotations.legFront = swing * step;
-          rotations.armFront = (run ? 7 : 4.5) * s;
-          rotations.head = -0.6 * step;
-          rotations.tail = (run ? 4 : 2.5) * Math.sin(phase + 0.5);
-          bodyY = -step * (run ? 3.4 : 2.2);
-          bodyAngle = run ? 2.2 : 0.6;
+        case 'run':
+          // His walking cycle is drawn frame by frame (below): nothing to turn.
+          bodyY = 0;
           break;
-        }
         case 'jump': {
           const p = t / clip.duration;
           lift = p < 0.18 ? -3 * Math.sin((p / 0.18) * Math.PI) : p < 0.86 ? 32 * Math.sin(((p - 0.18) / 0.68) * Math.PI) : 0;
@@ -295,6 +272,20 @@ export class RasterEngine {
       svg.querySelector('[data-raster-body]')?.setAttribute('transform', `translate(0 ${(bodyY - lift).toFixed(2)}) rotate(${bodyAngle.toFixed(2)} 175 280)`);
     }
 
+    // Walking: the frames of his cycle, in step with the ground he covers; the live canvas waits behind.
+    const walking = this.id === 'walk' || this.id === 'run';
+    if (walking) {
+      const strip = this.box.querySelector<HTMLElement>('[data-raster-walk]');
+      const frame = reduced ? 0 : Math.floor((((elapsed / cycle) % 1) + 1) % 1 * WALK.frames) % WALK.frames;
+      if (strip && strip.dataset.frame !== String(frame)) {
+        strip.dataset.frame = String(frame);
+        strip.style.backgroundPosition = `${((frame / (WALK.frames - 1)) * 100).toFixed(3)}% 0%`;
+      }
+      if (!this.box.hasAttribute('data-walking')) this.box.setAttribute('data-walking', '');
+      this.opts.onFrame?.({ lift: 0, clip: this.id });
+      return;
+    }
+    if (this.box.hasAttribute('data-walking')) this.box.removeAttribute('data-walking');
     const blink = life && elapsed % 4.7 > 4.52 ? Math.sin(((elapsed % 4.7) - 4.52) / 0.18 * Math.PI) : 0;
     if (!this.meshAttempted) {
       const canvas = this.box.querySelector<HTMLCanvasElement>('[data-raster-canvas]');

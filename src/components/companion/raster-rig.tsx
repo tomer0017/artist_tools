@@ -43,16 +43,24 @@ export const RASTER_RIGS: Record<AnimationId,Rig> = {
  holdSign:{...standing,head:{path:rect(50,0,205,179),pivot:[177,175]},tail:{path:'M0 180 H113 L138 238 L139 310 H0Z',pivot:[139,282]},armFront:{path:'M228 184 H286 V268 H237 L228 226Z',pivot:[237,217]},eyes:[[169,120,13,17],[209,113,11,16]]},
 };
 
+/** His walk: the founder's side-view cycle, 8 frames of 120 ms in one strip (scripts/sketchy/walk-cycle.mjs). */
+export const WALK = { src: '/sketchy/walk-cycle.webp', frames: 8, frameMs: 120 } as const;
+
 /**
  * The official artwork of one pose: the WebGL canvas draws it moving (raster-mesh.ts); the still
- * picture underneath shows until then, and stays on devices without WebGL. The empty SVG keeps
- * the stage's anchors and each joint's current turn (read by tests), mirrored with him.
+ * picture underneath shows until then, and stays on devices without WebGL. While he walks, the
+ * frames of his walking cycle show instead (the engine steps through them), and the two
+ * cross-fade. The empty SVG keeps the stage's anchors and each joint's current turn (read by
+ * tests), mirrored with him.
  */
 export function RasterRig({ pose, style }: {pose: AnimationId; style?: React.CSSProperties}) {
+ // The sprite's own proportions, centred like the still picture (never stretched to the box).
+ const frame: React.CSSProperties = {position:'absolute',top:0,left:'50%',height:'100%',aspectRatio:`${SPRITE.w} / ${SPRITE.h}`,transform:'translateX(-50%)'};
+ const fade = 'transition-opacity duration-200 ease-out motion-reduce:transition-none';
  return <div style={{...style,position:'relative'}} data-sketchy-art="official-raster-v1">
-  <img data-raster-fallback src={`/sketchy/${pose}.webp`} alt="" aria-hidden="true" draggable={false} style={{position:'absolute',width:'100%',height:'100%',objectFit:'contain'}} />
-  {/* The sprite's own proportions, centred like the still picture (never stretched to the box). */}
-  <canvas data-raster-canvas aria-hidden="true" style={{position:'absolute',top:0,left:'50%',height:'100%',aspectRatio:`${SPRITE.w} / ${SPRITE.h}`,transform:'translateX(-50%)'}} />
+  <img data-raster-fallback src={`/sketchy/${pose}.webp`} alt="" aria-hidden="true" draggable={false} className={`${fade} [[data-walking]_&]:opacity-0`} style={{position:'absolute',width:'100%',height:'100%',objectFit:'contain'}} />
+  <canvas data-raster-canvas aria-hidden="true" className={`${fade} [[data-walking]_&]:opacity-0`} style={frame} />
+  <div data-raster-walk aria-hidden="true" className={`${fade} opacity-0 [[data-walking]_&]:opacity-100`} style={{...frame,backgroundImage:`url(${WALK.src})`,backgroundSize:`${WALK.frames * 100}% 100%`,backgroundRepeat:'no-repeat',backgroundPosition:'0% 0'}} />
   <svg viewBox={`0 0 ${SPRITE.w} ${SPRITE.h}`} style={{position:'absolute',width:'100%',height:'100%',overflow:'visible'}} aria-hidden="true" data-pose={pose}>
    <g data-raster-body>
     {(['tail','legBack','legFront','head','armFront'] as const).map(part=><g key={part} data-part={part}/>)}

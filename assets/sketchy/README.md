@@ -29,3 +29,13 @@ Limits: this is a 2.5D raster character, not a fully rigged 3D model. Gaze is
 intentionally subtle. Devices without WebGL retain the approved still artwork;
 reduced-motion users get a stable pose, with completion callbacks preserved.
 Source animation plates are finite: direction changes mirror the artwork.
+
+## Walking cycle
+
+`source/walk.gif` (supplied by the founder on 2026-11-25) is the side-view walking
+cycle: 8 frames of 120 ms. `node scripts/sketchy/walk-cycle.mjs` turns it into
+`public/sketchy/walk-cycle.webp`: one strip of 300 × 360 frames, every frame cropped
+and scaled the same way, at the same height and floor line as his standing poses.
+The engine steps through the frames while he walks (`raster-engine.ts`). A planted
+foot moves back about 20 sprite pixels a frame, so he crosses the screen at
+`walkSpeed` and his feet stay put.

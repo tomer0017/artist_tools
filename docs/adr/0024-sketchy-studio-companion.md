@@ -217,3 +217,25 @@ over animation. The stage is simpler now:
 - **The roulette on a phone.** After a spin the result comes first, right
   under the title, with its buttons. The wheel shrinks beside "Spin again",
   and mood and category fold away behind "Change mood or category".
+
+### Third amendment (2026-11-25): back in the hero, a drawn walk
+
+After testing again, the founder chose the original place and a real walk:
+
+- **His home is Home's hero again**: the artwork side (left in Hebrew), on the
+  hero's floor line, never over the headline, never below the hero
+  (`geometryOf`). He walks between his spots there and scrolls away with the
+  hero. Nothing floats. He no longer appears on the Learn home. Out of view he
+  stops (no drawing, no timers).
+- **The walk** is the founder's side-view cycle (`walk.gif`, 8 frames), shown
+  frame by frame from a CSS sprite strip. It cross-fades with the live canvas
+  of his other poses, and his speed matches the measured stride
+  (`walkSpeed`). It works without WebGL too.
+- **A calm daily life**: one thing at a time, each to its end, with pauses of
+  11–22 s. He strolls, sits for a while, draws in his sketchbook, thinks,
+  looks around, or now and then laughs. The pointer close by gets a wave
+  (at most every 45 s). After the admin's "rest after" without anyone around
+  he dozes. Suggestions come on his sign at the admin's pace.
+- **The roulette on phones** is a slot machine. A reel of the same challenges
+  stops the pick on its pay line, with the result and its buttons right under
+  the title. The wheel stays on larger screens.

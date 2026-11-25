@@ -63,6 +63,8 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
   const [group, setGroup] = useState('all');
   const [quick, setQuick] = useState(false);
   const [reel, setReel] = useState<ListEntry[]>([]);
+  // Phones: the same spin on a slot machine (the reel's strip, the row on the pay line, whether it is moving).
+  const [slot, setSlot] = useState<{ strip: ListEntry[]; index: number; animate: boolean }>({ strip: [], index: 1, animate: false });
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [picked, setPicked] = useState<ListEntry | null>(null);
@@ -85,6 +87,7 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
       setSpinning(false);
       setReel([]);
       setRotation(0);
+      setSlot({ strip: [], index: 1, animate: false });
       setOptions(false);
     }
     return () => window.clearTimeout(timer.current);
@@ -100,6 +103,8 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
   const details = item.data?.status === 'open' && item.data.item.kind === 'challenge' ? item.data.item : null;
   // A result to show: it comes first, right under the title, with its buttons (nothing to scroll to on a phone).
   const resultMode = picked !== null && !spinning;
+  const slotStrip = slot.strip.length > 0 ? slot.strip : pool.slice(0, WEDGES);
+  const slotIndex = slot.strip.length > 0 ? slot.index : Math.min(1, Math.max(0, slotStrip.length - 1));
 
   const onSpin = () => {
     if (spinning) return;
@@ -118,9 +123,13 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
     const from = rotation % 360;
     const to = rotation + 4 * 360 + ((target - from + 360) % 360);
     setReel(next);
+    // The slot's strip runs through the same challenges a few times and stops on the pick (its last row).
+    const strip = [...Array(3)].flatMap(() => next.slice(0, -1)).concat(next);
+    setSlot({ strip, index: Math.min(1, strip.length - 1), animate: false });
     setPicked(null);
     if (reducedMotion || next.length === 1) {
       setRotation(to);
+      setSlot({ strip, index: strip.length - 1, animate: false });
       land(pick);
       return;
     }
@@ -128,13 +137,19 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
     setSaid(t('spinning'));
     fox.current?.play('curious');
     // Turn on the next frame so the new wedges are drawn first.
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => setRotation(to)));
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        setRotation(to);
+        setSlot((was) => ({ ...was, index: was.strip.length - 1, animate: true }));
+      }),
+    );
     timer.current = window.setTimeout(() => land(pick), SPIN_MS + 120);
   };
 
   const result = useRef<HTMLElement>(null);
   const land = (pick: ListEntry) => {
     setSpinning(false);
+    setSlot((was) => ({ ...was, animate: false }));
     setPicked(pick);
     setSaid(t('landed', { title: pick.title[locale] }));
     setOptions(false);
@@ -247,10 +262,12 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
             </article>
           )}
 
-          {/* Before a spin: the big wheel, then "Spin!". After one: a small wheel beside "Spin again", below the result. */}
-          <div className={resultMode ? 'mt-4 flex items-center justify-center gap-4' : 'flex flex-col items-center'}>
-            <div className={resultMode ? 'relative flex shrink-0 items-end justify-center' : 'relative mx-auto mt-3 flex w-full max-w-[480px] items-end justify-center py-3'}>
-              <div className={`relative drop-shadow-[0_0_24px_#e99b2430] ${resultMode ? 'h-[min(28vw,120px)] w-[min(28vw,120px)]' : 'h-[min(64vw,320px)] w-[min(64vw,320px)]'}`}>
+          {/* Phones: a slot machine of the challenges, the pick stopping on its pay line. Larger screens: the wheel
+              (after a spin, a small wheel beside "Spin again", below the result). One Sketchy beside either. */}
+          <div className={resultMode ? 'mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-4' : 'flex flex-col items-center'}>
+            <div className={resultMode ? 'relative flex items-end justify-center gap-1 sm:shrink-0' : 'relative mx-auto mt-3 flex w-full max-w-[480px] items-end justify-center gap-1 py-3'}>
+              <Slot entries={slotStrip} index={slotIndex} animate={slot.animate} landed={resultMode} locale={locale} />
+              <div className={`relative hidden drop-shadow-[0_0_24px_#e99b2430] sm:block ${resultMode ? 'h-[120px] w-[120px]' : 'h-[min(64vw,320px)] w-[min(64vw,320px)]'}`}>
                 {/* the pointer */}
                 <svg viewBox="0 0 24 24" className={`absolute left-1/2 z-10 -translate-x-1/2 drop-shadow ${resultMode ? 'top-[-4px] h-5 w-5' : 'top-[-6px] h-7 w-7'}`} aria-hidden="true">
                   <path d="M12 22 L3 4 Q12 0 21 4 Z" fill="#fff0c3" stroke="#f5a623" strokeWidth="1.6" strokeLinejoin="round" />
@@ -265,12 +282,12 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
                 </div>
                 <div className={`pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[#986329] bg-[radial-gradient(circle_at_35%_25%,#fff2c9,#dfb268)] shadow-[0_2px_8px_#311a12] ${resultMode ? 'h-8 w-8 border-2' : 'h-12 w-12 border-[3px]'}`} aria-hidden="true"><Palette className={`text-[#744316] ${resultMode ? 'h-4 w-4' : 'h-6 w-6'}`} /></div>
               </div>
-              <div className={`relative shrink-0 [&>div]:!h-auto [&>div]:!w-full [&>div]:aspect-[248/292] ${resultMode ? '-ms-3 mb-[-3px] w-[clamp(46px,12vw,64px)]' : '-ms-10 mb-[-5px] w-[clamp(92px,24vw,160px)]'}`} aria-hidden="true">
+              <div className={`relative w-[clamp(64px,19vw,88px)] shrink-0 [&>div]:!h-auto [&>div]:!w-full [&>div]:aspect-[248/292] ${resultMode ? 'sm:-ms-3 sm:mb-[-3px] sm:w-[clamp(46px,12vw,64px)]' : 'sm:-ms-10 sm:mb-[-5px] sm:w-[clamp(92px,24vw,160px)]'}`} aria-hidden="true">
                 {ownsFox && <Sketchy ref={fox} height={180} initial="point" facing={locale === 'he' ? 'right' : 'left'} reducedMotion={reducedMotion} />}
               </div>
             </div>
 
-            <div className={resultMode ? 'flex min-w-0 flex-col items-start gap-1.5' : 'flex flex-col items-center'}>
+            <div className={resultMode ? 'flex min-w-0 flex-wrap items-center justify-center gap-x-4 gap-y-1.5 sm:flex-col sm:flex-nowrap sm:items-start' : 'flex flex-col items-center'}>
               <p className={resultMode ? 'text-xs text-muted-foreground' : 'mt-1 text-center text-xs text-muted-foreground'} data-roulette-count={pool.length}>
                 {list.isPending ? t('loading') : list.isError ? '' : t('count', { count: pool.length })}
               </p>
@@ -309,6 +326,28 @@ export function Roulette({ open, onOpenChange, mood: initialMood, classMode = fa
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+const ROW = 46;
+
+/**
+ * Phones: the roulette as a slot machine, easier to read than a small wheel. A reel of challenge
+ * titles runs behind a window of three rows and stops the pick on the pay line in the middle.
+ */
+function Slot({ entries, index, animate, landed, locale }: { entries: ListEntry[]; index: number; animate: boolean; landed: boolean; locale: 'en' | 'he' }) {
+  return (
+    <div className="relative h-[138px] min-w-0 flex-1 overflow-hidden rounded-2xl border-2 border-[#e7b759]/70 bg-[#1d1a17] shadow-[inset_0_2px_14px_#000c] sm:hidden" aria-hidden="true" data-roulette-slot>
+      <div className="pointer-events-none absolute inset-x-1.5 top-[46px] z-10 h-[46px] rounded-xl border-2 border-[#ffcb6e] bg-[#ffcb6e]/10 shadow-[0_0_14px_#ffcb6e55]" />
+      <ul style={{ transform: `translateY(${(1 - index) * ROW}px)`, transition: animate ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.8, 0.1, 1)` : 'none' }}>
+        {entries.map((entry, i) => (
+          <li key={`${entry.id}-${i}`} className={`flex h-[46px] items-center justify-center px-4 text-center text-[15px] font-semibold leading-tight ${landed && i === index ? 'text-[#ffe7a8]' : 'text-foreground/85'}`} data-slot-row={landed && i === index ? 'picked' : undefined}>
+            <span className="line-clamp-2">{entry.title[locale]}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(#1d1a17,transparent_34%,transparent_66%,#1d1a17)]" />
+    </div>
   );
 }
 

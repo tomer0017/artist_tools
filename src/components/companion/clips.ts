@@ -36,7 +36,7 @@ export interface Pose {
 export interface ClipParams {
   /** Where to point, in degrees (0: straight ahead, 90: straight down). */
   aim?: number;
-  /** Walking or running: seconds per stride cycle, matched to how fast he moves across the screen (raster-engine.ts strideCycle). */
+  /** Walking or running: seconds per walking cycle, matched to how fast he moves across the screen (raster-engine.ts walkCycle). */
   cycle?: number;
 }
 

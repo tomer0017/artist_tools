@@ -28,12 +28,13 @@ export default function HomeScreen() {
   const t = useTranslations('studio');
   const tl = useTranslations('landing');
   const content = useRef<HTMLDivElement>(null);
+  const hero = useRef<HTMLElement>(null);
   const companion = useAccount()?.account.companion?.show === true;
   return (
     <div className="flex-1 overflow-y-auto overscroll-contain bg-background">
       <div ref={content} className="relative mx-auto w-full max-w-6xl pb-8">
         {/* Hero */}
-        <section className="relative overflow-hidden px-4 pb-5 pt-3 md:px-6 md:pb-8 md:pt-8 lg:px-8">
+        <section ref={hero} className="relative overflow-hidden px-4 pb-5 pt-3 md:px-6 md:pb-8 md:pt-8 lg:px-8">
           <div
             className="pointer-events-none absolute inset-y-0 end-0 w-[64%] md:w-[55%] rtl:-scale-x-100"
             style={{ maskImage: HERO_FADE, WebkitMaskImage: HERO_FADE }}
@@ -104,13 +105,9 @@ export default function HomeScreen() {
         </p>
         <AccountLine />
         {companion && (
-          <>
-            {/* Room to scroll the last lines above Sketchy where he floats. */}
-            <div aria-hidden="true" className="h-28 md:h-16" data-sketchy-room="" />
-            <Suspense fallback={null}>
-              <CompanionStage screen="home" containerRef={content} />
-            </Suspense>
-          </>
+          <Suspense fallback={null}>
+            <CompanionStage screen="home" containerRef={content} floorRef={hero} />
+          </Suspense>
         )}
       </div>
     </div>

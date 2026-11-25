@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'use-intl';
 import { dayOf, mayOffer, pickTip, remember, snooze, type Context, type Memory } from '@/lib/companion/brain';
 import { canRun } from '@/lib/companion/registry';
@@ -8,10 +7,10 @@ import { classModeOn } from '@/lib/learn/class-mode';
 import { useAccount } from '@/components/shell/account';
 import { useCourseStart } from '@/components/learn/useCourseStart';
 import { CLIPS } from './clips';
-import { dockGeometry, signPlacement, type Geometry } from './geometry';
+import { geometryOf, signPlacement, type Geometry, type Measured } from './geometry';
 import { Menu } from './Menu';
 import { PRIORITY, useSketchyPresence } from './presence';
-import { gaitSpeed, strideCycle } from './raster-engine';
+import { walkCycle, walkSpeed } from './raster-engine';
 import { preloadSketchy } from './raster-mesh';
 import { Roulette } from './Roulette';
 import { Sign } from './Sign';
@@ -20,60 +19,91 @@ import { useAbilities, useRunAction, type MenuView } from './actions';
 import { loadMemory, saveMemory, stageMounted, takePending, useCompanionEvents, useCompanionPrefs, useLastTool, useReducedMotion, type CompanionEvent, type CompanionView } from './state';
 
 // ─── The stage (ADR-0024) ──────────────────────────────────────────────────────
-// Sketchy as a calm personal drawing assistant on Home and the Learn home.
-//   - Once a visit he walks in from the edge of the screen into his corner of
-//     the scrolling area (the end of the reading direction, above a phone's
-//     bottom bar), and stays there while the page scrolls: no other place, no
-//     second entrance, no jumps. Between Home and the Learn home he is simply
-//     there.
-//   - He stands, breathes, blinks and follows the pointer with his eyes;
-//     after a quiet while he sits down, later he dozes; a tap or the pointer
-//     close by and he stands again. Nothing else plays on its own.
+// Sketchy's home: the artwork side of Home's hero (left in Hebrew, right in
+// English), on the hero's floor line, never over the headline, never above
+// the top limit, never below the hero (geometry.ts). He scrolls away with the
+// hero like the rest of the page; out of view he stops completely.
+//   - Once a visit he walks in from the side of the hero (his drawn walking
+//     cycle, in step with the ground he covers); back on Home later he is
+//     simply there.
+//   - He lives there calmly, one thing at a time, each to its end, with quiet
+//     pauses between: a stroll to another spot, sitting for a while, drawing
+//     in his sketchbook, thinking, looking around, now and then a laugh. The
+//     pointer close by gets a wave; his eyes follow it; after minutes without
+//     anyone around he dozes, and wakes when someone is.
 //   - Now and then he pulls out his wooden sign with a suggestion that fits
-//     the moment (the screen, the tool used last, who the person is, what their
-//     plan opens) and a real button; a challenge to spin comes with a little
-//     jump. The pace, the daily cap and "Not now" are the admin's
+//     (the screen, the tool used last, who the person is, what their plan
+//     opens) and a real button; a challenge to spin comes with a little jump.
+//     The pace, the daily cap and "Not now" are the admin's
 //     (../../lib/companion/brain).
 //   - After a save or a completed lesson or challenge he celebrates once and
 //     may suggest a next step.
 //   - A click (or Enter) opens his menu at once.
-//   - While the roulette (or anything else showing its own Sketchy) is open
-//     he is not drawn at all (presence.ts); he is back when it closes.
+//   - While the roulette (or anything else showing its own Sketchy) is open he
+//     is not drawn at all (presence.ts); he is back when it closes.
 // In a hidden tab he stops. With reduced motion he does not walk: he appears,
 // and every pose is still.
 
 export interface StageProps {
   screen: ScreenId;
-  /** The screen's content, inside its scrolling area: his corner is that area's. */
+  /** The element he lives in (position: relative); his floor, text to avoid and top limit are found inside it. */
   containerRef: RefObject<HTMLElement | null>;
+  /** He stands on this element's bottom edge (or on the first match of `floorSelector` inside the container). */
+  floorRef?: RefObject<HTMLElement | null>;
+  floorSelector?: string;
+  /** Stand on the floor element's bottom edge (Home's hero) or its top edge. */
+  floorEdge?: 'top' | 'bottom';
   view: CompanionView;
 }
 
-type Phase = 'waiting' | 'entering' | 'idle' | 'sign' | 'leaving';
+type Phase = 'waiting' | 'entering' | 'idle' | 'acting' | 'sign' | 'leaving';
 type Posture = 'stand' | 'sit' | 'doze';
-type DockGeometry = Geometry & { topLimit: number };
+type Activity = 'stroll' | 'sit' | 'draw' | 'think' | 'look' | 'laugh';
 
 const QUIET_MS = 4000;
 const SIGN_TIMEOUT_MS = 45_000;
-/** After this long with nothing happening he sits down (he dozes after the admin's "rest after"). */
-const SIT_AFTER_MS = 75_000;
-/** The pointer this close (CSS pixels) wakes him. */
-const NEAR = 160;
+/** The calm pause between two things he does on his own (ms). */
+const PAUSE = { min: 11_000, max: 22_000 };
+/** The pointer this close (CSS pixels) wakes him, and now and then gets a wave. */
+const NEAR = 140;
+const WAVE_EVERY_MS = 45_000;
 
-/** This visit (until the page is reloaded): he walks in once and says hello once, on whichever screen. */
+/** This visit (until the page is reloaded): he walks in once and says hello once. */
 const visit = { entered: false, greeted: false };
 
-/**
- * The scrolling area on screen. Its outer sides, scrollbar or not, so his corner is the same on
- * every screen (a desktop scrollbar is narrower than the gap he keeps from the side).
- */
-function areaOf(scroller: HTMLElement | null) {
-  if (!scroller) return { left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight };
-  const r = scroller.getBoundingClientRect();
-  return { left: r.left, right: r.right, top: r.top, bottom: r.top + scroller.clientTop + scroller.clientHeight };
+const between = (min: number, max: number) => min + Math.random() * (max - min);
+
+function measureStage(container: HTMLElement, floor: HTMLElement, edge: 'top' | 'bottom' = 'bottom'): Measured | null {
+  const c = container.getBoundingClientRect();
+  const f = floor.getBoundingClientRect();
+  if (c.width === 0 || f.height === 0) return null;
+  const rtl = getComputedStyle(container).direction === 'rtl';
+  const floorY = (edge === 'top' ? f.top : f.bottom) - c.top - 2;
+  const top = container.querySelector<HTMLElement>('[data-sketchy-top]');
+  const topLimit = (top ? top.getBoundingClientRect().bottom - c.top : edge === 'top' ? 0 : f.top - c.top) + 6;
+  // Only text in the band where he stands (between the top limit and the floor) has to stay clear.
+  let textEnd = 0;
+  for (const el of container.querySelectorAll<HTMLElement>('[data-sketchy-avoid]')) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    for (const r of range.getClientRects()) {
+      if (r.width === 0 || r.bottom - c.top < topLimit || r.top - c.top > floorY) continue;
+      textEnd = Math.max(textEnd, rtl ? c.right - r.left : r.right - c.left);
+    }
+  }
+  return { width: c.width, floor: floorY, textEnd, topLimit, rtl, narrow: window.innerWidth < 768 };
 }
 
-export function Stage({ screen, containerRef, view }: StageProps) {
+export function Stage({ screen, containerRef, floorRef: floorRefProp, floorSelector, floorEdge = 'bottom', view }: StageProps) {
+  // The floor: the element given, or found inside the container when the stage cannot reach it directly.
+  const floorRef = useMemo<RefObject<HTMLElement | null>>(
+    () => ({
+      get current() {
+        return floorRefProp?.current ?? (floorSelector ? (containerRef.current?.querySelector<HTMLElement>(floorSelector) ?? null) : null);
+      },
+    }),
+    [containerRef, floorRefProp, floorSelector],
+  );
   const t = useTranslations('companion');
   const locale = useLocale() === 'he' ? 'he' : 'en';
   const account = useAccount();
@@ -87,7 +117,7 @@ export function Stage({ screen, containerRef, view }: StageProps) {
   // He is drawn only while nothing else shows its own Sketchy (the roulette).
   const owns = useSketchyPresence(`stage:${screen}`, PRIORITY.stage);
 
-  const [geo, setGeo] = useState<DockGeometry | null>(null);
+  const [geo, setGeo] = useState<Geometry | null>(null);
   // Read the latest geometry inside callbacks that outlive a render (his entrance, a sign shown later).
   const geoRef = useRef(geo);
   geoRef.current = geo;
@@ -98,10 +128,12 @@ export function Stage({ screen, containerRef, view }: StageProps) {
   const [moveMs, setMoveMs] = useState(0);
   const [faded, setFaded] = useState(true);
   const [pageShown, setPageShown] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  const [arrived, setArrived] = useState(false);
+  const [inView, setInView] = useState(true);
   const [tip, setTip] = useState<CompanionTip | null>(null);
   const [signPos, setSignPos] = useState<{ left: number; top: number; width: number; below: boolean; maxHeight: number | null } | null>(null);
   const [menu, setMenu] = useState<MenuView | null>(null);
-  const [menuPos, setMenuPos] = useState<{ left: number; top: number; maxHeight: number | null } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [roulette, setRoulette] = useState<{ mood?: Mood; classMode?: boolean } | null>(null);
   const [said, setSaid] = useState('');
 
@@ -115,14 +147,18 @@ export function Stage({ screen, containerRef, view }: StageProps) {
   const memory = useRef<Memory | null>(null);
   const timers = useRef(new Set<number>());
   const lastInput = useRef(0);
-  /** The last thing that happened (arrival, a sign, the menu, a celebration): he sits and dozes after a long quiet. */
-  const lastEvent = useRef(Date.now());
   const arrivedAt = useRef(Date.now());
   const xNow = useRef<number | null>(null);
+  const spotIndex = useRef(0);
+  /** When he next does something on his own. */
+  const nextActAt = useRef(Date.now() + 9_000);
+  const lastWave = useRef(0);
   /** Only the newest quiet loop runs (each effect run starts a new one). */
   const loop = useRef(0);
-  /** His entrance; a newer one (or hiding him) stops an older one where it is. */
+  /** Each walk in or out; a newer one (or hiding him) stops an older one where it is. */
   const moves = useRef(0);
+  /** What he is doing on his own; anything the person asks for ends it. */
+  const deeds = useRef(0);
   /** His hello on this visit; asking for him (a click) cancels one still on its way. */
   const hello = useRef(0);
   const menuOpen = useRef(false);
@@ -162,44 +198,57 @@ export function Stage({ screen, containerRef, view }: StageProps) {
     },
     [clearTimers],
   );
-  const scroller = useCallback(() => containerRef.current?.closest<HTMLElement>('.overflow-y-auto') ?? null, [containerRef]);
 
   const allowed = useCallback((id: AnimationId) => settings.animations[id] !== false, [settings.animations]);
   /** A clip, or a calmer one when the admin switched it off. */
   const choose = useCallback(
     (id: AnimationId): AnimationId => {
-      const fallbacks: Partial<Record<AnimationId, AnimationId[]>> = { run: ['walk'], celebrate: ['jump', 'wave'], jump: ['celebrate', 'wave'], rest: ['sit'], sit: ['idle'] };
+      const fallbacks: Partial<Record<AnimationId, AnimationId[]>> = {
+        celebrate: ['jump', 'wave'],
+        jump: ['celebrate', 'wave'],
+        laugh: ['wave'],
+        rest: ['sit'],
+        sit: ['idle'],
+        draw: ['think'],
+        curious: ['think'],
+        think: ['curious'],
+        point: ['holdSign'],
+      };
       for (const c of [id, ...(fallbacks[id] ?? [])]) if (allowed(c)) return c;
       return 'idle';
     },
     [allowed],
   );
-  /** Play a clip; resolves when a clip that ends has ended, or after `ms` for one that loops. */
+  /** Play a clip to its end (one that ends), or for `ms` (one that loops). */
   const play = useCallback(
-    (id: AnimationId, ms = 1600) =>
+    (id: AnimationId, ms = 1600, params?: { aim?: number }) =>
       new Promise<void>((resolve) => {
         const clip = choose(id);
         if (!fox.current) return resolve();
         if (CLIPS[clip].loop || reduced) {
-          fox.current.play(clip);
+          fox.current.play(clip, { params });
           later(reduced ? Math.min(ms, 900) : ms, resolve);
-        } else fox.current.play(clip, { onEnd: () => resolve(), restart: true });
+        } else fox.current.play(clip, { params, onEnd: () => resolve(), restart: true });
       }),
     [choose, later, reduced],
   );
-  /** Back to standing quietly (after a sign, the menu or a celebration). */
+  /** Whatever he was doing on his own ends here. */
+  const interrupt = useCallback(() => {
+    deeds.current += 1;
+    if (phase.current === 'acting') phase.current = 'idle';
+  }, []);
+  /** Back to standing quietly. */
   const settle = useCallback(() => {
     posture.current = 'stand';
-    lastEvent.current = Date.now();
     if (phase.current === 'idle') fox.current?.play('idle');
+    nextActAt.current = Math.max(nextActAt.current, Date.now() + PAUSE.min);
   }, []);
   /** Up from sitting or dozing, without a fuss. */
   const wake = useCallback(() => {
-    lastEvent.current = Date.now();
-    if (posture.current === 'stand' || phase.current !== 'idle') return;
-    posture.current = 'stand';
-    fox.current?.play('idle');
-  }, []);
+    if (posture.current === 'stand' || (phase.current !== 'idle' && phase.current !== 'acting')) return;
+    interrupt();
+    settle();
+  }, [interrupt, settle]);
 
   const persist = useCallback(
     (next: Memory) => {
@@ -209,41 +258,55 @@ export function Stage({ screen, containerRef, view }: StageProps) {
     [userId],
   );
 
-  // ── his corner ─────────────────────────────────────────────────────────────
+  // ── his room in the hero ───────────────────────────────────────────────────
   useLayoutEffect(() => {
-    const area = scroller();
+    const container = containerRef.current;
+    const floor = floorRef.current;
+    if (!container || !floor) return;
     const update = () => {
-      const rtl = getComputedStyle(containerRef.current ?? document.documentElement).direction === 'rtl';
-      const next = dockGeometry(areaOf(area), window.innerWidth, rtl, window.innerWidth < 768, settings.size);
+      const measured = measureStage(container, floor, floorEdge);
+      const next = measured ? geometryOf(measured, settings.size) : null;
       setGeo((was) => (JSON.stringify(was) === JSON.stringify(next) ? was : next));
     };
     update();
     const observer = new ResizeObserver(update);
-    if (area) observer.observe(area);
-    window.addEventListener('resize', update);
+    observer.observe(container);
+    observer.observe(floor);
     window.addEventListener('orientationchange', update);
+    // Web fonts change where the text ends.
+    void document.fonts?.ready.then(update).catch(() => {});
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', update);
       window.removeEventListener('orientationchange', update);
     };
-  }, [containerRef, scroller, settings.size]);
+  }, [containerRef, floorRef, floorEdge, settings.size]);
 
-  // His corner moved (rotation, a resized window, a phone's toolbar): he is in it at once.
+  // The room changed (rotation, resizing): he is on a valid spot at once.
   useEffect(() => {
     if (!geo || xNow.current === null || phase.current === 'waiting' || phase.current === 'entering' || phase.current === 'leaving') return;
-    xNow.current = geo.spots[0];
+    spotIndex.current = Math.min(spotIndex.current, geo.spots.length - 1);
+    const spot = geo.spots[spotIndex.current];
+    interrupt();
+    xNow.current = spot;
     setMoveMs(0);
-    setX(geo.spots[0]);
+    setX(spot);
     setFacing(geo.facing);
-  }, [geo]);
+  }, [geo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── a hidden tab: he stops ─────────────────────────────────────────────────
+  // ── a hidden tab, or the hero scrolled away: he stops ──────────────────────
   useEffect(() => {
     const onVis = () => setPageShown(document.visibilityState === 'visible');
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
+  useEffect(() => {
+    const el = foxBox.current;
+    if (!el || !arrived) return;
+    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [arrived, owns]);
+  const shown = pageShown && inView;
 
   // ── suggestions ────────────────────────────────────────────────────────────
   const contextFor = useCallback(
@@ -255,28 +318,21 @@ export function Stage({ screen, containerRef, view }: StageProps) {
   );
 
   const placeSign = useCallback(() => {
+    const container = containerRef.current;
+    const floor = floorRef.current;
     const sign = signEl.current;
     const box = foxBox.current;
     const g = geoRef.current;
-    if (!sign || !box || !g) return;
-    const width = window.innerWidth;
+    if (!container || !floor || !sign || !box || !g) return;
+    const c = container.getBoundingClientRect();
     const r = box.getBoundingClientRect();
-    const at = { left: r.left, right: r.right, top: r.top, height: r.height };
-    const room = { width, topLimit: g.topLimit, floor: g.floor };
+    const at = { left: r.left - c.left, right: r.right - c.left, top: r.top - c.top, height: r.height };
+    const room = { width: c.width, topLimit: measureStage(container, floor, floorEdge)?.topLimit ?? 8, floor: g.floor };
     // Two steps: the width first (the text wraps to it), then the height it takes.
     const first = signPlacement(at, sign.offsetHeight, room, facingRef.current);
     sign.style.width = `${first.width}px`;
-    const placed = signPlacement(at, sign.offsetHeight, room, facingRef.current);
-    if (placed.below) {
-      // Nothing below him in his corner: on a very narrow screen the sign goes above him.
-      const w = Math.min(placed.width, width - 16);
-      const left = Math.min(Math.max(8, (at.left + at.right) / 2 - w / 2), width - w - 8);
-      const above = at.top - 4 - g.topLimit;
-      setSignPos({ left: Math.round(left), top: Math.round(Math.max(g.topLimit, at.top - sign.offsetHeight - 4)), width: w, below: false, maxHeight: above < sign.offsetHeight ? Math.round(above) : null });
-      return;
-    }
-    setSignPos(placed);
-  }, []);
+    setSignPos(signPlacement(at, sign.offsetHeight, room, facingRef.current));
+  }, [containerRef, floorRef, floorEdge]);
 
   const closeSign = useCallback(
     (snoozed: boolean) => {
@@ -296,6 +352,7 @@ export function Stage({ screen, containerRef, view }: StageProps) {
   const present = useCallback(
     async (next: CompanionTip) => {
       if (!fox.current || !geoRef.current) return;
+      interrupt();
       phase.current = 'sign';
       posture.current = 'stand';
       const now = Date.now();
@@ -316,7 +373,7 @@ export function Stage({ screen, containerRef, view }: StageProps) {
         if (phase.current === 'sign') closeSign(false);
       });
     },
-    [choose, closeSign, later, locale, persist, play, reduced, t],
+    [choose, closeSign, interrupt, later, locale, persist, play, reduced, t],
   );
 
   const offer = useCallback(
@@ -339,13 +396,17 @@ export function Stage({ screen, containerRef, view }: StageProps) {
     setMenuPos(null);
     setMenu(v);
   }, []);
-  const openRoulette = useCallback((o: { mood?: Mood; classMode?: boolean }) => {
-    setMenu(null);
-    setTip(null);
-    setSignPos(null);
-    phase.current = phase.current === 'sign' ? 'idle' : phase.current;
-    setRoulette(o);
-  }, []);
+  const openRoulette = useCallback(
+    (o: { mood?: Mood; classMode?: boolean }) => {
+      interrupt();
+      setMenu(null);
+      setTip(null);
+      setSignPos(null);
+      if (phase.current === 'sign') phase.current = 'idle';
+      setRoulette(o);
+    },
+    [interrupt],
+  );
   const host = useMemo(() => ({ openRoulette, openMenu, nextLessonHref: nextLesson && !nextLesson.loading ? nextLesson.href : null }), [nextLesson, openMenu, openRoulette]);
   const runAction = useRunAction(host, can);
 
@@ -370,10 +431,10 @@ export function Stage({ screen, containerRef, view }: StageProps) {
     options[Math.floor(Math.random() * options.length)]();
   }, [can, contextFor, drawingTips.length, nextLesson, openRoulette, present, runAction, view.tips]);
 
-  // ── moving ─────────────────────────────────────────────────────────────────
-  /** Walk (or run) to `target` at his natural rhythm, his steps matched to the ground he covers. */
+  // ── walking ────────────────────────────────────────────────────────────────
+  /** Walk to `target` (his drawn walking cycle, in step with the ground he covers). */
   const walkTo = useCallback(
-    (target: number, run = false) =>
+    (target: number) =>
       new Promise<void>((resolve) => {
         const g = geoRef.current;
         if (!g) return resolve();
@@ -391,39 +452,102 @@ export function Stage({ screen, containerRef, view }: StageProps) {
           });
           return;
         }
-        const clip = run ? choose('run') : 'walk';
-        const gait = clip === 'run' ? 'run' : 'walk';
         setFacing(target < from ? 'left' : 'right');
-        const pxPerSec = gaitSpeed(gait, g.height, settings.speed);
-        fox.current?.play(clip, { params: { cycle: strideCycle(gait, pxPerSec, g.height) } });
+        const pxPerSec = walkSpeed(g.height, settings.speed);
+        fox.current?.play('walk', { params: { cycle: walkCycle(settings.speed) } });
         const ms = Math.round((dist / pxPerSec) * 1000);
         setMoveMs(ms);
         xNow.current = target;
         setX(target);
         later(ms + 30, resolve);
       }),
-    [allowed, choose, later, reduced, settings.speed],
+    [allowed, later, reduced, settings.speed],
   );
+
+  /** Stop where he is now (on his way somewhere). */
+  const stopHere = useCallback(() => {
+    const box = foxBox.current;
+    const container = containerRef.current;
+    const g = geoRef.current;
+    if (!box || !container || !g) return;
+    const r = box.getBoundingClientRect();
+    const here = r.left + r.width / 2 - container.getBoundingClientRect().left;
+    moves.current += 1;
+    xNow.current = here;
+    setMoveMs(0);
+    setX(here);
+    setFaded(false);
+    setFacing(g.facing);
+  }, [containerRef]);
 
   const hide = useCallback(async (): Promise<boolean> => {
     const ok = await savePrefs({ hidden: true }, { refresh: false });
     if (!ok) return false;
     setMenu(null);
+    interrupt();
     phase.current = 'leaving';
     moves.current += 1;
     clearTimers();
     await play('wave', 1800);
     const g = geoRef.current;
-    if (g && !reduced && allowed('walk')) {
-      setFacing(g.offstage > (xNow.current ?? 0) ? 'right' : 'left');
-      await walkTo(g.offstage);
-    } else {
+    if (g && !reduced && allowed('walk')) await walkTo(g.offstage);
+    else {
       setFaded(true);
       await wait(350);
     }
     await account?.refresh();
     return true;
-  }, [account, allowed, clearTimers, play, reduced, savePrefs, wait, walkTo]);
+  }, [account, allowed, clearTimers, interrupt, play, reduced, savePrefs, wait, walkTo]);
+
+  // ── what he does on his own, one thing at a time, each to its end ──────────
+  const act = useCallback(async () => {
+    const g = geoRef.current;
+    if (!g || !fox.current) return;
+    const deed = ++deeds.current;
+    const still = () => deed === deeds.current && alive.current && phase.current === 'acting';
+    phase.current = 'acting';
+    posture.current = 'stand';
+    const choices: [Activity, number][] = [
+      ['sit', 2],
+      ['draw', 2],
+      ['think', 1.5],
+      ['look', 1.5],
+      ['laugh', 0.5],
+    ];
+    if (settings.wander && !g.compact && g.spots.length > 1) choices.unshift(['stroll', 3]);
+    let roll = Math.random() * choices.reduce((sum, [, w]) => sum + w, 0);
+    let doing: Activity = choices[0][0];
+    for (const [what, w] of choices) {
+      roll -= w;
+      if (roll < 0) {
+        doing = what;
+        break;
+      }
+    }
+    if (doing === 'stroll') {
+      const others = g.spots.map((_, i) => i).filter((i) => i !== spotIndex.current);
+      spotIndex.current = others[Math.floor(Math.random() * others.length)] ?? 0;
+      await walkTo(g.spots[spotIndex.current]);
+      if (!still()) return;
+      setFacing(g.facing);
+      fox.current?.play('idle');
+      await wait(1500);
+    } else if (doing === 'sit') {
+      posture.current = 'sit';
+      fox.current?.play(choose('sit'));
+      await wait(between(14_000, 22_000));
+    } else if (doing === 'draw') {
+      fox.current?.play(choose('draw'));
+      await wait(between(7_000, 10_000));
+    } else if (doing === 'think') await play('think', CLIPS.think.duration * 1000);
+    else if (doing === 'look') await play('curious', CLIPS.curious.duration * 1000);
+    else await play('laugh');
+    if (!still()) return;
+    phase.current = 'idle';
+    posture.current = 'stand';
+    fox.current?.play('idle');
+    nextActAt.current = Date.now() + between(PAUSE.min, PAUSE.max);
+  }, [choose, play, settings.wander, wait, walkTo]);
 
   /** His hello on this visit: the introduction, a celebration of what just happened, or the day's greeting. */
   const greet = useCallback(
@@ -454,7 +578,7 @@ export function Stage({ screen, containerRef, view }: StageProps) {
     [choose, contextFor, offer, persist, play, present, settings.celebrate, settle, view.tips],
   );
 
-  // ── his entrance: once a visit, from the edge of the screen into his corner ──
+  // ── his entrance: once a visit, walking in from the side of the hero ───────
   useEffect(() => {
     if (!geo || !userId || phase.current !== 'waiting') return;
     memory.current = loadMemory(userId);
@@ -463,11 +587,11 @@ export function Stage({ screen, containerRef, view }: StageProps) {
     const walkIn = !visit.entered && !reduced && allowed('walk');
     visit.entered = true;
     const spot = geo.spots[0];
+    spotIndex.current = 0;
     xNow.current = walkIn ? geo.offstage : spot;
     setMoveMs(0);
     setX(xNow.current);
     setFacing(geo.facing);
-    // Back on another screen of this visit he is simply there.
     setFaded(walkIn);
     void (async () => {
       // His artwork is ready before he moves (never a still picture sliding in).
@@ -480,15 +604,17 @@ export function Stage({ screen, containerRef, view }: StageProps) {
       phase.current = 'idle';
       posture.current = 'stand';
       arrivedAt.current = Date.now();
-      lastEvent.current = Date.now();
-      if (walkIn) fox.current?.play('idle');
+      nextActAt.current = Date.now() + between(PAUSE.min, PAUSE.max);
+      setArrived(true);
+      fox.current?.play('idle');
       if (!visit.greeted) await greet(walkIn);
     })();
   }, [geo, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── the person's input (he never interrupts it), the pointer and taps ──────
   useEffect(() => {
-    const area = scroller() ?? window;
+    const container = containerRef.current;
+    const area = container?.closest('.overflow-y-auto') ?? window;
     const input = () => {
       lastInput.current = Date.now();
     };
@@ -504,7 +630,21 @@ export function Stage({ screen, containerRef, view }: StageProps) {
       const dx = px - (r.left + r.width / 2);
       const dy = py - (r.top + r.height * 0.32);
       const d = Math.hypot(dx, dy);
-      if (d < NEAR) wake();
+      if (d < NEAR) {
+        input();
+        wake();
+        // Someone came to see him: now and then, a wave.
+        if (phase.current === 'idle' && Date.now() - lastWave.current > WAVE_EVERY_MS && allowed('wave')) {
+          lastWave.current = Date.now();
+          const deed = ++deeds.current;
+          phase.current = 'acting';
+          void play('wave').then(() => {
+            if (deed !== deeds.current || phase.current !== 'acting') return;
+            phase.current = 'idle';
+            fox.current?.play('idle');
+          });
+        }
+      }
       // His own frame: forward is the way he faces; close by he looks less far.
       const toward = facingRef.current === 'left' ? -1 : 1;
       const reach = Math.min(1, d / 160);
@@ -543,11 +683,11 @@ export function Stage({ screen, containerRef, view }: StageProps) {
       document.removeEventListener('mouseout', onOut);
       area.removeEventListener('scroll', input);
     };
-  }, [scroller, wake]);
+  }, [allowed, containerRef, play, wake]);
 
-  // ── the quiet loop: a suggestion now and then; sitting, then dozing, after a long quiet ──
+  // ── the quiet loop: a suggestion now and then, something to do, dozing after a long quiet ──
   useEffect(() => {
-    if (!geo || !pageShown || !owns) return;
+    if (!geo || !shown || !owns) return;
     const generation = ++loop.current;
     const tick = () => {
       if (!alive.current || generation !== loop.current) return;
@@ -555,14 +695,11 @@ export function Stage({ screen, containerRef, view }: StageProps) {
       const busy = phase.current !== 'idle' || menu !== null || roulette !== null || tip !== null;
       if (!busy && now - lastInput.current > QUIET_MS) {
         if (now - arrivedAt.current >= settings.tipAfterSec * 1000 && offer('idle')) return;
-        const still = now - lastEvent.current;
-        if (posture.current !== 'doze' && still >= settings.restAfterSec * 1000 && allowed('rest')) {
+        // Nobody around for a long while: he dozes off (a tap or the pointer near wakes him).
+        if (posture.current !== 'doze' && now - Math.max(lastInput.current, arrivedAt.current) >= settings.restAfterSec * 1000 && allowed('rest')) {
           posture.current = 'doze';
           fox.current?.play('rest');
-        } else if (posture.current === 'stand' && still >= SIT_AFTER_MS) {
-          posture.current = 'sit';
-          fox.current?.play(choose('sit'));
-        }
+        } else if (posture.current !== 'doze' && now >= nextActAt.current) void act();
       }
       later(1000, tick);
     };
@@ -574,53 +711,60 @@ export function Stage({ screen, containerRef, view }: StageProps) {
       window.clearTimeout(id);
       held.delete(id);
     };
-  }, [geo, pageShown, owns, menu, roulette, tip, settings, offer, later, allowed, choose]);
+  }, [geo, shown, owns, menu, roulette, tip, settings, offer, later, allowed, act]);
 
   // ── good news from elsewhere on the page ───────────────────────────────────
   const onEvent = useCallback(
     (event: CompanionEvent) => {
-      if (!settings.celebrate || phase.current !== 'idle' || menu !== null || roulette !== null) return;
+      if (!settings.celebrate || (phase.current !== 'idle' && phase.current !== 'acting') || menu !== null || roulette !== null) return;
       takePending();
+      if (phase.current === 'acting') stopHere();
+      interrupt();
       posture.current = 'stand';
       void play(choose('celebrate')).then(() => {
         if (!offer(event.type === 'saved' ? 'afterSave' : 'afterComplete') && phase.current === 'idle') settle();
       });
     },
-    [choose, menu, offer, play, roulette, settings.celebrate, settle],
+    [choose, interrupt, menu, offer, play, roulette, settings.celebrate, settle, stopHere],
   );
   useCompanionEvents(onEvent);
 
-  // ── the menu's place: above him, beside him, or above him with its entries scrolling ──
+  // ── the menu's place: above him, beside him, or (narrow screens) just below his feet ──
   useLayoutEffect(() => {
-    if (!menu || !menuEl.current || !geo || xNow.current === null) return;
-    const width = window.innerWidth;
+    const container = containerRef.current;
+    const floor = floorRef.current;
+    if (!menu || !menuEl.current || !container || !floor || !geo || xNow.current === null) return;
+    const c = container.getBoundingClientRect();
     const m = menuEl.current;
-    const top = geo.topLimit;
+    const top = measureStage(container, floor, floorEdge)?.topLimit ?? 8;
     const foxLeft = xNow.current - geo.width / 2;
     const foxRight = xNow.current + geo.width / 2;
-    const above = geo.floor - geo.height - 6 - top;
-    const beside = facing === 'left' ? foxLeft - 12 : width - foxRight - 12;
+    const above = geo.floor - geo.height - m.offsetHeight - 6;
+    const roomBeside = facing === 'left' ? foxLeft - 12 : c.width - foxRight - 12;
     let left: number;
     let at: number;
-    let maxHeight: number | null = null;
-    if (m.offsetHeight <= above) {
+    if (above >= top) {
       left = xNow.current - m.offsetWidth / 2;
-      at = geo.floor - geo.height - 6 - m.offsetHeight;
-    } else if (beside >= m.offsetWidth) {
+      at = above;
+    } else if (roomBeside >= m.offsetWidth) {
       left = facing === 'left' ? foxLeft - m.offsetWidth - 4 : foxRight + 4;
       at = Math.max(top, geo.floor - m.offsetHeight);
-      if (m.offsetHeight > geo.floor - top) maxHeight = geo.floor - top;
     } else {
       left = xNow.current - m.offsetWidth / 2;
-      at = top;
-      maxHeight = Math.max(160, above);
+      at = geo.floor + 6;
     }
-    setMenuPos({ left: Math.round(Math.min(Math.max(8, left), Math.max(8, width - m.offsetWidth - 8))), top: Math.round(at), maxHeight: maxHeight === null ? null : Math.round(maxHeight) });
-  }, [menu, geo, facing]);
+    setMenuPos({ left: Math.round(Math.min(Math.max(8, left), Math.max(8, c.width - m.offsetWidth - 8))), top: Math.round(at) });
+    window.requestAnimationFrame(() => m.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }));
+  }, [menu, geo, facing, containerRef, floorRef, floorEdge]);
+
+  // Below him there is no post to hold: he points down at the sign instead.
+  useEffect(() => {
+    if (signPos?.below && allowed('point')) fox.current?.play('point', { params: { aim: 75 } });
+  }, [signPos?.below, allowed]);
 
   useLayoutEffect(() => {
     if (!tip) return;
-    // The sign takes its place once he holds the post up (the next frames), and again when his corner moves.
+    // The sign takes its place once he holds the post up (the next frames), and again when the room changes.
     placeSign();
     const id = later(320, placeSign);
     return () => window.clearTimeout(id);
@@ -638,11 +782,17 @@ export function Stage({ screen, containerRef, view }: StageProps) {
 
   const onFoxClick = () => {
     if (phase.current === 'leaving') return;
-    // Asked for: no hello on top (on his way in he finishes walking into his corner).
+    // Asked for: what he was doing stops where he is, and no hello comes on top.
+    if (phase.current === 'entering' || phase.current === 'acting') {
+      stopHere();
+      arrivedAt.current = Date.now();
+      setArrived(true);
+    }
+    interrupt();
+    phase.current = phase.current === 'sign' ? 'sign' : 'idle';
     visit.greeted = true;
     hello.current += 1;
     posture.current = 'stand';
-    lastEvent.current = Date.now();
     if (menu) {
       setMenu(null);
       settle();
@@ -653,7 +803,7 @@ export function Stage({ screen, containerRef, view }: StageProps) {
       setSignPos(null);
       phase.current = 'idle';
     }
-    if (phase.current === 'idle') fox.current?.play('idle');
+    fox.current?.play('idle');
     setMenu('main');
   };
 
@@ -674,16 +824,17 @@ export function Stage({ screen, containerRef, view }: StageProps) {
     runAction(action);
   };
 
-  if (!geo) return <div aria-hidden="true" className="hidden" data-sketchy-stage="waiting" />;
+  if (!geo || x === null) return <div aria-hidden="true" className="hidden" data-sketchy-stage="waiting" />;
 
-  const scene =
-    x !== null && owns ? (
-      <div className="pointer-events-none fixed inset-0 z-30 overflow-hidden" data-sketchy-stage={screen} data-sketchy-dock="" data-sketchy-motion={reduced ? 'reduced' : 'full'}>
+  const top = geo.floor - geo.height;
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" data-sketchy-stage={screen} data-sketchy-compact={geo.compact || undefined} data-sketchy-motion={reduced ? 'reduced' : 'full'}>
+      {owns && (
         <div
           ref={foxBox}
           className="pointer-events-none absolute left-0 top-0"
           style={{
-            transform: `translate3d(${Math.round(x - geo.width / 2)}px, ${Math.round(geo.floor - geo.height)}px, 0)`,
+            transform: `translate3d(${Math.round(x - geo.width / 2)}px, ${Math.round(top)}px, 0)`,
             transition: `transform ${moveMs}ms linear, opacity 320ms ease`,
             opacity: faded ? 0 : 1,
             width: geo.width,
@@ -703,54 +854,49 @@ export function Stage({ screen, containerRef, view }: StageProps) {
             data-sketchy-button=""
           />
           <div className="pointer-events-none absolute inset-0">
-            <Sketchy ref={fox} height={geo.height} facing={facing} reducedMotion={reduced} idleLife={settings.idleLife} paused={!pageShown} initial="idle" />
+            <Sketchy ref={fox} height={geo.height} facing={facing} reducedMotion={reduced} idleLife={settings.idleLife} paused={!shown} initial="idle" />
           </div>
         </div>
+      )}
 
-        {tip && (
-          <Sign
-            ref={signEl}
-            tip={tip}
-            locale={locale}
-            actionable={canRun(tip.action, can)}
-            onAction={onSignAction}
-            onDismiss={() => closeSign(true)}
-            onClose={() => closeSign(false)}
-            below={false}
-            style={signPos ? { left: signPos.left, top: signPos.top, width: signPos.width, ...(signPos.maxHeight ? { maxHeight: signPos.maxHeight, display: 'flex' } : {}) } : { left: -10000, top: 0, visibility: 'hidden' }}
-          />
-        )}
+      {owns && tip && (
+        <Sign
+          ref={signEl}
+          tip={tip}
+          locale={locale}
+          actionable={canRun(tip.action, can)}
+          onAction={onSignAction}
+          onDismiss={() => closeSign(true)}
+          onClose={() => closeSign(false)}
+          below={signPos?.below === true}
+          style={signPos ? { left: signPos.left, top: signPos.top, width: signPos.width, ...(signPos.maxHeight ? { maxHeight: signPos.maxHeight, display: 'flex' } : {}) } : { left: -10000, top: 0, visibility: 'hidden' }}
+        />
+      )}
 
-        {menu && (
-          <Menu
-            ref={menuEl}
-            view={menu}
-            setView={setMenu}
-            onClose={closeMenu}
-            can={can}
-            locale={locale}
-            audience={audienceSaid}
-            drawingTips={drawingTips}
-            pickDrawingTip={pickDrawingTip}
-            runAction={(action) => {
-              setMenu(null);
-              runAction(action);
-            }}
-            openRoulette={openRoulette}
-            surprise={surprise}
-            nextLesson={nextLesson}
-            saveAudience={(a) => savePrefs({ audience: a })}
-            hide={hide}
-            ready={menuPos !== null}
-            style={menuPos ? { left: menuPos.left, top: menuPos.top, ...(menuPos.maxHeight ? { maxHeight: menuPos.maxHeight, overflowY: 'auto' } : {}) } : { left: -10000, top: 0, visibility: 'hidden' }}
-          />
-        )}
-      </div>
-    ) : null;
-
-  return (
-    <>
-      {scene && createPortal(scene, document.body)}
+      {owns && menu && (
+        <Menu
+          ref={menuEl}
+          view={menu}
+          setView={setMenu}
+          onClose={closeMenu}
+          can={can}
+          locale={locale}
+          audience={audienceSaid}
+          drawingTips={drawingTips}
+          pickDrawingTip={pickDrawingTip}
+          runAction={(action) => {
+            setMenu(null);
+            runAction(action);
+          }}
+          openRoulette={openRoulette}
+          surprise={surprise}
+          nextLesson={nextLesson}
+          saveAudience={(a) => savePrefs({ audience: a })}
+          hide={hide}
+          ready={menuPos !== null}
+          style={menuPos ? { left: menuPos.left, top: menuPos.top } : { left: -10000, top: 0, visibility: 'hidden' }}
+        />
+      )}
 
       {roulette && (
         <Roulette
@@ -758,7 +904,7 @@ export function Stage({ screen, containerRef, view }: StageProps) {
           onOpenChange={(o) => {
             if (!o) {
               setRoulette(null);
-              lastEvent.current = Date.now();
+              settle();
               window.setTimeout(() => button.current?.focus({ preventScroll: true }), 0);
             }
           }}
@@ -772,6 +918,6 @@ export function Stage({ screen, containerRef, view }: StageProps) {
       <p aria-live="polite" className="sr-only">
         {said}
       </p>
-    </>
+    </div>
   );
 }

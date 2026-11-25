@@ -8,7 +8,7 @@ import { companionEn, companionHe } from '@/i18n/messages/companion';
 import { Sign } from '@/components/companion/Sign';
 import { Sketchy, type SketchyHandle } from '@/components/companion/Sketchy';
 import { CLIPS } from '@/components/companion/clips';
-import { WIDTH_RATIO, dockHeight, signPlacement } from '@/components/companion/geometry';
+import { BASE_HEIGHT, WIDTH_RATIO, signPlacement } from '@/components/companion/geometry';
 
 // The preview stage of Admin → Companion (ADR-0024): the real Sketchy and
 // his real sign, as the studio shows them (the sign on the post he holds), on
@@ -68,8 +68,8 @@ export function CompanionPreview({
     if (request.nonce > 0) section.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   }, [request.nonce]);
 
-  // His size where he floats in the studio: a phone's, or a desktop's.
-  const height = width === 'phone' ? dockHeight(390, true, size) : dockHeight(1280, false, size);
+  // His standard size in Home's hero: a phone's, or a desktop's.
+  const height = Math.round((width === 'phone' ? BASE_HEIGHT.narrow : BASE_HEIGHT.wide) * (size / 100));
   const rtl = locale === 'he';
   const boxHeight = request.tip ? 380 : 300;
 

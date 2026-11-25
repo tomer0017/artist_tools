@@ -2,7 +2,7 @@ import {afterEach,describe,expect,it,vi} from 'vitest';
 import {cleanup,render} from '@testing-library/react';
 import {ANIMATIONS} from '@/lib/companion/model';
 import {RasterRig} from './raster-rig';
-import {CADENCE, RasterEngine, SWING, gaitSpeed, strideCycle} from './raster-engine';
+import {RasterEngine, WALK_STRIDE, walkCycle, walkSpeed} from './raster-engine';
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.useRealTimers();});
 function setup(id:'idle'|'walk'|'jump'='idle',reducedMotion=false){
  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);
@@ -38,54 +38,38 @@ describe('walking, looking (the remaster fixes)', () => {
     return m ? Number(m[1]) : NaN;
   };
 
-  it('matches his steps to the ground he covers, within sane bounds', () => {
-    // One cycle covers 4 × leg × sin(swing) sprite pixels, scaled to his height.
-    const perCycle = (clip: 'walk' | 'run', h: number) => 4 * 78 * Math.sin((SWING[clip] * Math.PI) / 180) * (h / 360);
-    const walk = strideCycle('walk', 48, 168);
-    expect(walk * 48).toBeCloseTo(perCycle('walk', 168), 5);
-    expect(strideCycle('walk', 64, 168)).toBeCloseTo((walk * 48) / 64, 5);
-    expect(strideCycle('run', 86, 168) * 86).toBeCloseTo(perCycle('run', 168), 5);
-    // Never a frantic shuffle or a slow-motion stride.
-    expect(strideCycle('walk', 10_000, 168)).toBe(0.42);
-    expect(strideCycle('walk', 1, 168)).toBe(1.6);
-  });
-
-  it('walks in two identical steps a cycle: legs toward each other and back, never past the drawing (no limp)', () => {
+  it('walks frame by frame through the founder\'s cycle, at the cycle he is given, and cross-fades back', () => {
     let now = 1000;
     vi.spyOn(performance, 'now').mockImplementation(() => now);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(1);
     const view = render(<RasterRig pose="walk" />);
     const engine = new RasterEngine(view.container, { idleLife: false }, () => {});
+    const strip = () => view.container.querySelector<HTMLElement>('[data-raster-walk]')!;
+    const frameAt = () => Number(strip().dataset.frame);
     engine.play('walk', { params: { cycle: 0.8 } });
-    const legs = () => [angle(view.container, 'legBack'), angle(view.container, 'legFront')];
-    now = 1200; // the first passing moment
-    engine.renderNow();
-    const first = legs();
-    expect(first[0]).toBeCloseTo(-SWING.walk, 1);
-    expect(first[1]).toBeCloseTo(SWING.walk, 1);
-    now = 1400; // contact: the drawn stride
-    engine.renderNow();
-    expect(legs().map((a) => Math.abs(a))).toEqual([0, 0]);
-    now = 1600; // the second step is the same as the first
-    engine.renderNow();
-    expect(legs()[0]).toBeCloseTo(first[0], 1);
-    expect(legs()[1]).toBeCloseTo(first[1], 1);
-    // Never beyond the drawing: the back leg only ever turns forward, the front one only back.
-    for (let t = 1000; t <= 1800; t += 37) {
-      now = t;
+    expect(view.container.hasAttribute('data-walking')).toBe(true);
+    const seen: number[] = [];
+    for (let t = 0; t < 800; t += 100) {
+      now = 1000 + t + 1;
       engine.renderNow();
-      const [back, front] = legs();
-      expect(back).toBeLessThanOrEqual(0.001);
-      expect(front).toBeGreaterThanOrEqual(-0.001);
+      seen.push(frameAt());
     }
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    now = 1801;
+    engine.renderNow();
+    expect(frameAt()).toBe(0);
+    engine.play('idle');
+    expect(view.container.hasAttribute('data-walking')).toBe(false);
     engine.dispose();
   });
 
-  it('crosses the screen at his natural, calm rhythm, his feet keeping pace', () => {
-    for (const clip of ['walk', 'run'] as const) for (const h of [112, 150]) expect(strideCycle(clip, gaitSpeed(clip, h), h)).toBeCloseTo(CADENCE[clip], 6);
-    expect(CADENCE.walk).toBeGreaterThanOrEqual(0.9);
-    expect(gaitSpeed('walk', 150, 200)).toBeCloseTo(2 * gaitSpeed('walk', 150), 6);
+  it('crosses the screen at the pace of his steps (his feet stay put), the admin speed scaling both', () => {
+    expect(walkCycle()).toBeCloseTo(0.96, 6);
+    expect(walkSpeed(360) * walkCycle()).toBeCloseTo(WALK_STRIDE, 6);
+    expect(walkSpeed(180) * walkCycle()).toBeCloseTo(WALK_STRIDE / 2, 6);
+    expect(walkCycle(200)).toBeCloseTo(0.48, 6);
+    expect(walkSpeed(180, 200) * walkCycle(200)).toBeCloseTo(WALK_STRIDE / 2, 6);
   });
 
   it('turns his head smoothly toward what he looks at, and keeps still with less motion', () => {

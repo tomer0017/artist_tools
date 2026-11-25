@@ -1,5 +1,5 @@
 import { ANIMATIONS, type AnimationId } from '@/lib/companion/model';
-import { RASTER_RIGS, SPRITE, type RasterPart } from './raster-rig';
+import { RASTER_RIGS, SPRITE, WALK, type RasterPart } from './raster-rig';
 
 // ─── Sketchy's artwork on the GPU ─────────────────────────────────────────────
 // One textured mesh per pose over its approved 300 × 360 sprite, its joints
@@ -33,13 +33,23 @@ export function sketchyImage(id: AnimationId): HTMLImageElement {
 
 const ready = (image: HTMLImageElement) => image.complete && image.naturalWidth > 0;
 
+let strip: HTMLImageElement | null = null;
+/** The walking cycle's strip (shown by CSS, decoded up front like the poses). */
+function walkStrip(): HTMLImageElement {
+  if (!strip) {
+    strip = new Image();
+    strip.decoding = 'async';
+    strip.src = WALK.src;
+  }
+  return strip;
+}
+
 let preloading: Promise<void> | null = null;
 /** Fetch and decode every pose (about 350 KB), so he never moves as a still picture. Resolves within `timeoutMs` whatever happens. */
 export function preloadSketchy(timeoutMs = 3000): Promise<void> {
   if (typeof window === 'undefined' || typeof Image === 'undefined') return Promise.resolve();
   preloading ??= Promise.all(
-    ANIMATIONS.map((id) => {
-      const image = sketchyImage(id);
+    [...ANIMATIONS.map((id) => sketchyImage(id)), walkStrip()].map((image) => {
       if (ready(image)) return Promise.resolve();
       return typeof image.decode === 'function'
         ? image.decode().catch(() => undefined)
