@@ -5,6 +5,18 @@ Each environment (staging, production) is one CloudPanel **Node.js site**
 Next.js standalone server, which runs under **systemd** as the site's user and
 listens on `127.0.0.1` only.
 
+## Production's address (since 2026-11-25)
+
+Production is **https://sketchyartlab.com** (DNS at Hostinger: `A @ 185.176.255.3`,
+`www` a CNAME to it). In CloudPanel it is a **Reverse Proxy** site,
+`sketchyartlab.com` → `http://127.0.0.1:3001` (CloudPanel allows one Node.js
+site per port), whose vhost also sends `www` to the apex; CloudPanel renews its
+Let's Encrypt certificate. The original Node.js site `app.185-176-255-3.sslip.io`
+only redirects there now, in its CloudPanel template as well as its nginx
+file, so CloudPanel keeps it. Google's OAuth client lists
+`https://sketchyartlab.com/api/auth/callback/google`; PayPal's webhook points to
+`https://sketchyartlab.com/api/billing/paypal/webhook`. Staging is unchanged.
+
 ## One-time setup per environment
 
 1. CloudPanel → Add Site → Node.js (or `clpctl site:add:nodejs`): the domain,
