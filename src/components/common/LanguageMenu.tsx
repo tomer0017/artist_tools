@@ -33,8 +33,9 @@ export function LanguageMenu() {
     // Radix needs the page's direction for its alignment and arrow keys.
     <DropdownMenu dir={dirOf(isLocale(locale) ? locale : 'en')}>
       <DropdownMenuTrigger
-        aria-label={t('choose')}
-        title={t('label')}
+        // Named "Language": tests and screen readers look for the tools' "Choose…" buttons by name.
+        aria-label={t('label')}
+        title={t('choose')}
         disabled={pending}
         data-language-menu=""
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background/60 text-muted-foreground ring-1 ring-border/70 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
