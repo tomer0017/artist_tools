@@ -4,7 +4,8 @@
 // same on the server (landing page) and inside the studio; fixed sizes keep the
 // layout from shifting while the images load. The lockup reads left to right in
 // Hebrew too, as a Latin wordmark does. `compact` is the studio's top bar, where
-// the tools need the room: the fox alone until wide screens.
+// the tools need the room: the fox alone until wide screens. Below 380 px it
+// is a little smaller, so the phone's Home row keeps room for its buttons.
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span role="img" aria-label="SketchyArtLab" dir="ltr" className="flex items-center gap-2" data-brand-mark="">
@@ -15,7 +16,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
         width={113}
         height={144}
         decoding="async"
-        className={compact ? 'h-8 w-auto shrink-0' : 'h-9 w-auto shrink-0 sm:h-10'}
+        className={compact ? 'h-8 w-auto shrink-0' : 'h-8 w-auto shrink-0 min-[380px]:h-9 sm:h-10'}
       />
       {/* eslint-disable-next-line @next/next/no-img-element -- as above */}
       <img
@@ -24,7 +25,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
         width={544}
         height={108}
         decoding="async"
-        className={compact ? 'hidden h-6 w-auto lg:block' : 'h-[26px] w-auto sm:h-[30px]'}
+        className={compact ? 'hidden h-6 w-auto lg:block' : 'h-[22px] w-auto min-[380px]:h-[26px] sm:h-[30px]'}
       />
     </span>
   );

@@ -200,6 +200,21 @@ test.describe('the studio in Hebrew', () => {
     await expectDirection(page, 'en', 'ltr');
     await page.getByRole('region', { name: 'Preferences' }).getByLabel('Language').selectOption('he');
     await expect(page.getByRole('heading', { name: 'החשבון שלך', level: 1 })).toBeVisible();
+
+    // The 🌐 menu in the header (on phones, in Home's top row) switches in place: no reload.
+    await page.goto('/app');
+    await expect(page.getByRole('heading', { name: 'על מה עובדים היום?' })).toBeVisible();
+    await page.evaluate(() => Object.assign(window, { stayed: true }));
+    await page.getByRole('button', { name: 'בחירת שפה' }).click();
+    await page.getByRole('menuitemradio', { name: 'English' }).click();
+    await expect(page.getByRole('heading', { name: 'What do you want to work on?' })).toBeVisible();
+    await expectDirection(page, 'en', 'ltr');
+    await page.getByRole('button', { name: 'Choose a language' }).click();
+    await expect(page.getByRole('menuitemradio', { name: 'English' })).toHaveAttribute('aria-checked', 'true');
+    await page.getByRole('menuitemradio', { name: 'עברית' }).click();
+    await expect(page.getByRole('heading', { name: 'על מה עובדים היום?' })).toBeVisible();
+    await expectDirection(page, 'he', 'rtl');
+    expect(await page.evaluate(() => (window as Window & { stayed?: boolean }).stayed)).toBe(true);
     await context.close();
   });
 });

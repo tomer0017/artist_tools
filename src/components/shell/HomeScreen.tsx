@@ -7,6 +7,7 @@ import LearnOnHome from '@/components/learn/LearnOnHome';
 import { ProBanner, ProMark, UpgradeButton, proOfferFor } from '@/components/billing/pro';
 import { TOOL_FEATURES } from '@/lib/plans';
 import { BrandMark } from './BrandMark';
+import { LanguageMenu } from '@/components/common/LanguageMenu';
 import { AccountButton, AccountLine, useAccount, useToolAllowed } from './account';
 import { HOME_ORDER, TOOLS, TOOL_ART, pathForView } from './tools';
 import type { TabId } from '@/types/project';
@@ -61,6 +62,7 @@ export default function HomeScreen() {
                 <BrandMark />
                 <div className="flex items-center gap-2">
                   <UpgradeButton compact />
+                  <LanguageMenu />
                   <AccountButton />
                 </div>
               </div>
