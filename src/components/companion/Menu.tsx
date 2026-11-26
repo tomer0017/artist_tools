@@ -48,6 +48,7 @@ export interface MenuProps {
   runAction: (action: TipAction) => void;
   openRoulette: (options: { classMode?: boolean }) => void;
   surprise: () => void;
+  nextAnimation?: () => void;
   nextLesson: { href: string; label: string; loading: boolean } | null;
   saveAudience: (audience: Audience | null) => Promise<boolean>;
   hide: () => Promise<boolean>;
@@ -141,13 +142,15 @@ function Entry({ icon: Icon, label, onClick, data, chevron = false }: { icon: Lu
   );
 }
 
-function MainView({ can, setView, openRoulette, surprise, drawingTips, onClose }: MenuProps) {
+function MainView({ can, setView, openRoulette, surprise, nextAnimation, locale, drawingTips, onClose }: MenuProps) {
   const t = useTranslations('companion.menu');
   const guide = can.companion('guide');
   const classroom = can.companion('classroom');
   return (
     <div className="space-y-0.5">
       <p className="px-3 pb-1 text-sm text-muted-foreground">{t('lead')}</p>
+      {nextAnimation && <Entry icon={Smile} label={locale === 'he' ? 'האנימציה הבאה' : 'Next animation'} onClick={nextAnimation} data="next-animation" />}
+      <a href="/sketchy/art/v2/index.html" target="_blank" rel="noopener noreferrer" className={item}>{locale === 'he' ? 'צפייה בכל האנימציות ↗' : 'View all animations ↗'}</a>
       <Entry icon={Wand2} label={t('surprise')} onClick={surprise} data="surprise" />
       {guide && drawingTips.length > 0 && <Entry icon={Lightbulb} label={t('tip')} onClick={() => setView('tip')} data="tip" chevron />}
       {can.companion('roulette') && can.challenges === 'open' && (

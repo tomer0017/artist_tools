@@ -9,7 +9,8 @@ No stock artwork, services, or new database models are used.
 `node scripts/sketchy/art-scenes.mjs` reproduces the transparent runtime WebP strips,
 removing isolated alpha residue and preserving frame registration. `ArtScene.tsx`
 controls timing, pauses, meaningful action buttons and reduced-motion presentation.
-Scenes replace the hero character briefly, are interruptible, and are spaced at
-least three minutes apart. They respect the existing draw/sit/rest/point settings.
+Scenes replace the hero character briefly and are interruptible. The current
+Home cycle walks briefly, stands for 11 seconds, sits for 8 seconds, then plays
+a scene from a shuffled rotation (see continuous-v2/README.md). They respect the existing draw/sit/rest/point settings.
 
 These are deliberately short sprite performances, not full 3D character rigs.

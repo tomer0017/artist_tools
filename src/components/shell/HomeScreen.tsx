@@ -34,7 +34,7 @@ export default function HomeScreen() {
     <div className="flex-1 overflow-y-auto overscroll-contain bg-background">
       <div ref={content} className="relative mx-auto w-full max-w-6xl pb-8">
         {/* Hero */}
-        <section ref={hero} className="relative overflow-hidden px-4 pb-5 pt-3 md:px-6 md:pb-8 md:pt-8 lg:px-8">
+        <section ref={hero} className={`relative overflow-hidden px-4 pb-5 pt-3 md:px-6 md:pb-8 md:pt-8 lg:px-8 ${companion ? "md:min-h-[280px]" : ""}`}>
           <div
             className="pointer-events-none absolute inset-y-0 end-0 w-[64%] md:w-[55%] rtl:-scale-x-100"
             style={{ maskImage: HERO_FADE, WebkitMaskImage: HERO_FADE }}
@@ -65,6 +65,7 @@ export default function HomeScreen() {
                 </div>
               </div>
             )}
+            <div className={companion ? "md:w-[50%]" : undefined}>
             <h1 className="text-[28px] font-bold leading-[1.1] tracking-tight text-foreground md:text-[40px] lg:text-[46px]" data-sketchy-avoid="">
               {tl('heroLine1')}
               <span className="relative block w-fit text-primary">
@@ -78,7 +79,9 @@ export default function HomeScreen() {
             <p className="mt-4 max-w-[17rem] text-sm leading-relaxed text-foreground/80 md:mt-5 md:max-w-sm md:text-base" data-sketchy-avoid="">
               {tl('heroLead')}
             </p>
+            </div>
           </div>
+          {companion && <div aria-hidden="true" data-sketchy-space="" className="relative mt-3 h-[180px] w-full md:absolute md:inset-y-6 md:end-6 md:mt-0 md:h-auto md:w-[45%]" />}
         </section>
 
         {/* Pro, said up front: what it adds and what it costs (only while it is on offer to this account). */}

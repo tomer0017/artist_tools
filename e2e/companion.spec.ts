@@ -99,7 +99,7 @@ test.describe('his menu', () => {
     await expect(menu.locator('button:focus')).toHaveCount(1);
     // This Free account has no Learn on the e2e server: no challenge or lesson entries.
     const entries = await menu.locator('[data-menu-entry]').evaluateAll((els) => els.map((e) => e.getAttribute('data-menu-entry')));
-    expect(entries).toEqual(['surprise', 'tip', 'improve', 'choose', 'about', 'hide']);
+    expect(entries).toEqual(['next-animation', 'surprise', 'tip', 'improve', 'choose', 'about', 'hide']);
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
     await expect(fox(page)).toBeFocused();
@@ -233,7 +233,8 @@ test.describe('on a phone', () => {
     expect(f.height).toBeGreaterThanOrEqual(80);
     expect(f.height).toBeLessThanOrEqual(125);
     const lead = await box(page.locator('[data-sketchy-avoid]').last());
-    expect(f.x).toBeGreaterThanOrEqual(lead.x + lead.width - 1);
+    expect(overlaps(f, lead)).toBe(false);
+    expect(f.y).toBeGreaterThanOrEqual(lead.y + lead.height);
     await expect(sign(page)).toBeVisible({ timeout: 20_000 });
     await sign(page).getByRole('button', { name: 'Not now' }).click();
     await fox(page).tap();
@@ -415,5 +416,70 @@ test.describe('walking and looking', () => {
     await page.waitForTimeout(700);
     const down = await tilt();
     expect(down - up).toBeGreaterThan(4);
+  });
+});
+
+// Complete scenes must be discoverable without a multi-minute wait, including on phones.
+test.describe('art scene rotation', () => {
+  test.use({storageState:auth('sketchy-roulette'),locale:'en-US'});
+  test('mobile: Next animation previews every scene once without shrinking or clipping',async({page})=>{
+    test.setTimeout(120_000);
+    await page.goto('/app');
+    await expect(sign(page)).toBeVisible({timeout:20_000});
+    await page.locator('[data-sketchy-close]').click();
+    const seen=new Set<string>();
+    for(let i=0;i<10;i++){
+      const scene=page.locator('[data-sketchy-art-scene]');
+      if(await scene.count())await scene.getByRole('button',{name:'Talk to Sketchy'}).click();
+      else await fox(page).click();
+      await page.locator('[data-menu-entry="next-animation"]').click();
+      await expect(scene).toBeVisible();
+      await expect(scene).toBeInViewport();
+      const id=(await scene.getAttribute('data-sketchy-art-scene'))!;
+      expect(seen.has(id),`repeated ${id} before covering the pool`).toBe(false);seen.add(id);
+      const area=await box(page.locator('[data-sketchy-space]'));
+      const s=await box(scene);
+      expect(s.y).toBeGreaterThanOrEqual(area.y);
+      expect(s.x).toBeGreaterThanOrEqual(area.x-1);
+      expect(s.x+s.width).toBeLessThanOrEqual(area.x+area.width+1);
+      expect(s.y+s.height).toBeLessThanOrEqual(area.y+area.height);
+    }
+    expect([...seen]).toEqual(expect.arrayContaining(['sunflowers','flower-crown','pearl','mona-lisa','scream','american-gothic','portrait-process','art-slots']));
+  });
+
+  test('six quiet minutes keep rotating after eleven seconds standing and eight sitting',async({page})=>{
+    test.setTimeout(180_000);
+    await page.clock.install();
+    await page.goto('/app');
+    for(let i=0;i<20&&!await sign(page).isVisible();i++)await page.clock.runFor(1000);
+    await expect(sign(page)).toBeVisible();
+    await page.locator('[data-sketchy-close]').click();
+    await page.mouse.move(0,0);
+    await page.evaluate(()=>{
+      const records:Array<{step:string;id:string|null;time:number}>=[];
+      (window as unknown as {sceneRecords:typeof records}).sceneRecords=records;
+      let last='';
+      new MutationObserver(()=>{
+        const stage=document.querySelector('[data-sketchy-cycle]');
+        const step=stage?.getAttribute('data-sketchy-cycle')??'';
+        const id=document.querySelector('[data-sketchy-art-scene]')?.getAttribute('data-sketchy-art-scene')??null;
+        const key=step+id;
+        if(key!==last){records.push({step,id,time:performance.now()});last=key;}
+      }).observe(document.body,{attributes:true,subtree:true,childList:true,attributeFilter:['data-sketchy-cycle','data-sketchy-art-scene']});
+    });
+    // Let image decoding/network settle at each simulated second.
+    for(let i=0;i<370;i++)await page.clock.runFor(1000);
+    const records=await page.evaluate(()=>(window as unknown as {sceneRecords:Array<{step:string;id:string|null;time:number}>}).sceneRecords);
+    const scenes=records.filter(r=>r.step==='scene'&&r.id);
+    expect(scenes.length).toBeGreaterThanOrEqual(10);
+    expect(new Set(scenes.slice(0,10).map(r=>r.id)).size).toBe(10);
+    for(let i=1;i<scenes.length;i++)expect(scenes[i].id).not.toBe(scenes[i-1].id);
+    const stand=records.find(r=>r.step==='stand')!;
+    const sit=records.find(r=>r.step==='sit'&&r.time>stand.time)!;
+    const scene=scenes.find(r=>r.time>sit.time)!;
+    expect(sit.time-stand.time).toBeGreaterThanOrEqual(10_900);
+    expect(sit.time-stand.time).toBeLessThan(11_500);
+    expect(scene.time-sit.time).toBeGreaterThanOrEqual(7_900);
+    expect(scene.time-sit.time).toBeLessThan(8_500);
   });
 });

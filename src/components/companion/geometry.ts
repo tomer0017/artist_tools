@@ -19,6 +19,9 @@ export interface Measured {
   rtl: boolean;
   /** A phone-sized screen. */
   narrow: boolean;
+  /** A reserved Hero area sized for complete art scenes. */
+  sceneRoom?: boolean;
+  sceneEdge?: number;
 }
 
 export interface Geometry {
@@ -48,19 +51,23 @@ export const BASE_HEIGHT = { narrow: 124, wide: 168 } as const;
 
 export function geometryOf(m: Measured, sizePercent: number): Geometry | null {
   const base = (m.narrow ? BASE_HEIGHT.narrow : BASE_HEIGHT.wide) * (sizePercent / 100);
-  const free = Math.max(0, m.width - m.textEnd - GAP - EDGE);
+  const edge = m.sceneEdge ?? EDGE;
+  const free = Math.max(0, m.width - m.textEnd - GAP - edge);
   const tallest = Math.max(0, m.floor - m.topLimit);
-  const height = Math.round(Math.min(base, tallest, free / WIDTH_RATIO));
+  // Reserve room for the full 640x360 scene while keeping the same fox size
+  // in normal poses and scenes. Mobile gets its own area below the headline.
+  const limit = Math.min(base, tallest / (m.sceneRoom ? (306/270 + 17/360) : 1), free / (m.sceneRoom ? (640*306/360/280) : WIDTH_RATIO));
+  const height = m.sceneRoom ? Math.floor(limit) : Math.round(limit);
   if (height < MIN_HEIGHT) return null;
   const width = height * WIDTH_RATIO;
   // Free room measured from the end edge inwards: spots at the end, the middle of the room, and its start.
   const room = free - width;
-  const fromEnd = [EDGE + width / 2];
-  if (room > width * 1.2) fromEnd.push(EDGE + width / 2 + room / 2);
-  if (room > width * 2.6) fromEnd.push(EDGE + width / 2 + room - width * 0.2);
+  const fromEnd = [edge + width / 2];
+  if (room > width * 1.2) fromEnd.push(edge + width / 2 + room / 2);
+  if (room > width * 2.6) fromEnd.push(edge + width / 2 + room - width * 0.2);
   const toX = (d: number) => (m.rtl ? d : m.width - d);
   return {
-    activity: { left: m.rtl ? EDGE : m.textEnd + GAP, right: m.rtl ? m.width - m.textEnd - GAP : m.width - EDGE, top: m.topLimit },
+    activity: { left: m.rtl ? edge : m.textEnd + GAP, right: m.rtl ? m.width - m.textEnd - GAP : m.width - edge, top: m.topLimit },
     height,
     width,
     floor: m.floor,
