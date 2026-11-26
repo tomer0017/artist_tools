@@ -1,14 +1,31 @@
-import { Layers } from 'lucide-react';
-
-// The Studio Companion logo and wordmark. Has no state, so it renders the same
-// on the server (landing page) and inside the studio.
+// The SketchyArtLab logo: the fox beside the wordmark, both cut from the
+// owner's official artwork (assets/brand, scripts/brand/logo.mjs), which is
+// drawn for dark backgrounds like the studio's. Has no state, so it renders the
+// same on the server (landing page) and inside the studio; fixed sizes keep the
+// layout from shifting while the images load. The lockup reads left to right in
+// Hebrew too, as a Latin wordmark does. `compact` is the studio's top bar, where
+// the tools need the room: the fox alone until wide screens.
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="flex items-center gap-2">
-      <Layers className={compact ? 'h-6 w-6 text-primary' : 'h-7 w-7 text-primary'} strokeWidth={2.2} aria-hidden="true" />
-      <span className={`font-semibold leading-[1.05] tracking-tight text-foreground ${compact ? 'text-sm' : 'text-[15px]'}`}>
-        Studio<br />Companion
-      </span>
+    <span role="img" aria-label="SketchyArtLab" dir="ltr" className="flex items-center gap-2" data-brand-mark="">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a tiny static logo, no optimisation needed */}
+      <img
+        src="/brand/mark.webp"
+        alt=""
+        width={113}
+        height={144}
+        decoding="async"
+        className={compact ? 'h-8 w-auto shrink-0' : 'h-9 w-auto shrink-0 sm:h-10'}
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element -- as above */}
+      <img
+        src="/brand/wordmark.webp"
+        alt=""
+        width={544}
+        height={108}
+        decoding="async"
+        className={compact ? 'hidden h-6 w-auto lg:block' : 'h-[26px] w-auto sm:h-[30px]'}
+      />
     </span>
   );
 }

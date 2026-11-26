@@ -8,7 +8,7 @@ import { VerifyForm } from './VerifyForm';
 // code from their authenticator app (or a recovery code) before the admin
 // dashboard opens, then returns where they were going.
 
-export const metadata: Metadata = { title: 'Verify · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Verify · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminVerifyPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

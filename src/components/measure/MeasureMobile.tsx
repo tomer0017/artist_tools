@@ -639,7 +639,7 @@ export default function MeasureMobile() {
 
       const finish = (blob: Blob | null) => {
         if (!blob) return;
-        void save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure', ...fromLearn(imageLearnItem) });
+        void save({ blob, filename: 'sketchyartlab-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure', ...fromLearn(imageLearnItem) });
       };
       if (c.toBlob) c.toBlob(finish, 'image/png');
       else {
@@ -666,7 +666,7 @@ export default function MeasureMobile() {
     if (!(await authorize({ tool: 'measure', features: [], ...fromLearn(imageLearnItem) }))) return;
     try {
       const blob = new Blob([exportProjectJSON()], { type: 'application/json' });
-      triggerDownload(blob, 'studio-companion-project.json');
+      triggerDownload(blob, 'sketchyartlab-project.json');
     } catch (error) {
       console.error('[MeasureMobile] Failed to export project JSON:', error);
     }

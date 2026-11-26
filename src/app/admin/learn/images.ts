@@ -140,9 +140,9 @@ export interface LicenceForm {
   attribution: string;
 }
 
-export const OWN_RIGHTS = 'Own work, made for Studio Companion; all rights reserved.';
+export const OWN_RIGHTS = 'Own work, made for SketchyArtLab; all rights reserved.';
 
-export const defaultLicence = (title: string): LicenceForm => ({ kind: 'own', source: '', author: 'Studio Companion', title, licenceUrl: '', rights: OWN_RIGHTS, attribution: '' });
+export const defaultLicence = (title: string): LicenceForm => ({ kind: 'own', source: '', author: 'SketchyArtLab', title, licenceUrl: '', rights: OWN_RIGHTS, attribution: '' });
 
 /** The licence as the server records it (src/server/learn/assets.ts). */
 export function licenceRecord(form: LicenceForm) {
@@ -150,7 +150,7 @@ export function licenceRecord(form: LicenceForm) {
   return {
     kind: form.kind,
     source: blank(form.source),
-    author: form.author.trim() || 'Studio Companion',
+    author: form.author.trim() || 'SketchyArtLab',
     title: form.title.trim().slice(0, 300) || 'Untitled',
     licenceUrl: blank(form.licenceUrl),
     rights: form.rights.trim() || OWN_RIGHTS,

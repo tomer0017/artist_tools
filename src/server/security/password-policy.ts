@@ -17,7 +17,7 @@ export const PASSWORD_MESSAGES: Record<PasswordProblem, string> = {
   too_long: `Use at most ${PASSWORD_MAX_LENGTH} characters.`,
   too_common: 'That password is too common. Try a short sentence or a few unrelated words.',
   too_predictable: 'Avoid repeated characters, sequences and keyboard patterns.',
-  personal: 'Do not use your name, your email address or "Studio Companion" in your password.',
+  personal: 'Do not use your name, your email address or "SketchyArtLab" in your password.',
 };
 
 // Words that, with digits or symbols around them, make up most leaked
@@ -97,7 +97,7 @@ export function checkPassword(password: string, context: { email?: string | null
   const substituted = onlyLetters(undoSubstitutions(password));
   if (isCommon(plain) || isCommon(substituted)) return 'too_common';
 
-  const personal = ['studiocompanion'];
+  const personal = ['sketchyartlab', 'studiocompanion'];
   const local = onlyLetters(context.email?.split('@')[0] ?? '');
   if (local.length >= 4) personal.push(local);
   for (const part of (context.name ?? '').split(/\s+/)) {

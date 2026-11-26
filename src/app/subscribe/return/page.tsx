@@ -14,7 +14,7 @@ import { CheckoutStatus } from './CheckoutStatus';
 // server reads the subscription from PayPal (src/server/billing/paypal/) and
 // shows what PayPal says, for the signed-in account's own checkout only.
 
-export const metadata: Metadata = { title: 'Subscription · Studio Companion', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Subscription · SketchyArtLab', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 function paypal(): PayPalClient | null {

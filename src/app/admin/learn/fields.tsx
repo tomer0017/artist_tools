@@ -110,8 +110,8 @@ export function LocField({
 export function RightsPanel({ value, onChange }: { value: LicenceForm; onChange: (value: LicenceForm) => void }) {
   const set = (patch: Partial<LicenceForm>) => onChange({ ...value, ...patch });
   const kinds: [LicenceKind, string][] = [
-    ['own', 'My own work (drawn or photographed for Studio Companion)'],
-    ['commissioned', 'Made for Studio Companion by someone else'],
+    ['own', 'My own work (drawn or photographed for SketchyArtLab)'],
+    ['commissioned', 'Made for SketchyArtLab by someone else'],
     ['cc0', 'CC0 (public domain dedication)'],
     ['public-domain', 'Public domain'],
     ['licensed', 'Licensed to us'],

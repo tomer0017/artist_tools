@@ -56,7 +56,7 @@ describe('SignInCard', () => {
 
   it('with open registration, explains that Google creates a free account automatically', () => {
     render(<SignInCard callbackPath="/app" available error={null} registration="open" />);
-    expect(screen.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in to SketchyArtLab' })).toBeInTheDocument();
     expect(screen.getByText(/your free account is created automatically; if you already have one, the same button signs you in/)).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'What you get' })).toHaveTextContent('All five tools, free with no time limit');
     expect(screen.queryByText(/invite-only/)).toBeNull();
@@ -81,7 +81,7 @@ describe('SignInCard', () => {
 
   it('while invite-only, says so and still explains the free account', () => {
     render(<SignInCard callbackPath="/app" available error={null} registration="invite" />);
-    expect(screen.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in to SketchyArtLab' })).toBeInTheDocument();
     expect(screen.getByText(/invite-only while we test it/)).toBeInTheDocument();
     expect(screen.getByText(/your free account is created automatically the first time/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'compare plans' })).toHaveAttribute('href', '/pricing');
@@ -89,7 +89,7 @@ describe('SignInCard', () => {
 
   it('speaks Hebrew on Hebrew pages, with localized links and an email field that stays left-to-right', () => {
     render(<SignInCard callbackPath="/app" available error={null} registration="invite" emailPassword />, 'he');
-    expect(screen.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'כניסה ל-SketchyArtLab' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'המשך עם Google' })).toBeEnabled();
     expect(screen.getByLabelText('כתובת אימייל')).toHaveAttribute('dir', 'ltr');
     expect(screen.getByRole('link', { name: 'שכחת את הסיסמה?' })).toHaveAttribute('href', '/he/forgot-password');
@@ -134,7 +134,7 @@ describe('SignInCard', () => {
     const answers: [{ code?: string; status?: number }, string][] = [
       [{ code: 'INVALID_USERNAME_OR_PASSWORD', status: 401 }, 'That username and password do not match. Check both and try again.'],
       [{ code: 'USERNAME_TOO_SHORT', status: 422 }, 'That username and password do not match. Check both and try again.'],
-      [{ code: 'ACCOUNT_SUSPENDED', status: 403 }, 'This account is suspended. Please contact the Studio Companion team.'],
+      [{ code: 'ACCOUNT_SUSPENDED', status: 403 }, 'This account is suspended. Please contact the SketchyArtLab team.'],
       [{ code: 'TOO_MANY_ATTEMPTS', status: 429 }, 'Too many attempts. Please wait 15 minutes, then try again.'],
       [{ status: 429 }, 'Too many attempts from this network. Please wait a minute and try again.'],
     ];
@@ -180,7 +180,7 @@ describe('SignInCard', () => {
 
   it('in Hebrew, the one action reads המשך עם Google', () => {
     const { container } = render(<SignInCard callbackPath="/app" available error={null} registration="open" />, 'he');
-    expect(screen.getByRole('heading', { name: 'כניסה ל-Studio Companion' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'כניסה ל-SketchyArtLab' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'המשך עם Google' })).toBeEnabled();
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
     expect(container.textContent).not.toMatch(/הזמנה|יצירת חשבון|שכחת/);

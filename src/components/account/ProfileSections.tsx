@@ -528,7 +528,7 @@ export function DataCard({ account }: { account: StudioAccount }) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1] ?? 'studio-companion-account.json';
+      link.download = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1] ?? 'sketchyartlab-account.json';
       document.body.appendChild(link);
       link.click();
       link.remove();

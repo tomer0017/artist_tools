@@ -64,7 +64,7 @@ describe('TOTP (RFC 6238)', () => {
     const bytes = Buffer.from([0, 1, 2, 250, 251, 252, 253, 254, 255]);
     expect(base32Decode(base32Encode(bytes))).toEqual(bytes);
     expect(otpauthUri('JBSWY3DPEHPK3PXP', 'admin@example.com')).toBe(
-      'otpauth://totp/Studio%20Companion:admin%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Studio+Companion&algorithm=SHA1&digits=6&period=30',
+      'otpauth://totp/SketchyArtLab:admin%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=SketchyArtLab&algorithm=SHA1&digits=6&period=30',
     );
   });
 });

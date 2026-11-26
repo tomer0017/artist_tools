@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { AccountSync } from '@/components/shell/account';
 import { requireStudioAccount } from '@/server/studio-account';
 
-export const metadata: Metadata = { title: 'Your account · Studio Companion', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Your account · SketchyArtLab', robots: { index: false, follow: false } };
 
 // Depends on who is signed in: always rendered per request, never cached.
 export const dynamic = 'force-dynamic';

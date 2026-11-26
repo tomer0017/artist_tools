@@ -46,7 +46,7 @@ test.describe('email and password', () => {
     await page.getByRole('link', { name: 'Create an account' }).click();
     await expect(page).toHaveURL(/\/sign-up\?callbackURL=%2Fapp$/);
     await expect(page.getByRole('heading', { name: 'Create your free account' })).toBeVisible();
-    await expect(page.getByText('Studio Companion is invite-only while we test it.')).toBeVisible();
+    await expect(page.getByText('SketchyArtLab is invite-only while we test it.')).toBeVisible();
     await page.getByLabel('Your name').fill('New Artist');
     await page.getByLabel('Email address').fill(email);
     await page.getByLabel('Password', { exact: true }).fill('Password1234');
@@ -120,7 +120,7 @@ test.describe('email and password', () => {
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
     // Only the owner learns why, from their inbox.
-    expect(await linkFromOutbox(browser, 'user@e2e.test', 'You already have a Studio Companion account')).toMatch(/\/sign-in$/);
+    expect(await linkFromOutbox(browser, 'user@e2e.test', 'You already have a SketchyArtLab account')).toMatch(/\/sign-in$/);
   });
 });
 
@@ -159,7 +159,7 @@ test.describe('the account page', () => {
     });
 
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'הורדת הנתונים שלי' }).click()]);
-    expect(download.suggestedFilename()).toMatch(/^studio-companion-account-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(download.suggestedFilename()).toMatch(/^sketchyartlab-account-\d{4}-\d{2}-\d{2}\.json$/);
     const data = JSON.parse(await readFile((await download.path())!, 'utf8'));
     expect(data.account).toMatchObject({ name: 'Edited Artist', language: 'he', currency: 'ILS', email: 'editor@e2e.test' });
     expect(data.marketingEmail).toMatchObject({ consent: true });

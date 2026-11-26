@@ -82,7 +82,7 @@ export default function MeasurePanel() {
         ctx.fillText(line.label || getRealSize(line), mx, my - 8);
       });
       canvasToBlob(canvas, 'image/png')
-        .then((blob) => save({ blob, filename: 'studio-companion-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure', ...fromLearn(imageLearnItem) }))
+        .then((blob) => save({ blob, filename: 'sketchyartlab-export.png', mime: 'image/png', title: t('shared.saveSheetTitle'), tool: 'measure', ...fromLearn(imageLearnItem) }))
         .catch((error) => console.error('[MeasurePanel] Failed to export annotated PNG:', error));
       } catch (error) {
         console.error('[MeasurePanel] Failed to export annotated PNG:', error);
@@ -99,7 +99,7 @@ export default function MeasurePanel() {
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.download = 'studio-companion-project.json';
+      link.download = 'sketchyartlab-project.json';
       link.href = url;
       link.click();
       URL.revokeObjectURL(url);

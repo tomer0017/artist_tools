@@ -14,7 +14,7 @@ import { CompanionManager } from './CompanionManager';
 // which animation and which button. Each save is live at once as a new
 // version of the configuration; any earlier version can be restored.
 
-export const metadata: Metadata = { title: 'Companion · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Companion · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminCompanionPage() {

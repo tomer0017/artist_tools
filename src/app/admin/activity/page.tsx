@@ -12,7 +12,7 @@ import { ACTORS, auditQueryFrom } from './query';
 // The audit log: registrations, sign-ins, security changes and admin changes,
 // newest first, filtered by kind of event, who did it, account and dates.
 
-export const metadata: Metadata = { title: 'Activity · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Activity · SketchyArtLab admin', robots: { index: false, follow: false } };
 
 // Depends on who is signed in: always rendered per request, never cached.
 export const dynamic = 'force-dynamic';

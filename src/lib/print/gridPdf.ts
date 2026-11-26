@@ -117,7 +117,7 @@ export interface GridPdfInput {
 export async function buildGridPdf(lib: JsPdfModule, input: GridPdfInput): Promise<ArrayBuffer> {
   const { gs, layout } = input;
   const doc = new lib.jsPDF({ orientation: layout.orientation, unit: 'mm', format: 'a4', compress: true, putOnlyUsedFonts: true, floatPrecision: 4 });
-  doc.setProperties({ title: input.words.title, creator: 'Studio Companion' });
+  doc.setProperties({ title: input.words.title, creator: 'SketchyArtLab' });
   // Ask viewers to print at actual size (most honour it; the bar shows if one did not).
   doc.viewerPreferences({ PrintScaling: 'None' });
 

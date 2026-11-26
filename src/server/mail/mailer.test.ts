@@ -12,7 +12,7 @@ import { mailTemplates } from './templates';
 // machine), and the message nodemailer really builds from our templates.
 
 const SMTP: SmtpSettings = { host: 'smtp.example.com', port: 587, user: 'apikey', password: 'provider-secret' };
-const FROM = 'Studio Companion <hello@example.com>';
+const FROM = 'SketchyArtLab <hello@example.com>';
 
 let mongo: TestMongo;
 beforeAll(async () => {
@@ -84,7 +84,7 @@ describe('the SMTP transport', () => {
     const mailer = createMailer(mongo.db, 'smtp', { from: FROM, smtp: SMTP, connect });
     expect(await mailer.deliver(mailTemplates('he').verifyEmail('עדה', link), { address: 'hebrew@example.com' })).toBe('sent');
     const message = raw[0];
-    expect(message).toMatch(/^From: Studio Companion <hello@example\.com>$/m);
+    expect(message).toMatch(/^From: SketchyArtLab <hello@example\.com>$/m);
     expect(message).toMatch(/^To: hebrew@example\.com$/m);
     expect(message).toMatch(/^Auto-Submitted: auto-generated$/m);
     expect(message).toMatch(/^Subject: =\?UTF-8\?/m);
@@ -143,10 +143,10 @@ describe('the SMTP transport', () => {
 describe('the delivery test message', () => {
   it('says what it is, in English and Hebrew, with no link to follow', () => {
     const en = mailTemplates('en').deliveryTest();
-    expect(en).toMatchObject({ template: 'delivery_test', subject: 'Studio Companion: email delivery test', links: [] });
+    expect(en).toMatchObject({ template: 'delivery_test', subject: 'SketchyArtLab: email delivery test', links: [] });
     expect(en.text).toContain('No account was created or changed.');
     const he = mailTemplates('he').deliveryTest();
-    expect(he.subject).toBe('Studio Companion: בדיקת שליחת אימייל');
+    expect(he.subject).toBe('SketchyArtLab: בדיקת שליחת אימייל');
     expect(he.html).toContain('dir="rtl"');
   });
 });

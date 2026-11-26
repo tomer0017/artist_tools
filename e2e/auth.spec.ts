@@ -23,7 +23,7 @@ test.describe('signed out', () => {
     for (const path of ['/app', '/app/compare', '/app/study', '/admin']) {
       await page.goto(path);
       await expect(page).toHaveURL(new RegExp(`/sign-in\\?callbackURL=${encodeURIComponent(path)}$`));
-      await expect(page.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Sign in to SketchyArtLab' })).toBeVisible();
     }
   });
 

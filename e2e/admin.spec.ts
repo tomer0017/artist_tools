@@ -47,7 +47,7 @@ test.describe('as an admin', () => {
 
     const grantee = await asPerson(browser, 'grantee');
     await grantee.page.goto('/app/profile');
-    await expect(grantee.page.getByRole('region', { name: 'Plan', exact: true })).toContainText('Pro, given by Studio Companion until');
+    await expect(grantee.page.getByRole('region', { name: 'Plan', exact: true })).toContainText('Pro, given by SketchyArtLab until');
     const me = async () => (await (await grantee.page.request.get('/api/me')).json()).user;
     const first = await me();
     expect(first).toMatchObject({ plan: { assigned: 'free', effective: 'pro' }, grant: { planId: 'pro' } });

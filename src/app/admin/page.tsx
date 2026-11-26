@@ -11,13 +11,13 @@ import { AdminShell } from './AdminShell';
 import { EventList } from './EventList';
 import { SUBSCRIPTION_STATUS_LABELS, dateOnly, dateTime, sourceShort } from './format';
 
-// Application administration: who uses Studio Companion, what access each
+// Application administration: who uses SketchyArtLab, what access each
 // account has and where it comes from (paid, given for a time, given with no
 // end date, admin), billing as the payment provider reported it (kept
 // separate), and what happened to their accounts. Server rendered for admins only (everyone
 // else gets a 404); there is no API that exposes these lists.
 
-export const metadata: Metadata = { title: 'Users · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Users · SketchyArtLab admin', robots: { index: false, follow: false } };
 
 // Depends on who is signed in: always rendered per request, never cached.
 export const dynamic = 'force-dynamic';

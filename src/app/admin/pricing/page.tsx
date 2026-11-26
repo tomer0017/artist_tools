@@ -20,7 +20,7 @@ import { BASE_PRICE_ID, BasePriceEditor } from './BasePriceEditor';
 // every subscriber keeps the amount they agreed to: a new price applies only
 // to new subscriptions.
 
-export const metadata: Metadata = { title: 'Pricing · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Pricing · SketchyArtLab admin', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 const usdOf = (pricing: Pricing) => pricing.prices.find((p) => p.planId === 'pro' && p.interval === 'month' && p.currency === 'USD' && p.active) ?? null;

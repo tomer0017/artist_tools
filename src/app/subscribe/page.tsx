@@ -20,7 +20,7 @@ import { SubscribeForm } from './SubscribeForm';
 // summary, the exact monthly amount in the account's currency, how renewal,
 // stopping and refunds work, and the consent, before anything goes to PayPal.
 
-export const metadata: Metadata = { title: 'Subscribe · Studio Companion', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Subscribe · SketchyArtLab', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 function paypal(): PayPalClient | null {

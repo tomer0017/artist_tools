@@ -306,7 +306,7 @@ test.describe('the admin', () => {
     await expect(tester.page).toHaveURL(/\/sign-in/);
     expect((await me(tester.page)).status).toBe(401);
     await signIn(tester.page, username, password);
-    await expect(refusal(tester.page)).toHaveText('This account is suspended. Please contact the Studio Companion team.');
+    await expect(refusal(tester.page)).toHaveText('This account is suspended. Please contact the SketchyArtLab team.');
     await signIn(tester.page, username, 'Not-The-Pass-word-42');
     await expect(refusal(tester.page)).toContainText('do not match');
 

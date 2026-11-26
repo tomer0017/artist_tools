@@ -9,7 +9,7 @@ import { CreateTesterForm } from './CreateTesterForm';
 // A new account for an invited tester: a username and a password the admin
 // hands over (ADR-0012). Nobody can create one of these accounts themselves.
 
-export const metadata: Metadata = { title: 'New tester account · Studio Companion admin', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'New tester account · SketchyArtLab admin', robots: { index: false, follow: false } };
 
 // Depends on who is signed in: always rendered per request, never cached.
 export const dynamic = 'force-dynamic';

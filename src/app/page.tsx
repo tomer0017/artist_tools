@@ -13,7 +13,7 @@ import { subscriptionsOpen } from '@/server/billing/summary';
 import { describablePlanOffer } from '@/server/entitlements';
 import { getSession } from '@/server/session';
 
-// Public landing page: what Studio Companion is, the five tools, and how to
+// Public landing page: what SketchyArtLab is, the five tools, and how to
 // start (a free account with Google, or invite-only while testing). It reuses
 // the studio's hero and tool artwork so the brand looks the same before and
 // after entry. Someone already signed in is offered the studio itself, not

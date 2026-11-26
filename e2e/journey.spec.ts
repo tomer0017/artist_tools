@@ -41,7 +41,7 @@ test.describe('signed out: the way in', () => {
     await expect(pro).toContainText('Large GIFs');
     await expect(pro).toContainText('Compare + Difference GIFs');
     await expect(pro.getByRole('button', { name: 'Coming soon' })).toBeDisabled();
-    await expect(page.getByText('Pro cannot be bought yet. Nothing is charged anywhere in Studio Companion.')).toBeVisible();
+    await expect(page.getByText('Pro cannot be bought yet. Nothing is charged anywhere in SketchyArtLab.')).toBeVisible();
     expect(await page.locator('main').innerText()).not.toMatch(/[$€£₪]\s?\d|\d\s?[$€£₪]|per month|\/mo\b|checkout|buy now/i);
     await expect(page.getByText('How do I get an account?')).toBeVisible();
     await expect(page.getByText(/invite-only while we test it/)).toBeVisible();
@@ -51,7 +51,7 @@ test.describe('signed out: the way in', () => {
 
   test('sign-in explains the free account and the invite-only phase', async ({ page }) => {
     await page.goto('/sign-in');
-    await expect(page.getByRole('heading', { name: 'Sign in to Studio Companion' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign in to SketchyArtLab' })).toBeVisible();
     await expect(page.getByText(/your free account is created automatically the first time/)).toBeVisible();
     await expect(page.getByRole('list', { name: 'What you get' })).toContainText('All five tools, free with no time limit');
     await page.getByRole('link', { name: 'compare plans' }).click();

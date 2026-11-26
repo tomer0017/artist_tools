@@ -230,11 +230,11 @@ function CodeForm({ label, submitLabel, pending, numeric, danger, onSubmit, onCa
 
 function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
   const download = () => {
-    const text = `Studio Companion — admin recovery codes\nEach code works once. Keep them somewhere safe, away from your phone.\n\n${codes.join('\n')}\n`;
+    const text = `SketchyArtLab — admin recovery codes\nEach code works once. Keep them somewhere safe, away from your phone.\n\n${codes.join('\n')}\n`;
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'studio-companion-recovery-codes.txt';
+    link.download = 'sketchyartlab-recovery-codes.txt';
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
