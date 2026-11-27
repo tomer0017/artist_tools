@@ -28,12 +28,16 @@ function sofaImage(project: WallProject) {
   return c;
 }
 
+/** The sofa's size against its real one, as the person set it (0.7…1.3). */
+export const sofaScaleOf = (project: WallProject): number => Math.min(1.3, Math.max(0.7, project.space.room.sofaScale || 1));
+
 export function interiorScale(project: WallProject, W: number, H: number, outerW: number, outerH: number) {
   const sofa = SOFAS[project.space.room.sofaStyle];
   // One scale for both artwork and furniture. Enlarge the field of view for oversized works.
+  // The sofa's own size setting is left out of it, so resizing the sofa never resizes the artwork.
   const s = Math.min(W / Math.max(440, outerW + 100), H * 0.86 / (outerH + sofa.back + project.space.aboveSofaCm + 45));
   const sofaBottom = H * 0.93;
-  return { s, sofaBottom, artBottom: sofaBottom - sofa.back * s - project.space.aboveSofaCm * s };
+  return { s, sofaBottom, artBottom: sofaBottom - sofa.back * sofaScaleOf(project) * s - project.space.aboveSofaCm * s };
 }
 
 export function drawInterior(ctx: Ctx, project: WallProject, W: number, H: number, s: number, sofaBottom: number) {
@@ -44,7 +48,9 @@ export function drawInterior(ctx: Ctx, project: WallProject, W: number, H: numbe
   const sofa = sofaImage(project);
   if (!sofa) throw new Error('Furniture has not loaded');
   const dims = SOFAS[project.space.room.sofaStyle];
-  const w = dims.w * s, h = dims.back * s;
+  // Scaled as a whole (its proportions kept), standing on the same floor line.
+  const sofaSize = sofaScaleOf(project);
+  const w = dims.w * sofaSize * s, h = dims.back * sofaSize * s;
   // A broad floor shadow plus a tighter contact shadow anchors the furniture.
   ctx.save();
   ctx.translate(W / 2, sofaBottom - 1.5 * s);

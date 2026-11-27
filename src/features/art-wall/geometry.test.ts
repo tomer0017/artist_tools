@@ -18,6 +18,10 @@ describe('Art on Your Wall geometry', () => {
         close((width * v.s) / (SOFAS.modern.w * v.s), width / SOFAS.modern.w);
         expect(v.artBottom - width * v.s).toBeGreaterThan(0);
         expect(width * v.s).toBeLessThan(W);
+        // A larger sofa never changes the artwork's scale; the piece only moves up with the sofa's back.
+        const big = interiorScale({ ...p, space: { ...p.space, room: { ...p.space.room, sofaScale: 1.3 } } }, W, H, width, width);
+        close(big.s, v.s);
+        expect(big.artBottom).toBeLessThan(v.artBottom);
       }
     }
   });

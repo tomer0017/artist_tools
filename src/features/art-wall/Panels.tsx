@@ -121,6 +121,23 @@ export function ArtworkPanel({ state, project, onLocked }: PanelProps) {
       </Section>
 
       <Section title={t('size')} hint={t('sizeHint')}>
+        {/* One slider for the size, the ratio kept (the longest side, or the diameter); the fields stay for exact numbers. */}
+        <Slider
+          label={t('sizeSlider')}
+          min={10}
+          max={300}
+          step={1}
+          value={Math.round(Math.min(300, Math.max(10, round ? project.artwork.widthCm : Math.max(project.artwork.widthCm, project.artwork.heightCm))))}
+          readout={round ? `Ø ${round1(project.artwork.widthCm)} ${t('cm')}` : `${round1(project.artwork.widthCm)} × ${round1(project.artwork.heightCm)} ${t('cm')}`}
+          onChange={(v) =>
+            state.update((p) => {
+              if (round) return { ...p, artwork: { ...p.artwork, widthCm: v, heightCm: v } };
+              return ratio >= 1
+                ? { ...p, artwork: { ...p.artwork, widthCm: v, heightCm: round1(v / ratio) } }
+                : { ...p, artwork: { ...p.artwork, heightCm: v, widthCm: round1(v * ratio) } };
+            })
+          }
+        />
         {round ? (
           <CmField id="wall-diameter" label={t('diameter')} unit={t('cm')} value={project.artwork.widthCm} onChange={(d) => state.update((p) => ({ ...p, artwork: { ...p.artwork, widthCm: d, heightCm: d } }))} />
         ) : (
@@ -294,16 +311,25 @@ export function SpacePanel({ state, project, access, onLocked, calibration }: Pa
         <>
           <Section title={t('room')}>
             <div role="group" aria-label={t('room')} className="grid grid-cols-2 gap-2">
-              {ROOMS.map((r) => <button type="button" key={r.id} aria-pressed={space.room.id === r.id} onClick={() => setSpace((s) => ({ ...s, room: { id: r.id, sofaStyle: r.sofa.style, sofaColor: r.sofa.color } }))} className={`overflow-hidden rounded-xl border text-start transition ${space.room.id === r.id ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-white/40'}`}>
+              {ROOMS.map((r) => <button type="button" key={r.id} aria-pressed={space.room.id === r.id} onClick={() => setSpace((s) => ({ ...s, room: { id: r.id, sofaStyle: r.sofa.style, sofaColor: r.sofa.color, sofaScale: s.room.sofaScale } }))} className={`overflow-hidden rounded-xl border text-start transition ${space.room.id === r.id ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-white/40'}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- local optimized studio asset */}
                 <img src={`/images/art-wall/${r.id}.webp`} alt="" loading="lazy" className="aspect-[3/2] w-full object-cover" />
                 <span className="block px-2.5 py-2 text-xs font-medium">{t(`rooms.${r.id}`)}</span>
               </button>)}
             </div>
           </Section>
-          <Section title={t('sofa')} hint={t('scaleNote', { w: SOFAS[space.room.sofaStyle].w })}>
+          <Section title={t('sofa')} hint={t('scaleNote', { w: Math.round(SOFAS[space.room.sofaStyle].w * (space.room.sofaScale || 1)) })}>
             <Chips<SofaStyle> label={t('sofa')} columns={2} options={SOFA_STYLES.map((s) => ({ id: s, label: t(`sofas.${s}`) }))} value={space.room.sofaStyle} onChange={(sofaStyle) => setSpace((s) => ({ ...s, room: { ...s.room, sofaStyle } }))} onLocked={onLocked} />
             <Swatches label={t('sofaColor')} swatches={SOFA_COLORS.map((c) => ({ id: c, color: c, label: c }))} value={space.room.sofaColor} onChange={(sofaColor) => setSpace((s) => ({ ...s, room: { ...s.room, sofaColor } }))} onLocked={onLocked} custom={{ label: t('sofaColor') }} />
+            <Slider
+              label={t('sofaSize')}
+              min={70}
+              max={130}
+              step={1}
+              value={Math.round((space.room.sofaScale || 1) * 100)}
+              readout={`${Math.round(SOFAS[space.room.sofaStyle].w * (space.room.sofaScale || 1))} cm`}
+              onChange={(v) => setSpace((s) => ({ ...s, room: { ...s.room, sofaScale: v / 100 } }))}
+            />
           </Section>
           <Slider label={t('aboveSofa')} min={8} max={60} step={1} value={space.aboveSofaCm} readout={`${space.aboveSofaCm} cm`} onChange={(v) => setSpace((s) => ({ ...s, aboveSofaCm: v }))} />
         </>

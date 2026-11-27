@@ -84,7 +84,8 @@ export interface PhotoSpec {
 export interface SpaceSpec {
   mode: SpaceMode;
   wall: { color: string; texture: WallTexture };
-  room: { id: RoomId; sofaStyle: SofaStyle; sofaColor: string };
+  /** The sofa's size against its real one (1 = as made); the artwork keeps its own size. */
+  room: { id: RoomId; sofaStyle: SofaStyle; sofaColor: string; sofaScale: number };
   /** Wall Studio: how much of the view's width the framed piece takes (0.25…0.8). */
   zoom: number;
   /** Room Studio: the gap between the sofa's back and the frame's bottom edge, cm. */
@@ -255,7 +256,7 @@ export function newProject(id: string, name: string, now = Date.now()): WallProj
     space: {
       mode: 'wall',
       wall: { color: WALL_COLORS[1], texture: 'plaster' },
-      room: { id: 'nordic', sofaStyle: 'modern', sofaColor: ROOMS[0].sofa.color },
+      room: { id: 'nordic', sofaStyle: 'modern', sofaColor: ROOMS[0].sofa.color, sofaScale: 1 },
       zoom: 0.42,
       aboveSofaCm: 24,
       photo: { imageId: null, naturalWidth: 0, naturalHeight: 0, calibration: null, quad: null, shadow: 55, match: 0 },
