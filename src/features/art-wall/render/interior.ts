@@ -31,20 +31,30 @@ function sofaImage(project: WallProject) {
 /** The sofa's size against its real one, as the person set it (0.7…1.3). */
 export const sofaScaleOf = (project: WallProject): number => Math.min(1.3, Math.max(0.7, project.space.room.sofaScale || 1));
 
+/**
+ * One scale for the artwork and the sofa, set by the room and the picture's
+ * size only: a larger or smaller artwork (or sofa) never zooms the room, so
+ * the sofa keeps its size and the artwork grows against it. Only a piece
+ * wider than the room's view widens it.
+ */
 export function interiorScale(project: WallProject, W: number, H: number, outerW: number, outerH: number) {
   const sofa = SOFAS[project.space.room.sofaStyle];
-  // One scale for both artwork and furniture. Enlarge the field of view for oversized works.
-  // The sofa's own size setting is left out of it, so resizing the sofa never resizes the artwork.
-  const s = Math.min(W / Math.max(440, outerW + 100), H * 0.86 / (outerH + sofa.back + project.space.aboveSofaCm + 45));
+  void outerH;
+  const s = Math.min(W / 440, H / 285, (W * 0.94) / outerW);
   const sofaBottom = H * 0.93;
   return { s, sofaBottom, artBottom: sofaBottom - sofa.back * sofaScaleOf(project) * s - project.space.aboveSofaCm * s };
 }
 
-export function drawInterior(ctx: Ctx, project: WallProject, W: number, H: number, s: number, sofaBottom: number) {
+/** The room photograph behind everything. */
+export function drawInterior(ctx: Ctx, project: WallProject, W: number, H: number) {
   const image = roomImage(project.space.room.id);
   if (!image) throw new Error('Room has not loaded');
   const k = Math.max(W / image.naturalWidth, H / image.naturalHeight);
   ctx.drawImage(image, (W - image.naturalWidth * k) / 2, H - image.naturalHeight * k, image.naturalWidth * k, image.naturalHeight * k);
+}
+
+/** The sofa and its floor shadow: the front-most layer, over the artwork where they meet. */
+export function drawSofaLayer(ctx: Ctx, project: WallProject, W: number, s: number, sofaBottom: number) {
   const sofa = sofaImage(project);
   if (!sofa) throw new Error('Furniture has not loaded');
   const dims = SOFAS[project.space.room.sofaStyle];

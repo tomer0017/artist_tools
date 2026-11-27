@@ -4,24 +4,29 @@ import { cropRatio, fitCrop, rotatedSize } from './render/artwork';
 import { frameGeometry } from './render/frame';
 import { apply3, invert3, isConvex, squareToQuad } from './render/photo';
 import { interiorScale } from './render/interior';
-import { SOFAS } from './render/room';
+import { placeFrame } from './render/scene';
 import { newProject, type Pt } from './types';
 
 const close = (a: number, b: number, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(eps);
 
 describe('Art on Your Wall geometry', () => {
-  it('keeps artwork and sofa at the same physical scale, including oversized circular works', () => {
-    const p = newProject('scale', 'scale');
-    for (const width of [50, 120, 250]) {
-      for (const [W, H] of [[1200, 800], [800, 1000]]) {
-        const v = interiorScale(p, W, H, width, width);
-        close((width * v.s) / (SOFAS.modern.w * v.s), width / SOFAS.modern.w);
-        expect(v.artBottom - width * v.s).toBeGreaterThan(0);
-        expect(width * v.s).toBeLessThan(W);
-        // A larger sofa never changes the artwork's scale; the piece only moves up with the sofa's back.
-        const big = interiorScale({ ...p, space: { ...p.space, room: { ...p.space.room, sofaScale: 1.3 } } }, W, H, width, width);
-        close(big.s, v.s);
-        expect(big.artBottom).toBeLessThan(v.artBottom);
+  it('keeps the sofa at one size whatever the artwork\'s size, the artwork in view and the sofa in front', () => {
+    const p = { ...newProject('scale', 'scale'), space: { ...newProject('scale', 'scale').space, mode: 'room' as const } };
+    for (const [W, H] of [[1200, 800], [800, 1000]]) {
+      // The artwork's size never changes the room's scale: the sofa keeps its size.
+      const scales = [50, 120, 250].map((width) => interiorScale(p, W, H, width, width).s);
+      scales.forEach((s) => close(s, scales[0]));
+      // Nor does the sofa's own size; the artwork only moves up with the sofa's back.
+      const v = interiorScale(p, W, H, 80, 80);
+      const big = interiorScale({ ...p, space: { ...p.space, room: { ...p.space.room, sofaScale: 1.3 } } }, W, H, 80, 80);
+      close(big.s, v.s);
+      expect(big.artBottom).toBeLessThan(v.artBottom);
+      // A very large piece stays in view: its top inside the picture, its width within it.
+      for (const width of [50, 250]) {
+        const project = { ...p, artwork: { ...p.artwork, widthCm: width, heightCm: width } };
+        const { place } = placeFrame(project, project.frame, W, H);
+        expect(place.y).toBeGreaterThanOrEqual(0);
+        expect(place.w).toBeLessThan(W);
       }
     }
   });

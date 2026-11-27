@@ -7,7 +7,7 @@
 import { finishOf, isRound, roomOf, type FrameSpec, type LightSpec, type LightTemp, type WallProject } from '../types';
 import { frameGeometry, renderFramed } from './frame';
 import type { RoomView } from './room';
-import { drawInterior, interiorScale } from './interior';
+import { drawInterior, drawSofaLayer, interiorScale } from './interior';
 import { paintWall } from './wall';
 import { css, ctxOf, makeCanvas, rgbOf, shade, type Ctx, type RGB } from './util';
 
@@ -33,7 +33,10 @@ export function placeFrame(project: WallProject, frame: FrameSpec, W: number, H:
   if (project.space.mode === 'room') {
     const { s, artBottom } = interiorScale(project, W, H, g.outerW, outerH);
     const w = g.outerW * s, h = outerH * s;
-    return { place: { x: (W - w) / 2, y: artBottom - h, w, h, s, round }, view: { W, H, s, cx: W / 2, horizon: 0 } };
+    // Hung at its height above the sofa; a piece too tall for the view comes down
+    // (its lower part behind the sofa) so its top, and the picture light, stay in view.
+    const top = Math.max(H * 0.03 + (project.light.pictureLight ? 16 * s : 0), artBottom - h);
+    return { place: { x: (W - w) / 2, y: top, w, h, s, round }, view: { W, H, s, cx: W / 2, horizon: 0 } };
   }
 
   const zoom = Math.min(0.8, Math.max(0.2, project.space.zoom));
@@ -212,7 +215,7 @@ export function renderScene(canvas: HTMLCanvasElement, project: WallProject, opt
 
   // 1. The wall (and room) behind, cached per look and size.
   if (view) {
-    drawInterior(ctx, project, W, H, place.s, H * 0.93);
+    drawInterior(ctx, project, W, H);
   } else {
     const back = cached(`wall|${space.wall.color}|${space.wall.texture}|${W}x${H}|${place.s.toFixed(4)}`, W, H, (c) => paintWall(c, 0, 0, W, H, space.wall.color, space.wall.texture, place.s));
     ctx.drawImage(back, 0, 0);
@@ -234,6 +237,23 @@ export function renderScene(canvas: HTMLCanvasElement, project: WallProject, opt
   ctx.drawImage(framed, place.x, place.y, place.w, place.h);
   if (light.pictureLight) {
     pictureLightFixture(ctx, place, frame, light);
+  }
+
+  // 4. The sofa, in front of everything, in the same light as the room.
+  if (view) {
+    const layer = makeCanvas(W, H);
+    const lc = ctxOf(layer);
+    drawSofaLayer(lc, project, W, place.s, H * 0.93);
+    if (light.enabled) {
+      // The room's dimming and the light's colour, on the sofa's own pixels only (its shadow stays a shadow).
+      const k = light.intensity / 100;
+      lc.globalCompositeOperation = 'source-atop';
+      lc.fillStyle = `rgba(0,0,0,${(0.12 + 0.12 * k).toFixed(3)})`;
+      lc.fillRect(0, 0, W, H);
+      lc.fillStyle = css(LIGHT[light.temperature], 0.1 + 0.1 * k);
+      lc.fillRect(0, 0, W, H);
+    }
+    ctx.drawImage(layer, 0, 0);
   }
 
   return place;
