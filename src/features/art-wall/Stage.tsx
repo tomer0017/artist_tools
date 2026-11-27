@@ -99,7 +99,7 @@ export function ScenePreview({ project, art, photo, frame, label, margin = 12 }:
 }
 
 /** Up to four frames side by side; choosing one makes it the frame. */
-export function CompareGrid({ project, art, photo, frames, labels, onUse, label }: { project: WallProject; art: ArtSource; photo: HTMLCanvasElement | null; frames: FrameSpec[]; labels: string[]; onUse: (i: number) => void; label: string }) {
+export function CompareGrid({ project, art, photo, frames, labels, onUse, label, selected }: { selected?: number; project: WallProject; art: ArtSource; photo: HTMLCanvasElement | null; frames: FrameSpec[]; labels: string[]; onUse: (i: number) => void; label: string }) {
   return (
     <div className={`grid h-full w-full gap-1.5 p-1.5 ${frames.length > 2 ? 'grid-cols-2 grid-rows-2' : 'grid-cols-1 grid-rows-2 sm:grid-cols-2 sm:grid-rows-1'}`}>
       {frames.map((frame, i) => (
@@ -107,7 +107,8 @@ export function CompareGrid({ project, art, photo, frames, labels, onUse, label 
           key={i}
           type="button"
           onClick={() => onUse(i)}
-          className="relative min-h-0 min-w-0 overflow-hidden rounded-lg ring-1 ring-white/10 transition hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          aria-pressed={selected === i}
+          className={`relative min-h-0 min-w-0 overflow-hidden rounded-lg ring-2 ${selected === i ? 'ring-primary' : 'ring-white/10'} transition hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
         >
           <ScenePreview project={project} art={art} photo={photo} frame={frame} label={`${label}: ${labels[i]}`} margin={4} />
           <span className="absolute start-2 top-2 rounded-full bg-black/70 px-2.5 py-1 text-xs font-semibold text-white">{labels[i]}</span>

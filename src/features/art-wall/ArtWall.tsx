@@ -4,6 +4,7 @@
 // the studio (src/components/common/SaveMedia.tsx: the server authorizes the
 // tool, the image and every Pro option it was made with).
 
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Crop, Check, Image as ImageIcon, Frame, House, Sun, Download, Copy, FolderOpen, Loader2, Plus, Trash2, X } from 'lucide-react';
@@ -23,6 +24,8 @@ import { EXPORT_PX, WALL_FEATURES, WALL_TEXTURES, finishOf, type FrameSpec, type
 import { cropRatio, cropArtwork } from './render/artwork';
 import { ProHint } from './ui';
 import { useWallProject, type WallState } from './useWallProject';
+
+const Room3D = dynamic(() => import('./Room3D'), { ssr: false });
 
 const STEPS = ['artwork', 'frame', 'space', 'lighting', 'export'] as const;
 const TAB_ICONS = [ImageIcon, Frame, House, Sun, Download];
@@ -78,6 +81,8 @@ export default function ArtWall() {
   const [hint, setHint] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [comparing, setComparing] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState(0);
+  const [view3D, setView3D] = useState(false);
   const [calPoints, setCalPoints] = useState<Pt[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -122,10 +127,11 @@ export default function ArtWall() {
     setMessage(null);
     try {
       const compared = compareOn ? shown.variants : null;
+      const exportProject = !compared && step === 4 && shown.variants[selectedVariant] ? { ...shown, frame: shown.variants[selectedVariant] } : shown;
       const exportArt = state.artImage ? { canvas: cropArtwork(state.artImage, shown.artwork.crop, EXPORT_PX[shown.output.size]), key: `${state.art.key}|export-${shown.output.size}` } : state.art;
-      const blob = await exportImage({ project: shown, art: exportArt, photo: state.photoImage, long: EXPORT_PX[shown.output.size], compare: compared, labels });
+      const blob = await exportImage({ project: exportProject, art: exportArt, photo: state.photoImage, long: EXPORT_PX[shown.output.size], compare: compared, labels });
       const ext = shown.output.format === 'png' ? 'png' : 'jpg';
-      await save({ blob, filename: `sketchyartlab-wall-${Date.now()}.${ext}`, mime: shown.output.format === 'png' ? 'image/png' : 'image/jpeg', title: t('imageTitle'), tool: 'wall', features: featuresOf(shown, compared) });
+      await save({ blob, filename: `sketchyartlab-wall-${Date.now()}.${ext}`, mime: shown.output.format === 'png' ? 'image/png' : 'image/jpeg', title: t('imageTitle'), tool: 'wall', features: featuresOf(exportProject, compared) });
     } catch {
       setMessage(t('output.failed'));
     } finally {
@@ -171,8 +177,9 @@ export default function ArtWall() {
       />
     );
   else if (step === 4 && compareOn)
-    stage = <CompareGrid project={shown} art={state.art} photo={state.photoImage} frames={shown.variants} labels={labels} label={t('preview.label')} onUse={(i) => state.update((p) => ({ ...p, frame: { ...p.variants[i], mat: { ...p.variants[i].mat } } }))} />;
-  else stage = <ScenePreview project={shown} art={state.art} photo={state.photoImage} label={t('preview.label')} />;
+    stage = <CompareGrid project={shown} art={state.art} photo={state.photoImage} frames={shown.variants} labels={labels} label={t('preview.label')} onUse={setSelectedVariant} selected={selectedVariant} />;
+  else if (view3D && shown.space.mode !== 'photo' && step !== 4) stage = <Room3D project={shown} art={state.art} onExit={() => setView3D(false)} />;
+  else stage = <ScenePreview project={shown} art={state.art} photo={state.photoImage} frame={step === 4 ? shown.variants[selectedVariant] : undefined} label={t('preview.label')} />;
 
   // ── the panel ────────────────────────────────────────────────────────────
   let panel: React.ReactNode = null;
@@ -188,7 +195,7 @@ export default function ArtWall() {
       ) : step === 3 ? (
         <LightControls {...props} />
       ) : (
-        <ExportPanel {...props} comparing={compareOn} setComparing={setComparing} onSave={() => void onSave()} saving={saving} message={message} />
+        <ExportPanel {...props} selectedVariant={selectedVariant} setSelectedVariant={setSelectedVariant} onUseVariant={(i) => { state.update((p) => ({ ...p, frame: { ...p.variants[i], mat: { ...p.variants[i].mat } } })); setComparing(false); go(1); }} comparing={compareOn} setComparing={setComparing} onSave={() => void onSave()} saving={saving} message={message} />
       );
   }
 
@@ -209,7 +216,8 @@ export default function ArtWall() {
           {hasArt && step === 0 && <button type="button" aria-pressed={cropping} onClick={() => setCropping(!cropping)} className="absolute end-3 top-3 flex h-10 items-center gap-2 rounded-full border border-white/15 bg-[#202124]/95 px-4 text-xs font-semibold text-white shadow-lg">
             {cropping ? <Check className="h-4 w-4" /> : <Crop className="h-4 w-4" />}{cropping ? te('doneCrop') : te('crop')}
           </button>}
-          {hasArt && !cropping && shown && <div className="pointer-events-none absolute bottom-3 start-3 rounded-full bg-black/65 px-3 py-1.5 text-[11px] tabular-nums text-white/90" dir="ltr">{shown.artwork.widthCm} × {shown.artwork.heightCm} cm</div>}
+          {hasArt && !cropping && shown && shown.space.mode !== 'photo' && step !== 4 && <button type="button" aria-pressed={view3D} onClick={() => access.premium ? setView3D(!view3D) : onLocked(te('view3D'))} className="absolute start-3 top-3 z-10 flex h-10 items-center rounded-full border border-white/20 bg-[#202124]/95 px-4 text-xs font-semibold text-white shadow-lg">{view3D ? te('view2D') : te('view3D')}{!access.premium && ' · Pro'}</button>}
+          {hasArt && !cropping && shown && !view3D && <div className="pointer-events-none absolute bottom-3 start-3 rounded-full bg-black/65 px-3 py-1.5 text-[11px] tabular-nums text-white/90" dir="ltr">{shown.artwork.widthCm} × {shown.artwork.heightCm} cm</div>}
         </section>
         {panel && <aside className="wall-editor-inspector flex min-h-0 flex-col border-t border-border bg-card md:w-[350px] md:shrink-0 md:border-s md:border-t-0 lg:w-[380px]">
           <div role="tablist" aria-label={te('settings')} className="grid shrink-0 grid-cols-5 gap-0.5 border-b border-border px-2 py-2">

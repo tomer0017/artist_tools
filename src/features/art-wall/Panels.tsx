@@ -195,12 +195,12 @@ const finishBackground = (id: string) => {
   return `linear-gradient(135deg, ${f.light}, ${f.base} 60%, ${f.dark})`;
 };
 
-export function FramePanel({ state, project, access, onLocked }: PanelProps) {
+export function FramePanel({ state, project, access, onLocked, value, onChange }: PanelProps & { value?: FrameSpec; onChange?: (frame: FrameSpec) => void }) {
   const t = useTranslations('wallTool.frame');
   const tc = useTranslations('wallTool.artwork');
-  const frame = project.frame;
-  const setFrame = (recipe: (f: FrameSpec) => FrameSpec) => state.update((p) => ({ ...p, frame: recipe(p.frame) }));
-  const outer = outerCm(project);
+  const frame = value ?? project.frame;
+  const setFrame = (recipe: (f: FrameSpec) => FrameSpec) => onChange ? onChange(recipe(frame)) : state.update((p) => ({ ...p, frame: recipe(p.frame) }));
+  const outer = outerCm({ ...project, frame });
   const round = project.artwork.crop.aspect === 'circle';
   return (
     <div className="space-y-6">
@@ -432,7 +432,10 @@ export function LightControls({ state, project, access, onLocked }: PanelProps) 
 }
 
 // ── 4. Preview & save ───────────────────────────────────────────────────────
-export function ExportPanel({ state, project, access, onLocked, comparing, setComparing, onSave, saving, message }: PanelProps & {
+export function ExportPanel({ state, project, access, onLocked, comparing, setComparing, onSave, saving, message, selectedVariant, setSelectedVariant, onUseVariant }: PanelProps & {
+  selectedVariant: number;
+  setSelectedVariant: (index: number) => void;
+  onUseVariant: (index: number) => void;
   comparing: boolean;
   setComparing: (on: boolean) => void;
   onSave: () => void;
@@ -440,7 +443,7 @@ export function ExportPanel({ state, project, access, onLocked, comparing, setCo
   message: string | null;
 }) {
   const t = useTranslations('wallTool');
-  const tf = useTranslations('wallTool.frame');
+  const tc = useTranslations('wallTool.comparisonEditor');
   const variants = project.variants;
   const [name, setName] = useState(project.name);
   useEffect(() => setName(project.name), [project.id, project.name]);
@@ -454,40 +457,26 @@ export function ExportPanel({ state, project, access, onLocked, comparing, setCo
           <Toggle label={t('compare.title')} checked={false} locked onLocked={onLocked} onChange={() => undefined} />
         ) : (
           <>
-            {variants.length > 0 && (
-              <ul className="space-y-1.5">
-                {variants.map((v, i) => (
-                  <li key={i} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-1.5 ps-2.5">
-                    <span className="h-6 w-6 shrink-0 rounded-full ring-1 ring-black/20" style={{ background: v.type === 'frameless' ? '#888' : finishBackground(v.finish) }} aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate text-[13px]">
-                      {t('compare.label', { n: i + 1 })} · {tf(`types.${v.type}`)}
-                      {v.type !== 'frameless' ? ` · ${tf(`finishes.${v.finish}`)}` : ''}
-                    </span>
-                    <button type="button" onClick={() => state.update((p) => ({ ...p, frame: { ...v, mat: { ...v.mat } } }))} className="rounded-md px-2 py-1.5 text-xs font-semibold text-primary hover:bg-secondary">
-                      {t('compare.use')}
-                    </button>
-                    <button type="button" aria-label={`${t('compare.remove')} ${i + 1}`} onClick={() => state.update((p) => ({ ...p, variants: p.variants.filter((_, j) => j !== i) }))} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary">
-                      <X className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={variants.length >= 4}
-                onClick={() => state.update((p) => ({ ...p, variants: [...p.variants, { ...p.frame, mat: { ...p.frame.mat } }].slice(0, 4) }))}
-                className="flex h-10 items-center gap-1.5 rounded-lg border border-border bg-secondary/40 px-3 text-sm font-medium hover:bg-secondary disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" /> {variants.length >= 4 ? t('compare.full') : t('compare.add')}
-              </button>
-              {variants.length >= 2 && (
-                <button type="button" aria-pressed={comparing} onClick={() => setComparing(!comparing)} className={`flex h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium ${comparing ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-secondary/40 hover:bg-secondary'}`}>
-                  <Columns2 className="h-4 w-4" aria-hidden="true" /> {comparing ? t('compare.hide') : t('compare.show')}
-                </button>
-              )}
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t('compare.title')}>
+              {variants.map((v, i) => <button key={i} type="button" aria-pressed={selectedVariant === i} onClick={() => { setSelectedVariant(i); setComparing(true); }} className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 text-xs font-semibold ${selectedVariant === i ? 'border-primary bg-primary/15 text-primary' : 'border-border'}`}>
+                <span className="h-5 w-5 rounded-full" style={{ background: finishBackground(v.finish) }} />{t('compare.label', { n: i + 1 })}
+              </button>)}
+              <button type="button" disabled={variants.length >= 4} onClick={() => {
+                const index = variants.length;
+                state.update((p) => ({ ...p, variants: [...p.variants, { ...p.frame, mat: { ...p.frame.mat } }].slice(0, 4) }));
+                setSelectedVariant(index); setComparing(true);
+              }} className="flex min-h-11 items-center gap-1 rounded-lg border border-dashed border-primary/60 px-3 text-xs font-semibold text-primary disabled:opacity-40"><Plus className="h-4 w-4" />{variants.length >= 4 ? t('compare.full') : t('compare.add')}</button>
             </div>
+            {variants[selectedVariant] && <div className="rounded-xl border border-border bg-background/40 p-3">
+              <div className="mb-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => onUseVariant(selectedVariant)} className="min-h-11 rounded-lg bg-primary/15 px-3 text-xs font-semibold text-primary">{tc('use')}</button>
+                <button type="button" onClick={() => state.update((p) => ({ ...p, variants: p.variants.map((v, i) => i === selectedVariant ? { ...p.frame, mat: { ...p.frame.mat } } : v) }))} className="min-h-11 rounded-lg border border-border px-3 text-xs">{tc('replace')}</button>
+                <button type="button" aria-label={`${t('compare.remove')} ${selectedVariant + 1}`} onClick={() => { state.update((p) => ({ ...p, variants: p.variants.filter((_, i) => i !== selectedVariant) })); setSelectedVariant(Math.max(0, selectedVariant - 1)); }} className="flex min-h-11 items-center gap-1 rounded-lg border border-border px-3 text-xs"><X className="h-4 w-4" />{t('compare.remove')}</button>
+              </div>
+              <FramePanel state={state} project={project} access={access} onLocked={onLocked} value={variants[selectedVariant]} onChange={(frame) => state.update((p) => ({ ...p, variants: p.variants.map((v, i) => i === selectedVariant ? frame : v) }))} />
+            </div>}
+            {variants.length >= 2 && <button type="button" aria-pressed={comparing} onClick={() => setComparing(!comparing)} className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm"><Columns2 className="h-4 w-4" />{comparing ? t('compare.hide') : t('compare.show')}</button>}
+
           </>
         )}
       </Section>

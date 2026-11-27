@@ -68,22 +68,27 @@ test.describe('Art on Your Wall', () => {
     // 4. Compare two frames, then save.
     await page.getByRole('tab', { name: 'Export', exact: true }).click();
     await page.getByRole('button', { name: 'Add this frame' }).click();
-    await page.getByRole('tab', { name: 'Frame', exact: true }).click();
-    await page.getByRole('group', { name: 'Frame' }).getByRole('button', { name: 'Classic', exact: true }).click();
-    await page.getByRole('radio', { name: 'Dark brown wood' }).click();
-    await page.getByRole('tab', { name: 'Room / Wall', exact: true }).click();
-    await page.getByRole('tab', { name: 'Export', exact: true }).click();
     await page.getByRole('button', { name: 'Add this frame' }).click();
-    await page.getByRole('button', { name: 'Show side by side' }).click();
-    await expect(page.getByRole('button', { name: /Frame 2$/ })).toBeVisible();
+    await expect(page.locator('.wall-editor-preview').getByRole('button', { name: /Frame 2$/ })).toBeVisible();
+    await page.getByRole('group', { name: 'Frame', exact: true }).getByRole('button', { name: 'Floating', exact: true }).click();
+    await page.getByRole('radio', { name: 'Silver' }).click();
+    await expect(page.getByRole('radio', { name: 'Silver' })).toHaveAttribute('aria-checked', 'true');
     await shot(page, '4-compare');
     await page.getByRole('button', { name: 'Save the comparison' }).click();
     await expect(page.getByText('Your artwork on the wall').first()).toBeVisible({ timeout: 30_000 });
     await shot(page, '5-saved');
     await page.getByRole('button', { name: 'Close', exact: true }).first().click();
 
+    await page.getByRole('button', { name: 'Add this frame' }).click();
+    await page.getByRole('button', { name: 'Add this frame' }).click();
+    await expect(page.locator('.wall-editor-preview').getByRole('button')).toHaveCount(4);
+    await page.getByRole('button', { name: 'Remove 4', exact: true }).click();
+    await expect(page.locator('.wall-editor-preview').getByRole('button')).toHaveCount(3);
+    await page.getByRole('button', { name: 'Replace with current frame' }).click();
+    await page.getByRole('button', { name: 'Use & continue editing' }).click();
+    await expect(page.getByRole('tab', { name: 'Frame', exact: true })).toHaveAttribute('aria-selected', 'true');
+
     // 5. My room: a photo of a wall, the piece placed and given perspective.
-    await page.getByRole('button', { name: 'Back to one view' }).click().catch(() => undefined);
     await page.getByRole('tab', { name: 'Room / Wall', exact: true }).click();
     await page.getByRole('group', { name: 'Where it hangs' }).getByRole('button', { name: 'My room', exact: true }).click();
     await upload(page, () => page.getByRole('button', { name: 'Choose a photo' }).first().click(), ROOM_PHOTO);
@@ -102,4 +107,44 @@ test.describe('Art on Your Wall', () => {
     await expect(page.getByRole('dialog').getByText('Open now')).toBeVisible({ timeout: 10_000 });
     expect(errors).toEqual([]);
   });
+  test('interactive 3D room keeps artwork dimensions and returns to 2D (desktop and mobile)', async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto('/app/wall');
+    const intro = page.getByRole('button', { name: 'Start framing' });
+    await expect(intro.or(page.getByRole('heading', { name: 'Art on Your Wall', level: 1 }))).toBeVisible();
+    if (await intro.isVisible()) await intro.click();
+    await upload(page, () => page.getByText('Drop an image here or click to upload').click(), ARTWORK);
+    await expect(page.getByRole('tab', { name: 'Artwork', exact: true })).toBeVisible();
+    await page.getByLabel('Width').fill('120');
+    await page.getByLabel('Width').blur();
+    await page.getByRole('tab', { name: 'Room / Wall', exact: true }).click();
+    await page.getByRole('group', { name: 'Where it hangs' }).getByRole('button', { name: 'Room', exact: true }).click();
+    await page.getByRole('button', { name: '3D View', exact: true }).click();
+    await expect(page.locator('[data-room-3d]')).toHaveAttribute('data-room-3d', 'ready', { timeout: 40_000 });
+    const canvas = page.getByRole('img', { name: 'Interactive 3D room' });
+    await shot(page, '3d-default');
+    const before = await canvas.screenshot();
+    const box = (await canvas.boundingBox())!;
+    await page.mouse.move(box.x + box.width * .5, box.y + box.height * .45);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * .75, box.y + box.height * .5, { steps: 16 });
+    await page.mouse.up();
+    await expect.poll(async () => (await canvas.screenshot()).equals(before)).toBe(false);
+    await shot(page, '3d-orbit');
+    await page.getByRole('button', { name: 'Inspect frame depth' }).click();
+    await shot(page, '3d-depth');
+    await page.getByRole('tab', { name: 'Artwork', exact: true }).click();
+    await page.getByRole('group', { name: 'Crop shape' }).getByRole('button', { name: 'Circle', exact: true }).click();
+    await page.getByRole('tab', { name: 'Frame', exact: true }).click();
+    await page.getByRole('group', { name: 'Frame', exact: true }).getByRole('button', { name: 'Floating', exact: true }).click();
+    await expect(page.locator('[data-room-3d]')).toHaveAttribute('data-room-3d', 'ready');
+    await shot(page, '3d-circular-floating');
+    await page.getByRole('button', { name: '2D View', exact: true }).click();
+    await expect(page.locator('[data-room-3d]')).toHaveCount(0);
+    await expect(page.getByRole('img', { name: 'Preview of your framed artwork', exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
 });

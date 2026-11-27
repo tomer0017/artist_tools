@@ -1,7 +1,9 @@
 // Art on Your Wall (src/features/art-wall), English and Hebrew.
 
 export const wallEn = {
-  editor: { subtitle: 'Your artwork. Beautifully at home.', artwork: 'Artwork', frame: 'Frame', space: 'Room / Wall', lighting: 'Lighting', export: 'Export', settings: 'Studio settings', live: 'Live preview', crop: 'Edit crop', doneCrop: 'Done cropping', loading: 'Preparing your room…', retry: 'Room could not load. Tap to retry.', photoLight: 'Your photo keeps its original lighting. Adjust the artwork shadow and light matching in Room / Wall → My room.' },
+  room3D: { loading: 'Preparing your 3D room…', unavailable: '3D could not start on this device. Your 2D editor is ready to use.', back: 'Back to 2D', inspect: 'Inspect frame depth', reset: 'Reset camera', gestures: 'Drag to orbit · Pinch / scroll to zoom · Two fingers / right drag to pan', note: 'One furnished 3D room. Room palette, sofa size and upholstery follow your settings; sofa style and wall texture stay in 2D. Exports use 2D.' },
+  comparisonEditor: { use: 'Use & continue editing', replace: 'Replace with current frame' },
+  editor: { view3D: '3D View', view2D: '2D View', subtitle: 'Your artwork. Beautifully at home.', artwork: 'Artwork', frame: 'Frame', space: 'Room / Wall', lighting: 'Lighting', export: 'Export', settings: 'Studio settings', live: 'Live preview', crop: 'Edit crop', doneCrop: 'Done cropping', loading: 'Preparing your room…', retry: 'Room could not load. Tap to retry.', photoLight: 'Your photo keeps its original lighting. Adjust the artwork shadow and light matching in Room / Wall → My room.' },
   steps: { artwork: 'Artwork', frame: 'Frame', space: 'Space', export: 'Preview & save' },
   task: {
     artwork: 'Add your artwork, crop it and give its real size',
@@ -124,7 +126,7 @@ export const wallEn = {
   },
   compare: {
     title: 'Compare frames',
-    lead: 'Keep up to four frames and see them side by side.',
+    lead: 'Add up to four variations. Select one below to edit it here.',
     add: 'Add this frame',
     full: 'Four frames are already kept.',
     show: 'Show side by side',
@@ -160,7 +162,9 @@ export const wallEn = {
 };
 
 export const wallHe: typeof wallEn = {
-  editor: { subtitle: 'היצירה שלך, במקום הראוי לה.', artwork: 'יצירה', frame: 'מסגרת', space: 'חדר / קיר', lighting: 'תאורה', export: 'ייצוא', settings: 'הגדרות הסטודיו', live: 'תצוגה חיה', crop: 'עריכת חיתוך', doneCrop: 'סיום החיתוך', loading: 'מכינים את החדר…', retry: 'החדר לא נטען. לחצו לניסיון נוסף.', photoLight: 'התאורה המקורית של הצילום נשמרת. התאמת הצל והאור של היצירה נמצאת בחדר / קיר ← החדר שלי.' },
+  room3D: { loading: 'מכינים את חדר התלת־ממד…', unavailable: 'לא ניתן להפעיל תלת־ממד במכשיר הזה. עורך ה־2D זמין לשימוש.', back: 'חזרה ל־2D', inspect: 'בדיקת עומק המסגרת', reset: 'איפוס מצלמה', gestures: 'גרירה לסיבוב · צביטה / גלגלת לזום · שתי אצבעות / כפתור ימני להזזה', note: 'חדר תלת־ממד מרוהט אחד. צבעי החדר, גודל הספה והריפוד מתעדכנים; סגנון הספה ומרקם הקיר נשארים ב־2D. הייצוא נעשה ב־2D.' },
+  comparisonEditor: { use: 'בחירה והמשך עריכה', replace: 'החלפה במסגרת הנוכחית' },
+  editor: { view3D: 'תצוגת 3D', view2D: 'תצוגת 2D', subtitle: 'היצירה שלך, במקום הראוי לה.', artwork: 'יצירה', frame: 'מסגרת', space: 'חדר / קיר', lighting: 'תאורה', export: 'ייצוא', settings: 'הגדרות הסטודיו', live: 'תצוגה חיה', crop: 'עריכת חיתוך', doneCrop: 'סיום החיתוך', loading: 'מכינים את החדר…', retry: 'החדר לא נטען. לחצו לניסיון נוסף.', photoLight: 'התאורה המקורית של הצילום נשמרת. התאמת הצל והאור של היצירה נמצאת בחדר / קיר ← החדר שלי.' },
   steps: { artwork: 'יצירה', frame: 'מסגרת', space: 'חלל', export: 'תצוגה ושמירה' },
   task: {
     artwork: 'להוסיף את היצירה, לחתוך אותה ולקבוע את הגודל האמיתי',
