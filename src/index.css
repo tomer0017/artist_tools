@@ -153,3 +153,14 @@
     @apply bg-primary text-primary-foreground;
   }
 }
+
+/* Art on Your Wall: one fixed preview and an independently scrollable inspector. */
+.wall-editor-workspace { overflow: hidden; }
+@media (max-width: 767px) {
+  .wall-editor-preview { flex: 0 0 43%; }
+  .wall-editor-inspector { flex: 1 1 57%; overflow: hidden; }
+  .wall-editor-inspector [role="tabpanel"] { padding: 14px 16px 24px; }
+}
+@media (min-width: 768px) {
+  .wall-editor-preview { padding: 20px; }
+}

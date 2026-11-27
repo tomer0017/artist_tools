@@ -258,7 +258,7 @@ export function newProject(id: string, name: string, now = Date.now()): WallProj
       room: { id: 'nordic', sofaStyle: 'modern', sofaColor: ROOMS[0].sofa.color },
       zoom: 0.42,
       aboveSofaCm: 24,
-      photo: { imageId: null, naturalWidth: 0, naturalHeight: 0, calibration: null, quad: null, shadow: 55, match: 30 },
+      photo: { imageId: null, naturalWidth: 0, naturalHeight: 0, calibration: null, quad: null, shadow: 55, match: 0 },
     },
     light: { enabled: false, pictureLight: false, temperature: 'warm', intensity: 60 },
     output: { format: 'jpeg', size: 'standard', shape: 'landscape' },

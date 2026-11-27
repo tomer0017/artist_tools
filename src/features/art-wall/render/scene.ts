@@ -6,7 +6,8 @@
 
 import { finishOf, isRound, roomOf, type FrameSpec, type LightSpec, type LightTemp, type WallProject } from '../types';
 import { frameGeometry, renderFramed } from './frame';
-import { CAMERA, SOFAS, drawDecor, drawRoomBack, drawSofa, roomView, type RoomView } from './room';
+import type { RoomView } from './room';
+import { drawInterior, interiorScale } from './interior';
 import { paintWall } from './wall';
 import { css, ctxOf, makeCanvas, rgbOf, shade, type Ctx, type RGB } from './util';
 
@@ -30,14 +31,11 @@ export function placeFrame(project: WallProject, frame: FrameSpec, W: number, H:
   const g = frameGeometry(art.widthCm, round ? art.widthCm : art.heightCm, frame);
   const outerH = round ? g.outerW : g.outerH;
   if (project.space.mode === 'room') {
-    const sofa = SOFAS[project.space.room.sofaStyle];
-    const centre = sofa.back + project.space.aboveSofaCm + outerH / 2;
-    const view = roomView(W, H, { w: g.outerW, h: outerH }, centre, sofa);
-    const w = g.outerW * view.s;
-    const h = outerH * view.s;
-    const cy = view.horizon - (centre - CAMERA.H) * view.s;
-    return { place: { x: view.cx - w / 2, y: cy - h / 2, w, h, s: view.s, round }, view };
+    const { s, artBottom } = interiorScale(project, W, H, g.outerW, outerH);
+    const w = g.outerW * s, h = outerH * s;
+    return { place: { x: (W - w) / 2, y: artBottom - h, w, h, s, round }, view: { W, H, s, cx: W / 2, horizon: 0 } };
   }
+
   const zoom = Math.min(0.8, Math.max(0.2, project.space.zoom));
   const s = Math.min((W * zoom) / g.outerW, (H * Math.min(0.86, zoom * 1.9)) / outerH);
   const w = g.outerW * s;
@@ -123,22 +121,6 @@ function pictureLightCone(ctx: Ctx, p: Placement, light: LightSpec): void {
   ctx.restore();
 }
 
-/** Neutral light falling across the piece from above: brighter at the top, no colour. */
-function pictureLightOnPiece(ctx: Ctx, p: Placement, light: LightSpec): void {
-  const k = light.intensity / 100;
-  ctx.save();
-  silhouette(ctx, p);
-  ctx.clip();
-  const g = ctx.createLinearGradient(0, p.y, 0, p.y + p.h);
-  g.addColorStop(0, `rgba(255,255,255,${(0.32 * k + 0.08).toFixed(3)})`);
-  g.addColorStop(0.55, 'rgba(255,255,255,0)');
-  g.addColorStop(1, `rgba(0,0,0,${(0.22 * k + 0.05).toFixed(3)})`);
-  ctx.globalCompositeOperation = 'soft-light';
-  ctx.fillStyle = g;
-  ctx.fillRect(p.x, p.y, p.w, p.h);
-  ctx.restore();
-}
-
 /** The fixture: a brass (or nickel) bar on two arms, lit from within. */
 function pictureLightFixture(ctx: Ctx, p: Placement, frame: FrameSpec, light: LightSpec): void {
   const finish = finishOf(frame.finish);
@@ -147,7 +129,7 @@ function pictureLightFixture(ctx: Ctx, p: Placement, frame: FrameSpec, light: Li
   const len = Math.min(Math.max(p.w / s * 0.55, 26), 100) * s;
   const cx = p.x + p.w / 2;
   const barY = p.y - 9 * s;
-  const plateY = p.y - 24 * s;
+  const plateY = p.y - 12 * s;
   const barH = Math.max(3, 4.6 * s);
   // Shadow of the fixture on the wall.
   ctx.save();
@@ -230,9 +212,7 @@ export function renderScene(canvas: HTMLCanvasElement, project: WallProject, opt
 
   // 1. The wall (and room) behind, cached per look and size.
   if (view) {
-    const room = roomOf(space.room.id);
-    const back = cached(`room|${room.id}|${W}x${H}|${view.s.toFixed(4)}|${view.horizon.toFixed(1)}`, W, H, (c) => drawRoomBack(c, view, room));
-    ctx.drawImage(back, 0, 0);
+    drawInterior(ctx, project, W, H, place.s, H * 0.93);
   } else {
     const back = cached(`wall|${space.wall.color}|${space.wall.texture}|${W}x${H}|${place.s.toFixed(4)}`, W, H, (c) => paintWall(c, 0, 0, W, H, space.wall.color, space.wall.texture, place.s));
     ctx.drawImage(back, 0, 0);
@@ -253,34 +233,9 @@ export function renderScene(canvas: HTMLCanvasElement, project: WallProject, opt
   const framed = framedFor(options.art, options.artKey, project, frame, place.s, lightAbove);
   ctx.drawImage(framed, place.x, place.y, place.w, place.h);
   if (light.pictureLight) {
-    pictureLightOnPiece(ctx, place, light);
     pictureLightFixture(ctx, place, frame, light);
   }
 
-  // 4. The sofa and decor, in front, in the same light as the room.
-  if (view) {
-    const room = roomOf(space.room.id);
-    const sofa = SOFAS[space.room.sofaStyle];
-    const front = cached(`sofa|${room.id}|${space.room.sofaStyle}|${space.room.sofaColor}|${W}x${H}|${view.s.toFixed(4)}|${view.horizon.toFixed(1)}`, W, H, (c) => {
-      drawSofa(c, view, space.room.sofaStyle, space.room.sofaColor);
-      drawDecor(c, view, room, sofa);
-    });
-    if (light.enabled) {
-      const lit = makeCanvas(W, H);
-      const lc = ctxOf(lit);
-      lc.drawImage(front, 0, 0);
-      lc.globalCompositeOperation = 'source-atop';
-      lc.fillStyle = css(shade([255, 255, 255], -0.18 - 0.1 * (light.intensity / 100)));
-      lc.globalCompositeOperation = 'multiply';
-      lc.fillRect(0, 0, W, H);
-      lc.globalCompositeOperation = 'destination-in';
-      lc.drawImage(front, 0, 0);
-      lc.globalCompositeOperation = 'source-atop';
-      lc.fillStyle = css(LIGHT[light.temperature], 0.12 + 0.12 * (light.intensity / 100));
-      lc.fillRect(0, 0, W, H);
-      ctx.drawImage(lit, 0, 0);
-    } else ctx.drawImage(front, 0, 0);
-  }
   return place;
 }
 

@@ -1,6 +1,7 @@
 // Art on Your Wall (src/features/art-wall), English and Hebrew.
 
 export const wallEn = {
+  editor: { subtitle: 'Your artwork. Beautifully at home.', artwork: 'Artwork', frame: 'Frame', space: 'Room / Wall', lighting: 'Lighting', export: 'Export', settings: 'Studio settings', live: 'Live preview', crop: 'Edit crop', doneCrop: 'Done cropping', loading: 'Preparing your room…', retry: 'Room could not load. Tap to retry.', photoLight: 'Your photo keeps its original lighting. Adjust the artwork shadow and light matching in Room / Wall → My room.' },
   steps: { artwork: 'Artwork', frame: 'Frame', space: 'Space', export: 'Preview & save' },
   task: {
     artwork: 'Add your artwork, crop it and give its real size',
@@ -157,6 +158,7 @@ export const wallEn = {
 };
 
 export const wallHe: typeof wallEn = {
+  editor: { subtitle: 'היצירה שלך, במקום הראוי לה.', artwork: 'יצירה', frame: 'מסגרת', space: 'חדר / קיר', lighting: 'תאורה', export: 'ייצוא', settings: 'הגדרות הסטודיו', live: 'תצוגה חיה', crop: 'עריכת חיתוך', doneCrop: 'סיום החיתוך', loading: 'מכינים את החדר…', retry: 'החדר לא נטען. לחצו לניסיון נוסף.', photoLight: 'התאורה המקורית של הצילום נשמרת. התאמת הצל והאור של היצירה נמצאת בחדר / קיר ← החדר שלי.' },
   steps: { artwork: 'יצירה', frame: 'מסגרת', space: 'חלל', export: 'תצוגה ושמירה' },
   task: {
     artwork: 'להוסיף את היצירה, לחתוך אותה ולקבוע את הגודל האמיתי',

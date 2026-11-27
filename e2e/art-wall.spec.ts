@@ -34,6 +34,7 @@ test.describe('Art on Your Wall', () => {
 
     // 1. Artwork: upload, a square crop, its real size.
     await upload(page, () => page.getByText('Drop an image here or click to upload').click(), ARTWORK);
+    await page.getByRole('button', { name: 'Edit crop', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Crop area' })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('group', { name: 'Crop shape' }).getByRole('button', { name: 'Square' }).click();
     await expect(page.getByRole('group', { name: 'Crop shape' }).getByRole('button', { name: 'Square' })).toHaveAttribute('aria-pressed', 'true');
@@ -45,29 +46,33 @@ test.describe('Art on Your Wall', () => {
     await shot(page, '1-crop');
 
     // 2. Frame: floating, light gold.
-    await page.getByRole('button', { name: /^Next: Frame/ }).click();
+    await page.getByRole('tab', { name: 'Frame', exact: true }).click();
     await page.getByRole('group', { name: 'Frame' }).getByRole('button', { name: 'Floating', exact: true }).click();
     await page.getByRole('radio', { name: 'Light gold' }).click();
     await expect(page.getByText(/^Framed size: /)).toBeVisible();
     await shot(page, '2-frame');
 
     // 3. Space: the classic salon, with a picture light.
-    await page.getByRole('button', { name: /^Next: Space/ }).click();
+    await page.getByRole('tab', { name: 'Room / Wall', exact: true }).click();
     await page.getByRole('group', { name: 'Where it hangs' }).getByRole('button', { name: 'Room', exact: true }).click();
     await page.getByRole('group', { name: 'Room' }).getByRole('button', { name: 'Classic salon' }).click();
+    await page.getByRole('tab', { name: 'Lighting', exact: true }).click();
     await page.getByRole('switch', { name: 'Picture light' }).click();
     await expect(page.getByRole('switch', { name: 'Picture light' })).toHaveAttribute('aria-checked', 'true');
+    const stage = page.locator('.wall-editor-preview');
+    const before = await stage.boundingBox();
+    await page.locator('#wall-settings').evaluate(el => { el.scrollTop = el.scrollHeight; });
+    expect(await stage.boundingBox()).toEqual(before);
     await shot(page, '3-room');
 
     // 4. Compare two frames, then save.
-    await page.getByRole('button', { name: /^Next: Preview/ }).click();
+    await page.getByRole('tab', { name: 'Export', exact: true }).click();
     await page.getByRole('button', { name: 'Add this frame' }).click();
-    await page.getByRole('button', { name: /^Back/ }).click();
-    await page.getByRole('button', { name: /^Back/ }).click();
+    await page.getByRole('tab', { name: 'Frame', exact: true }).click();
     await page.getByRole('group', { name: 'Frame' }).getByRole('button', { name: 'Classic', exact: true }).click();
     await page.getByRole('radio', { name: 'Dark brown wood' }).click();
-    await page.getByRole('button', { name: /^Next: Space/ }).click();
-    await page.getByRole('button', { name: /^Next: Preview/ }).click();
+    await page.getByRole('tab', { name: 'Room / Wall', exact: true }).click();
+    await page.getByRole('tab', { name: 'Export', exact: true }).click();
     await page.getByRole('button', { name: 'Add this frame' }).click();
     await page.getByRole('button', { name: 'Show side by side' }).click();
     await expect(page.getByRole('button', { name: /Frame 2$/ })).toBeVisible();
@@ -79,7 +84,7 @@ test.describe('Art on Your Wall', () => {
 
     // 5. My room: a photo of a wall, the piece placed and given perspective.
     await page.getByRole('button', { name: 'Back to one view' }).click().catch(() => undefined);
-    await page.getByRole('button', { name: /^Back/ }).click();
+    await page.getByRole('tab', { name: 'Room / Wall', exact: true }).click();
     await page.getByRole('group', { name: 'Where it hangs' }).getByRole('button', { name: 'My room', exact: true }).click();
     await upload(page, () => page.getByRole('button', { name: 'Choose a photo' }).first().click(), ROOM_PHOTO);
     const corner = page.getByLabel('Corner 2');

@@ -1,6 +1,7 @@
 // The saved image: the same renderer as the preview, at the chosen size. A
 // comparison is a grid of the same scene with each kept frame.
 
+import { loadRoomAssets } from './render/assets';
 import { canvasToBlob } from './images';
 import { fittedQuad } from './placement';
 import { frameGeometry } from './render/frame';
@@ -77,6 +78,7 @@ export interface ExportInput {
 /** Render the final image and encode it. */
 export async function exportImage(input: ExportInput): Promise<Blob> {
   const { project, art, photo, long } = input;
+  await loadRoomAssets(project);
   const mime = project.output.format === 'png' ? 'image/png' : 'image/jpeg';
   const photoMode = project.space.mode === 'photo' && photo && project.space.photo.quad;
   const single = (frame: FrameSpec, w: number, h: number): HTMLCanvasElement => {

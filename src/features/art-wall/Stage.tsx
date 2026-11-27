@@ -6,6 +6,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { renderPhotoScene, type ArtSource } from './exporter';
 import { centroid, defaultQuad, fittedQuad, quadMeta, translateQuad, type Quad } from './placement';
+import { loadRoomAssets } from './render/assets';
+import { useTranslations } from 'use-intl';
 import { renderScene } from './render/scene';
 import { ctxOf, makeCanvas } from './render/util';
 import { SHAPES, type FrameSpec, type Pt, type WallProject } from './types';
@@ -38,17 +40,17 @@ const dprOf = (css: { w: number; h: number }) => {
 
 /** A downscaled copy of the photo for a given canvas size (redrawing 12 MP per frame is slow). */
 function usePhotoAt(photo: HTMLCanvasElement | null, w: number, h: number) {
-  const cache = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
+  const cache = useRef<{ key: string; source: HTMLCanvasElement; canvas: HTMLCanvasElement } | null>(null);
   return useCallback(() => {
     if (!photo || w < 2 || h < 2) return null;
     const key = `${photo.width}x${photo.height}@${w}x${h}`;
-    if (cache.current?.key === key) return cache.current.canvas;
+    if (cache.current?.key === key && cache.current.source === photo) return cache.current.canvas;
     const c = makeCanvas(w, h);
     const ctx = ctxOf(c);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(photo, 0, 0, w, h);
-    cache.current = { key, canvas: c };
+    cache.current = { key, source: photo, canvas: c };
     return c;
   }, [photo, w, h]);
 }
@@ -65,23 +67,32 @@ export function ScenePreview({ project, art, photo, frame, label, margin = 12 }:
   const ph = Math.round(css.h * dpr);
   const photoAt = usePhotoAt(photoMode ? photo : null, pw, ph);
 
+  const t = useTranslations('wallTool.editor');
+  const [status, setStatus] = useState<'ready' | 'loading' | 'error'>('ready');
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     const c = canvas.current;
     if (!c || pw < 2 || ph < 2) return;
-    const raf = requestAnimationFrame(() => {
-      if (c.width !== pw || c.height !== ph) {
+    let alive = true;
+    let raf = 0;
+    setStatus('loading');
+    void loadRoomAssets(project).then(() => {
+      if (!alive) return;
+      raf = requestAnimationFrame(() => {
         c.width = pw;
         c.height = ph;
-      }
-      const scaled = photoAt();
-      if (photoMode && scaled) renderPhotoScene(c, project, art, scaled, frame ?? project.frame);
-      else renderScene(c, project, { art: art.canvas, artKey: art.key, frame });
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [project, art, frame, pw, ph, photoMode, photoAt]);
+        const scaled = photoAt();
+        if (photoMode && scaled) renderPhotoScene(c, project, art, scaled, frame ?? project.frame);
+        else renderScene(c, project, { art: art.canvas, artKey: art.key, frame });
+        setStatus('ready');
+      });
+    }).catch(() => alive && setStatus('error'));
+    return () => { alive = false; cancelAnimationFrame(raf); };
+  }, [project, art, frame, pw, ph, photoMode, photoAt, retry]);
 
   return (
-    <div ref={host} className="flex h-full w-full items-center justify-center">
+    <div ref={host} className="relative flex h-full w-full items-center justify-center">
+      {status !== 'ready' && <div role="status" className="absolute z-10 rounded-xl bg-background/90 px-4 py-3 text-xs shadow-lg">{status === 'loading' ? t('loading') : <button onClick={() => setRetry((n) => n + 1)}>{t('retry')}</button>}</div>}
       {css.w > 0 && <canvas ref={canvas} role="img" aria-label={label} className="block rounded-md shadow-2xl" style={{ width: css.w, height: css.h }} />}
     </div>
   );

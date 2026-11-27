@@ -31,7 +31,6 @@ import {
   type FrameType,
   type LightTemp,
   type Pt,
-  type RoomId,
   type SofaStyle,
   type SpaceMode,
   type WallProject,
@@ -174,7 +173,7 @@ export function SavedArtworks({ state }: { state: WallState }) {
 // ── 2. Frame ────────────────────────────────────────────────────────────────
 const finishBackground = (id: string) => {
   const f = FINISHES.find((x) => x.id === id)!;
-  if (f.kind === 'wood') return `repeating-linear-gradient(100deg, ${f.base} 0 3px, ${f.dark} 3px 4px, ${f.light} 4px 6px, ${f.base} 6px 9px)`;
+  if (f.kind === 'wood') return `repeating-linear-gradient(94deg, ${f.base} 0 5px, ${f.dark}88 5px 5.5px, ${f.base} 6px 11px, ${f.light}aa 11px 11.5px, ${f.base} 12px 17px)`;
   if (f.kind === 'metal') return `linear-gradient(135deg, ${f.light}, ${f.base} 40%, ${f.dark} 70%, ${f.light})`;
   return `linear-gradient(135deg, ${f.light}, ${f.base} 60%, ${f.dark})`;
 };
@@ -294,14 +293,13 @@ export function SpacePanel({ state, project, access, onLocked, calibration }: Pa
       {space.mode === 'room' && (
         <>
           <Section title={t('room')}>
-            <Chips<RoomId>
-              label={t('room')}
-              columns={2}
-              options={ROOMS.map((r) => ({ id: r.id, label: t(`rooms.${r.id}`), icon: <span className="h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-black/20" style={{ background: r.wall.color }} aria-hidden="true" /> }))}
-              value={space.room.id}
-              onChange={(id) => setSpace((s) => ({ ...s, room: { id, sofaStyle: ROOMS.find((r) => r.id === id)!.sofa.style, sofaColor: ROOMS.find((r) => r.id === id)!.sofa.color } }))}
-              onLocked={onLocked}
-            />
+            <div role="group" aria-label={t('room')} className="grid grid-cols-2 gap-2">
+              {ROOMS.map((r) => <button type="button" key={r.id} aria-pressed={space.room.id === r.id} onClick={() => setSpace((s) => ({ ...s, room: { id: r.id, sofaStyle: r.sofa.style, sofaColor: r.sofa.color } }))} className={`overflow-hidden rounded-xl border text-start transition ${space.room.id === r.id ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-white/40'}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- local optimized studio asset */}
+                <img src={`/images/art-wall/${r.id}.webp`} alt="" loading="lazy" className="aspect-[3/2] w-full object-cover" />
+                <span className="block px-2.5 py-2 text-xs font-medium">{t(`rooms.${r.id}`)}</span>
+              </button>)}
+            </div>
           </Section>
           <Section title={t('sofa')} hint={t('scaleNote', { w: SOFAS[space.room.sofaStyle].w })}>
             <Chips<SofaStyle> label={t('sofa')} columns={2} options={SOFA_STYLES.map((s) => ({ id: s, label: t(`sofas.${s}`) }))} value={space.room.sofaStyle} onChange={(sofaStyle) => setSpace((s) => ({ ...s, room: { ...s.room, sofaStyle } }))} onLocked={onLocked} />
@@ -313,7 +311,6 @@ export function SpacePanel({ state, project, access, onLocked, calibration }: Pa
 
       {space.mode === 'photo' && <PhotoControls state={state} project={project} calibration={calibration} />}
 
-      <LightControls state={state} project={project} access={access} onLocked={onLocked} />
       {space.mode === 'photo' && !state.photoImage && <p className="text-xs text-muted-foreground">{tp('addLead')}</p>}
     </div>
   );
@@ -388,11 +385,12 @@ function PhotoControls({ state, project, calibration }: { state: WallState; proj
   );
 }
 
-function LightControls({ state, project, access, onLocked }: PanelProps) {
+export function LightControls({ state, project, access, onLocked }: PanelProps) {
   const t = useTranslations('wallTool.light');
   const light = project.light;
   const setLight = (recipe: (l: WallProject['light']) => WallProject['light']) => state.update((p) => ({ ...p, light: recipe(p.light) }));
-  if (project.space.mode === 'photo') return null;
+  const te = useTranslations('wallTool.editor');
+  if (project.space.mode === 'photo') return <p className="text-sm leading-relaxed text-muted-foreground">{te('photoLight')}</p>;
   return (
     <Section title={t('title')} hint={access.lighting && (light.enabled || light.pictureLight) ? t('note') : undefined}>
       <Toggle label={t('gallery')} checked={access.lighting && light.enabled} locked={!access.lighting} onLocked={onLocked} onChange={(on) => setLight((l) => ({ ...l, enabled: on }))} />

@@ -62,7 +62,7 @@ function materialStrip(finish: Finish, variant: number): HTMLCanvasElement {
         const ring = v * rings + wave * 0.55;
         const t = ring - Math.floor(ring);
         const line = Math.pow(Math.max(0, Math.cos(t * 6.283)), 8);
-        k = 0.52 + 0.16 * rows[y] - 0.42 * line + 0.06 * Math.sin(6.283 * 41 * u + y * 0.9);
+        k = 0.54 + 0.12 * rows[y] - 0.18 * line + 0.025 * Math.sin(6.283 * 41 * u + y * 0.9);
       } else if (finish.kind === 'metal') {
         k = 0.5 + 0.22 * rows[y] + 0.08 * Math.sin(6.283 * 3 * u + p1) * Math.cos(6.283 * 2 * u + p2);
       } else {
@@ -87,16 +87,8 @@ function profileStops(kind: Finish['kind']): [number, string][] {
   const w = (a: number) => `rgba(255,255,255,${Math.min(0.9, a * k).toFixed(3)})`;
   const b = (a: number) => `rgba(0,0,0,${Math.min(0.9, a * k).toFixed(3)})`;
   return [
-    [0, b(0.42)],
-    [0.06, b(0.12)],
-    [0.16, w(0.1)],
-    [0.34, w(0.26)],
-    [0.5, w(0.04)],
-    [0.7, b(0.1)],
-    [0.86, b(0.26)],
-    [0.93, w(0.2)],
-    [0.97, b(0.12)],
-    [1, b(0.5)],
+    [0, b(0.44)], [0.035, w(0.3)], [0.09, w(0.1)],
+    [0.76, b(0.02)], [0.88, b(0.08)], [0.92, w(0.16)], [1, b(0.48)],
   ];
 }
 

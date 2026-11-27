@@ -3,11 +3,24 @@ import { fittedQuad, quadMeta, defaultQuad, outerCm } from './placement';
 import { cropRatio, fitCrop, rotatedSize } from './render/artwork';
 import { frameGeometry } from './render/frame';
 import { apply3, invert3, isConvex, squareToQuad } from './render/photo';
+import { interiorScale } from './render/interior';
+import { SOFAS } from './render/room';
 import { newProject, type Pt } from './types';
 
 const close = (a: number, b: number, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(eps);
 
 describe('Art on Your Wall geometry', () => {
+  it('keeps artwork and sofa at the same physical scale, including oversized circular works', () => {
+    const p = newProject('scale', 'scale');
+    for (const width of [50, 120, 250]) {
+      for (const [W, H] of [[1200, 800], [800, 1000]]) {
+        const v = interiorScale(p, W, H, width, width);
+        close((width * v.s) / (SOFAS.modern.w * v.s), width / SOFAS.modern.w);
+        expect(v.artBottom - width * v.s).toBeGreaterThan(0);
+        expect(width * v.s).toBeLessThan(W);
+      }
+    }
+  });
   it('maps the unit square exactly onto any convex quad, and back', () => {
     const quad: [Pt, Pt, Pt, Pt] = [{ x: 10, y: 20 }, { x: 210, y: 35 }, { x: 190, y: 260 }, { x: 25, y: 240 }];
     const h = squareToQuad(quad);

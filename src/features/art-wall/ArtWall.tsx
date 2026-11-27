@@ -6,25 +6,26 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ArrowLeft, ArrowRight, Copy, FolderOpen, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Crop, Check, Image as ImageIcon, Frame, House, Sun, Download, Copy, FolderOpen, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'use-intl';
 import ImageUploader from '@/components/common/ImageUploader';
 import { useSaveMedia } from '@/components/common/SaveMedia';
-import ToolHeader, { HeaderIconButton, StepIndicator } from '@/components/shell/ToolHeader';
+import ToolHeader, { HeaderIconButton } from '@/components/shell/ToolHeader';
 import { useHasFeature } from '@/components/shell/account';
 import type { UseFeatureId } from '@/lib/plans';
 import { exportImage } from './exporter';
 import { quadMeta, defaultQuad, fittedQuad, centroid } from './placement';
-import { ArtworkPanel, ExportPanel, FramePanel, SavedArtworks, SpacePanel, type Access } from './Panels';
+import { ArtworkPanel, ExportPanel, FramePanel, SavedArtworks, SpacePanel, LightControls, type Access } from './Panels';
 import { CompareGrid, PhotoStage, ScenePreview } from './Stage';
 import { CropEditor } from './CropEditor';
 import type { ProjectSummary } from './storage';
 import { EXPORT_PX, WALL_FEATURES, WALL_TEXTURES, finishOf, type FrameSpec, type Pt, type WallProject } from './types';
-import { cropRatio } from './render/artwork';
+import { cropRatio, cropArtwork } from './render/artwork';
 import { ProHint } from './ui';
 import { useWallProject, type WallState } from './useWallProject';
 
-const STEPS = ['artwork', 'frame', 'space', 'export'] as const;
+const STEPS = ['artwork', 'frame', 'space', 'lighting', 'export'] as const;
+const TAB_ICONS = [ImageIcon, Frame, House, Sun, Download];
 
 const premiumFrame = (f: FrameSpec) => f.type === 'floating' || (f.type !== 'frameless' && finishOf(f.finish).pro);
 
@@ -62,6 +63,7 @@ function Busy({ text }: { text?: string }) {
 
 export default function ArtWall() {
   const t = useTranslations('wallTool');
+  const te = useTranslations('wallTool.editor');
   const state = useWallProject(t('projects.untitled'));
   const { save } = useSaveMedia();
   const access: Access = {
@@ -72,6 +74,7 @@ export default function ArtWall() {
     hires: useHasFeature(WALL_FEATURES.hires),
   };
   const [step, setStep] = useState(0);
+  const [cropping, setCropping] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [comparing, setComparing] = useState(false);
@@ -91,6 +94,7 @@ export default function ArtWall() {
   const onLocked = (name: string) => setHint(name);
   const go = (next: number) => {
     setHint(null);
+    setCropping(false);
     setCalPoints(null);
     setStep(Math.max(0, Math.min(STEPS.length - 1, next)));
   };
@@ -118,7 +122,8 @@ export default function ArtWall() {
     setMessage(null);
     try {
       const compared = compareOn ? shown.variants : null;
-      const blob = await exportImage({ project: shown, art: state.art, photo: state.photoImage, long: EXPORT_PX[shown.output.size], compare: compared, labels });
+      const exportArt = state.artImage ? { canvas: cropArtwork(state.artImage, shown.artwork.crop, EXPORT_PX[shown.output.size]), key: `${state.art.key}|export-${shown.output.size}` } : state.art;
+      const blob = await exportImage({ project: shown, art: exportArt, photo: state.photoImage, long: EXPORT_PX[shown.output.size], compare: compared, labels });
       const ext = shown.output.format === 'png' ? 'png' : 'jpg';
       await save({ blob, filename: `sketchyartlab-wall-${Date.now()}.${ext}`, mime: shown.output.format === 'png' ? 'image/png' : 'image/jpeg', title: t('imageTitle'), tool: 'wall', features: featuresOf(shown, compared) });
     } catch {
@@ -133,7 +138,7 @@ export default function ArtWall() {
   if (!project || !shown) stage = <Busy />;
   else if (!hasArt || state.missing.art) stage = <EmptyArtwork state={state} />;
   else if (!state.artImage) stage = <Busy text={t('artwork.loading')} />;
-  else if (step === 0)
+  else if (step === 0 && cropping)
     stage = (
       <CropEditor
         image={state.artImage}
@@ -165,7 +170,7 @@ export default function ArtWall() {
         labels={{ label: t('preview.label'), hint: t('photo.hint'), corner: (n) => t('photo.corner', { n }), tap: calPoints && calPoints.length === 0 ? t('photo.tapFirst') : calPoints && calPoints.length === 1 ? t('photo.tapSecond') : t('photo.calibrateLead') }}
       />
     );
-  else if (step === 3 && compareOn)
+  else if (step === 4 && compareOn)
     stage = <CompareGrid project={shown} art={state.art} photo={state.photoImage} frames={shown.variants} labels={labels} label={t('preview.label')} onUse={(i) => state.update((p) => ({ ...p, frame: { ...p.variants[i], mat: { ...p.variants[i].mat } } }))} />;
   else stage = <ScenePreview project={shown} art={state.art} photo={state.photoImage} label={t('preview.label')} />;
 
@@ -180,49 +185,42 @@ export default function ArtWall() {
         <FramePanel {...props} />
       ) : step === 2 ? (
         <SpacePanel {...props} calibration={calibration} />
+      ) : step === 3 ? (
+        <LightControls {...props} />
       ) : (
         <ExportPanel {...props} comparing={compareOn} setComparing={setComparing} onSave={() => void onSave()} saving={saving} message={message} />
       );
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <div className="wall-editor flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       <ToolHeader
         tool="wall"
-        task={t(`task.${stepId}`)}
+        task={te('subtitle')}
         actions={
           <HeaderIconButton label={t('projects.button')} onClick={() => setProjectsOpen(true)}>
             <FolderOpen className="h-5 w-5" />
           </HeaderIconButton>
         }
       />
-      <StepIndicator steps={STEPS.map((s) => t(`steps.${s}`))} current={step} canSelect={(i) => i === 0 || hasArt} onSelect={go} />
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <section aria-label={t('preview.label')} className="relative min-h-[46%] min-w-0 flex-1 bg-[#0e0e10] md:min-h-0">
-          {stage}
+      <div className="wall-editor-workspace flex min-h-0 flex-1 flex-col md:flex-row">
+        <section aria-label={t('preview.label')} className="wall-editor-preview relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[#101112]">
+          <div className={cropping ? 'h-full pt-12' : 'h-full'}>{stage}</div>
+          {hasArt && step === 0 && <button type="button" aria-pressed={cropping} onClick={() => setCropping(!cropping)} className="absolute end-3 top-3 flex h-10 items-center gap-2 rounded-full border border-white/15 bg-[#202124]/95 px-4 text-xs font-semibold text-white shadow-lg">
+            {cropping ? <Check className="h-4 w-4" /> : <Crop className="h-4 w-4" />}{cropping ? te('doneCrop') : te('crop')}
+          </button>}
+          {hasArt && !cropping && shown && <div className="pointer-events-none absolute bottom-3 start-3 rounded-full bg-black/65 px-3 py-1.5 text-[11px] tabular-nums text-white/90" dir="ltr">{shown.artwork.widthCm} × {shown.artwork.heightCm} cm</div>}
         </section>
-        {panel && (
-          <aside className="flex max-h-[54%] min-h-0 flex-col border-t border-border bg-card md:max-h-none md:w-[360px] md:border-s md:border-t-0 lg:w-[390px]">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{panel}</div>
-            {hint && (
-              <div className="border-t border-border p-3">
-                <ProHint name={hint} onClose={() => setHint(null)} />
-              </div>
-            )}
-            <div className="flex gap-2 border-t border-border p-3">
-              {step > 0 && (
-                <button type="button" onClick={() => go(step - 1)} className="flex h-11 items-center gap-1.5 rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-secondary">
-                  <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> {t('back')}
-                </button>
-              )}
-              {step < STEPS.length - 1 && (
-                <button type="button" onClick={() => go(step + 1)} className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90">
-                  {t('next')}: {t(`steps.${STEPS[step + 1]}`)} <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          </aside>
-        )}
+        {panel && <aside className="wall-editor-inspector flex min-h-0 flex-col border-t border-border bg-card md:w-[350px] md:shrink-0 md:border-s md:border-t-0 lg:w-[380px]">
+          <div role="tablist" aria-label={te('settings')} className="grid shrink-0 grid-cols-5 gap-0.5 border-b border-border px-2 py-2">
+            {STEPS.map((id, i) => { const Icon = TAB_ICONS[i]; return <button key={id} id={`wall-tab-${id}`} role="tab" aria-selected={step === i} aria-controls="wall-settings" onClick={() => go(i)} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-0.5 text-[10px] font-medium transition-colors ${step === i ? 'bg-primary/12 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}><Icon className="h-4 w-4" aria-hidden="true" /><span>{te(id)}</span></button>; })}
+          </div>
+          <div id="wall-settings" role="tabpanel" aria-labelledby={`wall-tab-${stepId}`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4" key={step}>
+            <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-semibold">{te(stepId)}</h2><span className="text-[10px] uppercase tracking-[.12em] text-muted-foreground">{te('live')}</span></div>
+            {panel}
+          </div>
+          {hint && <div className="shrink-0 border-t border-border p-2"><ProHint name={hint} onClose={() => setHint(null)} /></div>}
+        </aside>}
       </div>
       <ProjectsDialog open={projectsOpen} onOpenChange={setProjectsOpen} state={state} onOpened={() => go(state.project?.artwork.imageId ? step : 0)} />
     </div>

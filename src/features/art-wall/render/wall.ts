@@ -25,7 +25,7 @@ export function paintWall(ctx: Ctx, x: number, y: number, w: number, h: number, 
       overlayGrain(ctx, x, y, w, h, 0.03);
       break;
     case 'plaster':
-      overlayTexture(ctx, clouds(w, h, 45 * s, seed + 1, 4), x, y, w, h, 0.32);
+      overlayTexture(ctx, clouds(w, h, 45 * s, seed + 1, 4), x, y, w, h, 0.13);
       overlayTexture(ctx, clouds(w, h, 9 * s, seed + 2, 2), x, y, w, h, 0.12);
       overlayGrain(ctx, x, y, w, h, 0.06);
       break;
@@ -35,9 +35,9 @@ export function paintWall(ctx: Ctx, x: number, y: number, w: number, h: number, 
       overlayGrain(ctx, x, y, w, h, 0.05);
       break;
     case 'concrete': {
-      overlayTexture(ctx, clouds(w, h, 32 * s, seed + 5, 4), x, y, w, h, 0.38);
+      overlayTexture(ctx, clouds(w, h, 32 * s, seed + 5, 4), x, y, w, h, 0.18);
       overlayTexture(ctx, clouds(w, h, 6 * s, seed + 6, 2), x, y, w, h, 0.2);
-      overlayGrain(ctx, x, y, w, h, 0.16);
+      overlayGrain(ctx, x, y, w, h, 0.065);
       // Pores and the faint seams of the formwork.
       const pores = Math.min(6000, Math.round(((w / s) * (h / s)) / 45));
       for (let i = 0; i < pores; i++) {

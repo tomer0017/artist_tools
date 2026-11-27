@@ -23,7 +23,7 @@ export function CropEditor({ image, crop, onChange, label, hint }: { image: HTML
   }, []);
 
   const r = rotatedSize(image.width, image.height, crop.rotation);
-  const f = size.w > 0 && size.h > 0 ? Math.min((size.w - 32) / r.w, (size.h - 56) / r.h) : 0;
+  const f = size.w > 0 && size.h > 0 ? Math.min((size.w - 52) / r.w, (size.h - 72) / r.h) : 0;
   const dw = Math.max(0, r.w * f);
   const dh = Math.max(0, r.h * f);
 
@@ -163,7 +163,7 @@ export function CropEditor({ image, crop, onChange, label, hint }: { image: HTML
               </div>
             )}
             {corners.map(([mode, cls]) => (
-              <span key={mode} onPointerDown={start(mode)} className={`absolute flex h-11 w-11 items-center justify-center ${cls}`} aria-hidden="true">
+              <span key={mode} onPointerDown={start(mode)} style={round ? { left: mode.endsWith('w') ? '14.645%' : '85.355%', top: mode.startsWith('n') ? '14.645%' : '85.355%', right: 'auto', bottom: 'auto', transform: 'translate(-50%, -50%)' } : undefined} className={`absolute flex h-11 w-11 items-center justify-center ${cls}`} aria-hidden="true">
                 <span className="h-4 w-4 rounded-[3px] border-2 border-white bg-primary shadow" />
               </span>
             ))}
