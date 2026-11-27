@@ -4,6 +4,7 @@ import { studyHe } from './tools/study';
 import { colorHe } from './tools/color';
 import { gridHe } from './tools/grid';
 import { compareHe } from './tools/compare';
+import { wallHe } from './tools/wall';
 import { commonHe } from './tools/common';
 import { worksheetsHe } from './tools/worksheets';
 import { learnHe } from './learn';
@@ -21,6 +22,7 @@ export const he: Messages = {
   colorTool: colorHe,
   gridTool: gridHe,
   compareTool: compareHe,
+  wallTool: wallHe,
   toolsCommon: commonHe,
   worksheets: worksheetsHe,
   learn: learnHe,
@@ -115,6 +117,19 @@ export const he: Messages = {
       step3: 'שקיפות, הבהוב או הצגת ההבדלים כדי לראות מה לתקן, ואז לשמור GIF.',
       start: 'להתחיל להשוות',
     },
+    wall: {
+      title: 'הציור שלך על הקיר',
+      description: 'ממסגרים את היצירה ורואים אותה על קיר או בחדר, בגודל האמיתי.',
+      alt: 'ציור ממוסגר תלוי על קיר מעל ספה',
+      navLabel: 'קיר',
+      chip1: 'מסגרות אמיתיות',
+      chip2: 'חדרים ותאורה',
+      chip3: 'החדר שלך',
+      step1: 'להוסיף צילום של היצירה ואת הגודל האמיתי שלה.',
+      step2: 'לבחור מסגרת, פספרטו וקיר או חדר.',
+      step3: 'להאיר, להשוות מסגרות ולשמור הדמיה.',
+      start: 'להתחיל למסגר',
+    },
   },
   landing: {
     heroLine1: 'הסטודיו שלך',
@@ -169,6 +184,8 @@ export const he: Messages = {
       learnCurriculum: { label: 'קורס רישום', detail: 'תרגילים צעד אחר צעד ברישום מהתבוננות, בעיפרון ונייר' },
       learnColor: { label: 'קורס צבע', detail: 'תרגילים בהתבוננות בצבע ובערבוב צבעים, אחרי יסודות העיפרון' },
       learnChallenges: { label: 'אתגרי רישום', detail: 'נושאים לרישום, מסקיצות מהירות ועד תרגילים ארוכים' },
+      wall: { label: 'הציור שלך על הקיר', detail: 'ממסגרים את היצירה ורואים אותה על קיר, בקנה מידה' },
+      wallPro: { label: 'הציור שלך על הקיר, בשלמותו', detail: 'כל המסגרות, חדרים וקירות מיוחדים, תאורת גלריה, צילום של החדר שלך, השוואת מסגרות ותמונות ברזולוציה גבוהה' },
     },
     faq: {
       freeQ: 'האם SketchyArtLab חינמי?',
@@ -201,6 +218,7 @@ export const he: Messages = {
     signOut: 'יציאה',
     signingOut: 'יוצאים…',
     loadingCompare: 'טוענים את כלי ההשוואה…',
+    loadingWall: 'טוענים את הציור שלך על הקיר…',
     notifications: 'התראות',
     loadingLearn: 'בטעינה…',
     plansLead: 'מתחילים בחינם עם כל הכלים. Pro יגיע בקרוב.',
@@ -299,6 +317,11 @@ export const he: Messages = {
       learnCurriculum: 'קורס רישום',
       learnColor: 'קורס צבע',
       learnChallenges: 'אתגרי רישום',
+      wallPremium: 'כל המסגרות, החדרים והקירות המיוחדים',
+      wallLighting: 'תאורת גלריה',
+      wallMyRoom: 'הדמיות בצילום של החדר שלך',
+      wallCompare: 'השוואת מסגרות',
+      exportWallHires: 'תמונות קיר ברזולוציה גבוהה',
     },
     intros: {
       title: 'הסברי פתיחה לכלים',

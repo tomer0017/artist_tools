@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Check, Crown, FileText, Film, GraduationCap, Image as ImageIcon, Layers, Maximize2, NotebookPen, Palette, Sparkles, Trophy, type LucideIcon } from 'lucide-react';
+import { Check, Crown, FileText, Film, Frame, GraduationCap, Image as ImageIcon, Layers, type LucideIcon, Maximize2, NotebookPen, Palette, Sofa, Sparkles, Trophy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'use-intl';
 import { useAccount } from '@/components/shell/account';
@@ -49,6 +49,8 @@ const ROW_ICONS: Partial<Record<string, LucideIcon>> = {
   learnCurriculum: GraduationCap,
   learnColor: Palette,
   learnChallenges: Trophy,
+  wall: Frame,
+  wallPro: Sofa,
 };
 
 /** The account's monthly price, formatted, and what Pro adds for it, as plain sentences. */

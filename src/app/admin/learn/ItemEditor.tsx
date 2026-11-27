@@ -47,7 +47,9 @@ import type { GroupOption, LessonOption } from './types';
 
 export type EditorTarget = { mode: 'edit'; id: string } | { mode: 'new'; kind: 'exercise' | 'challenge'; collection: LearnCollection; groupId: string };
 
-const TOOL_LABELS: Record<ToolId, string> = { measure: 'Measure & Plan', value: 'Study & Simplify', color: 'Color & Mixing', grid: 'Create a Grid', compare: 'Compare & Correct' };
+const TOOL_LABELS: Record<ToolId, string> = { measure: 'Measure & Plan', value: 'Study & Simplify', color: 'Color & Mixing', grid: 'Create a Grid', compare: 'Compare & Correct', wall: 'Art on Your Wall' };
+/** The tools a lesson or challenge can open (Art on Your Wall takes no reference picture). */
+const LEARN_TOOLS = TOOL_IDS.filter((tool) => tool !== 'wall');
 const LEVEL_LABELS: Record<(typeof CHALLENGE_LEVELS)[number], string> = { beginner: 'Light (a quick, easy one)', intermediate: 'Create (make something)', advanced: 'Challenge (a stretch)' };
 const REFERENCE_LABELS: Record<(typeof REFERENCE_KINDS)[number], string> = { life: 'From life (something real in front of you)', own_photo: 'From your own photo', provided: 'From a picture we provide', memory: 'From memory or imagination' };
 const MEDIUM_LABELS: Record<(typeof MEDIUMS)[number], string> = { pencil: 'Pencil', both: 'Pencil, or colour if you like' };
@@ -469,7 +471,7 @@ function ToolChoices({ value, onChange }: { value: ToolId[]; onChange: (tools: T
     <fieldset>
       <legend className="text-sm font-medium text-foreground">Tool shortcuts on the page</legend>
       <div className="mt-2 flex flex-wrap gap-3">
-        {TOOL_IDS.map((tool) => (
+        {LEARN_TOOLS.map((tool) => (
           <label key={tool} className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={value.includes(tool)} onChange={(e) => onChange(e.target.checked ? [...value, tool] : value.filter((t) => t !== tool))} className="h-4 w-4" />
             {TOOL_LABELS[tool]}
@@ -543,7 +545,7 @@ function ExerciseParts({ form, update, licence, title, onError }: { form: Exerci
                   Tool button
                   <select value={step.tool} onChange={(e) => setStep(i, { tool: e.target.value as ToolId | '' })} className={inputClass}>
                     <option value="">None</option>
-                    {TOOL_IDS.map((tool) => (
+                    {LEARN_TOOLS.map((tool) => (
                       <option key={tool} value={tool}>
                         {TOOL_LABELS[tool]}
                       </option>

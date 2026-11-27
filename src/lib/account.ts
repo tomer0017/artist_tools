@@ -2,8 +2,8 @@ import type { Currency, Locale } from './locale';
 import type { FeatureId, PlanId, PlanOffer } from './plans';
 import type { LearnCollection } from './learn/model';
 
-/** The five tools' ids (as in TabId), for checking what the browser sends. */
-export const TOOL_IDS = ['measure', 'value', 'color', 'grid', 'compare'] as const;
+/** The tools' ids (as in TabId), for checking what the browser sends. */
+export const TOOL_IDS = ['measure', 'value', 'color', 'grid', 'compare', 'wall'] as const;
 export type ToolId = (typeof TOOL_IDS)[number];
 
 /**

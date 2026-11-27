@@ -1,6 +1,6 @@
 import 'server-only';
 import type { Db, ObjectId } from 'mongodb';
-import { FEATURES, PLAN_IDS, betterPlan, isPlanId, type ExportFeatureId, type PlanOffer, type ToolFeatureId } from '@/lib/plans';
+import { FEATURES, PLAN_IDS, betterPlan, isPlanId, type PlanOffer, type ToolFeatureId, type UseFeatureId } from '@/lib/plans';
 import {
   collections,
   type AccountStatus,
@@ -361,7 +361,7 @@ export async function authorizeFeatureUse(db: Db, userId: ObjectId, features: Fe
 export async function authorizeToolUse(
   db: Db,
   userId: ObjectId,
-  use: { tool: ToolFeatureId | null; features: ExportFeatureId[]; learnItem?: string | null },
+  use: { tool: ToolFeatureId | null; features: UseFeatureId[]; learnItem?: string | null },
   now = new Date(),
 ): Promise<FeatureUseResult> {
   const entitlements = await getEntitlements(db, userId, now);

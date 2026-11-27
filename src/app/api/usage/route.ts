@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { EXPORT_FEATURE_IDS, TOOL_FEATURE_IDS } from '@/lib/plans';
+import { TOOL_FEATURE_IDS, USE_FEATURE_IDS } from '@/lib/plans';
 import { ITEM_ID } from '@/lib/learn/model';
 import { getDb } from '@/server/db/client';
 import { toObjectId } from '@/server/db/collections';
@@ -24,7 +24,7 @@ const json = (body: unknown, status = 200) => NextResponse.json(body, { status, 
 const Body = z
   .object({
     tool: z.enum(TOOL_FEATURE_IDS).optional(),
-    features: z.array(z.enum(EXPORT_FEATURE_IDS)).max(EXPORT_FEATURE_IDS.length).default([]),
+    features: z.array(z.enum(USE_FEATURE_IDS)).max(USE_FEATURE_IDS.length).default([]),
     learnItem: z.string().regex(ITEM_ID).optional(),
   })
   .refine((body) => body.tool !== undefined || body.features.length > 0, 'nothing to authorize');

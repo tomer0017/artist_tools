@@ -33,6 +33,8 @@ export const TOOL_CAPABILITIES: Record<ToolId, ToolCapability> = {
   color: { tool: 'color', feature: TOOL_FEATURES.color, helps: ['color'], pairs: ['value'] },
   grid: { tool: 'grid', feature: TOOL_FEATURES.grid, helps: ['transfer', 'proportions'], pairs: ['compare', 'measure'] },
   compare: { tool: 'compare', feature: TOOL_FEATURES.compare, helps: ['check', 'proportions', 'values'], pairs: ['measure', 'value'] },
+  // Art on Your Wall shows a finished piece; it answers none of the drawing needs.
+  wall: { tool: 'wall', feature: TOOL_FEATURES.wall, helps: [], pairs: [] },
 };
 
 /** The tools for a need, best first. */

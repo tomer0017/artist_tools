@@ -3,6 +3,7 @@ import { studyEn } from './tools/study';
 import { colorEn } from './tools/color';
 import { gridEn } from './tools/grid';
 import { compareEn } from './tools/compare';
+import { wallEn } from './tools/wall';
 import { commonEn } from './tools/common';
 import { worksheetsEn } from './tools/worksheets';
 import { learnEn } from './learn';
@@ -20,6 +21,7 @@ export const en = {
   colorTool: colorEn,
   gridTool: gridEn,
   compareTool: compareEn,
+  wallTool: wallEn,
   toolsCommon: commonEn,
   worksheets: worksheetsEn,
   // Learn's screens (src/components/learn, ADR-0018).
@@ -116,6 +118,19 @@ export const en = {
       step3: 'Fade, blink or show differences to spot what to fix, then save a GIF.',
       start: 'Start comparing',
     },
+    wall: {
+      title: 'Art on Your Wall',
+      description: 'Frame your artwork and see it on a wall or in a room, at its real size.',
+      alt: 'A framed painting hanging on a wall above a sofa',
+      navLabel: 'Wall',
+      chip1: 'Real frames',
+      chip2: 'Rooms & lighting',
+      chip3: 'Your own room',
+      step1: 'Add a photo of your artwork and its real size.',
+      step2: 'Choose a frame, a mat and a wall or room.',
+      step3: 'Light it, compare frames and save a mockup.',
+      start: 'Start framing',
+    },
   },
   landing: {
     heroLine1: 'Your All-in-One',
@@ -170,6 +185,8 @@ export const en = {
       learnCurriculum: { label: 'Drawing course', detail: 'Step-by-step exercises in drawing from observation, with pencil and paper' },
       learnColor: { label: 'Color course', detail: 'Exercises in seeing and mixing color, after the pencil basics' },
       learnChallenges: { label: 'Drawing challenges', detail: 'Subjects to draw, from quick sketches to longer studies' },
+      wall: { label: 'Art on Your Wall', detail: 'Frame your artwork and see it on a wall, to scale' },
+      wallPro: { label: 'Art on Your Wall, complete', detail: 'Every frame, rooms and premium walls, gallery lighting, your own room photo, frame comparison and high-resolution images' },
     },
     faq: {
       freeQ: 'Is SketchyArtLab free?',
@@ -202,6 +219,7 @@ export const en = {
     signOut: 'Sign out',
     signingOut: 'Signing out…',
     loadingCompare: 'Loading Compare…',
+    loadingWall: 'Loading Art on Your Wall…',
     notifications: 'Notifications',
     loadingLearn: 'Loading Learn…',
     plansLead: 'Start free with every tool. Pro is coming soon.',
@@ -301,6 +319,11 @@ export const en = {
       learnCurriculum: 'Drawing course',
       learnColor: 'Color course',
       learnChallenges: 'Drawing challenges',
+      wallPremium: 'All frames, rooms and premium walls',
+      wallLighting: 'Gallery lighting',
+      wallMyRoom: 'My Room photo mockups',
+      wallCompare: 'Frame comparison',
+      exportWallHires: 'High-resolution wall images',
     },
     intros: {
       title: 'Tool introductions',

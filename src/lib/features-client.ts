@@ -1,4 +1,4 @@
-import type { ExportFeatureId, FeatureId, ToolFeatureId } from './plans';
+import type { FeatureId, ToolFeatureId, UseFeatureId } from './plans';
 import { signInPath } from './redirects';
 
 export type FeatureAccess = 'ok' | 'locked' | 'limit' | 'signed_out' | 'unavailable';
@@ -19,7 +19,7 @@ export interface FeatureDecision {
  * restarting, any unexpected answer) is a refusal too, since nothing can be
  * verified then.
  */
-export async function authorizeUse(use: { tool: ToolFeatureId | null; features: ExportFeatureId[]; learnItem?: string | null }): Promise<FeatureDecision> {
+export async function authorizeUse(use: { tool: ToolFeatureId | null; features: UseFeatureId[]; learnItem?: string | null }): Promise<FeatureDecision> {
   try {
     const response = await fetch('/api/usage', {
       method: 'POST',

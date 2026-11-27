@@ -31,6 +31,8 @@ import { useToolAllowed } from '@/components/shell/account';
 // Compare Art (with its gifenc dependency) is code-split so it never weighs down
 // the initial load of the other workspaces.
 const CompareArt = lazy(() => import('@/features/compare-art/CompareArt'));
+// Art on Your Wall (its renderer) too: loaded the first time it opens.
+const ArtWall = lazy(() => import('@/features/art-wall/ArtWall'));
 // Learn (ADR-0018) is loaded only when it is opened: most accounts never see it.
 const LearnView = lazy(() => import('@/components/learn/LearnView'));
 // Sketchy across the studio (ADR-0024): celebrations away from Home, and the tool used last.
@@ -108,11 +110,22 @@ function useTypingFocus() {
       const type = (el as HTMLInputElement).type;
       return !['range', 'checkbox', 'radio', 'button', 'submit', 'file', 'color'].includes(type);
     };
-    const onIn = (e: FocusEvent) => setTyping(isTextField(e.target));
-    const onOut = () => setTyping(false);
+    // The bar comes back a moment after a field is left: tapping a button while
+    // typing must not move that button before its click lands (iPhone), and
+    // stepping from one field to the next does not make the bar flicker.
+    let timer = 0;
+    const onIn = (e: FocusEvent) => {
+      window.clearTimeout(timer);
+      setTyping(isTextField(e.target));
+    };
+    const onOut = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setTyping(false), 250);
+    };
     document.addEventListener('focusin', onIn);
     document.addEventListener('focusout', onOut);
     return () => {
+      window.clearTimeout(timer);
       document.removeEventListener('focusin', onIn);
       document.removeEventListener('focusout', onOut);
     };
@@ -196,6 +209,11 @@ function Workspace() {
             }
           >
             <CompareArt />
+          </Suspense>
+        </KeepAlive>
+        <KeepAlive active={open('wall')}>
+          <Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">{t('loadingWall')}</div>}>
+            <ArtWall />
           </Suspense>
         </KeepAlive>
         {locked && <ToolLocked key={locked} tool={locked} />}

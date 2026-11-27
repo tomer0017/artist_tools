@@ -81,7 +81,7 @@ export function useToolHandoff() {
         return;
       }
       // Nothing to hand over (no reference, or Color & Mixing): open the tool, as the step sets it.
-      if (!reference || tool === 'color') {
+      if (!reference || tool === 'color' || tool === 'wall') {
         applyPreset(tool, options.preset);
         go();
         return;

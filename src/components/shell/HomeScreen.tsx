@@ -94,10 +94,10 @@ export default function HomeScreen() {
         </h2>
 
         {/* Tool cards: one column of wide cards on phones and tablets; on
-            desktop the first two lead and the other three sit beneath. */}
-        <ul className="grid grid-cols-1 gap-3 px-4 md:gap-4 md:px-6 lg:grid-cols-6 lg:px-8">
+            desktop the first two lead and the others sit beneath, in one row. */}
+        <ul className="grid grid-cols-1 gap-3 px-4 md:gap-4 md:px-6 lg:grid-cols-12 lg:px-8">
           {HOME_ORDER.map((id, i) => (
-            <li key={id} className={i < 2 ? 'lg:col-span-3' : 'lg:col-span-2'}>
+            <li key={id} className={i < 2 ? 'lg:col-span-6' : HOME_ORDER.length - 2 === 4 ? 'lg:col-span-3' : 'lg:col-span-4'}>
               <ToolCard id={id} lead={i < 2} eager={i < 2} />
             </li>
           ))}

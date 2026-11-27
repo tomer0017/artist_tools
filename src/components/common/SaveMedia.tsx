@@ -35,7 +35,7 @@ import { pathForView } from '@/components/shell/tools';
 import type { ToolId } from '@/lib/account';
 import { authorizeUse, type FeatureDecision } from '@/lib/features-client';
 import { fromLearn } from '@/lib/learn/source';
-import { TOOL_FEATURES, isToolFeature, type ExportFeatureId, type FeatureId } from '@/lib/plans';
+import { TOOL_FEATURES, isToolFeature, type FeatureId, type UseFeatureId } from '@/lib/plans';
 import {
   canShareFile,
   downloadBlob,
@@ -59,7 +59,7 @@ export interface SaveMediaInput {
   /** The tool it comes from: its plan must still include that tool. */
   tool: ToolId;
   /** Export features beyond the image or GIF itself (a large GIF…), authorized with it. */
-  features?: ExportFeatureId[];
+  features?: UseFeatureId[];
   /**
    * The server already authorized (and counted) this very export, just before
    * the work of making it (a GIF, a PDF): it is not asked twice.
@@ -74,7 +74,7 @@ export interface SaveMediaInput {
 /** A protected operation of a tool: the tool, and what it exports (none, e.g. a project file). */
 export interface ToolUse {
   tool: ToolId;
-  features: ExportFeatureId[];
+  features: UseFeatureId[];
   /** Made from a Learn item's reference: that item must still be open to the account (ADR-0018). */
   learnItem?: string | null;
 }
@@ -214,6 +214,18 @@ function useFeatureName() {
         return t('tools.grid.title');
       case 'tool.compare':
         return t('tools.compare.title');
+      case 'tool.wall':
+        return t('tools.wall.title');
+      case 'wall.premium':
+        return t('account.features.wallPremium');
+      case 'wall.lighting':
+        return t('account.features.wallLighting');
+      case 'wall.my_room':
+        return t('account.features.wallMyRoom');
+      case 'wall.compare':
+        return t('account.features.wallCompare');
+      case 'export.wall_hires':
+        return t('account.features.exportWallHires');
     }
   };
 }

@@ -1,4 +1,4 @@
-import { Grid3X3, Home, Palette, Ruler, SquareSplitHorizontal, Sun, type LucideIcon } from 'lucide-react';
+import { Frame, Grid3X3, Home, Palette, Ruler, SquareSplitHorizontal, Sun, type LucideIcon } from 'lucide-react';
 import { en } from '@/i18n/messages/en';
 import { isLearnPath } from '@/lib/learn/routes';
 import type { NavViewId, TabId, ViewId } from '@/types/project';
@@ -48,6 +48,7 @@ export const TOOLS: Record<TabId, ToolInfo> = {
   color: english('color', Palette),
   grid: english('grid', Grid3X3),
   compare: english('compare', SquareSplitHorizontal),
+  wall: english('wall', Frame),
 };
 
 /** Each tool's picture (Home cards, the landing page, first-visit introductions). The images are
@@ -58,13 +59,17 @@ export const TOOL_ART: Record<TabId, { src: string; alt: string; width: number; 
   color: { src: '/images/home/home-color.webp', alt: en.tools.color.alt, width: 586, height: 209, position: '62% 50%' },
   grid: { src: '/images/home/home-grid.webp', alt: en.tools.grid.alt, width: 586, height: 196, position: '50% 50%' },
   compare: { src: '/images/home/home-compare.webp', alt: en.tools.compare.alt, width: 586, height: 205, position: '50% 50%' },
+  wall: { src: '/images/home/home-wall.webp', alt: en.tools.wall.alt, width: 586, height: 220, position: '50% 45%' },
 };
 
-/** Whether a view is one of the five tools (not Home, the account or the plans page). */
+/** Whether a view is one of the tools (not Home, the account or the plans page). */
 export const isTool = (view: ViewId): view is TabId => view in TOOLS;
 
 /** Order of the Home cards: the natural order of a painting's life. */
-export const HOME_ORDER: TabId[] = ['measure', 'value', 'color', 'grid', 'compare'];
+export const HOME_ORDER: TabId[] = ['measure', 'value', 'color', 'grid', 'compare', 'wall'];
+
+/** The public landing page shows the five drawing tools (Art on Your Wall is introduced in the studio). */
+export const LANDING_ORDER: TabId[] = ['measure', 'value', 'color', 'grid', 'compare'];
 
 /** Order of the navigation bars. */
 export const NAV_ORDER: NavViewId[] = ['home', 'measure', 'value', 'grid', 'compare', 'color'];
@@ -83,6 +88,7 @@ const SLUGS: Record<TabId, string> = {
   color: 'color',
   grid: 'grid',
   compare: 'compare',
+  wall: 'wall',
 };
 
 /** URL segments of the tools, e.g. for the router to know which tool pages exist. */

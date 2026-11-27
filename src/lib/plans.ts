@@ -32,6 +32,15 @@ export const FEATURES = [
   'learn.curriculum',
   'learn.color',
   'learn.challenges',
+  // Since 2026-11-27: Art on Your Wall — the tool, then what Pro adds to it
+  // (every frame, rooms and premium walls, gallery lighting, the person's own
+  // room photo, frame comparison) and its high-resolution images.
+  'tool.wall',
+  'wall.premium',
+  'wall.lighting',
+  'wall.my_room',
+  'wall.compare',
+  'export.wall_hires',
 ] as const;
 export type FeatureId = (typeof FEATURES)[number];
 
@@ -44,7 +53,19 @@ export const PLAN_NAMES: Record<PlanId, string> = { free: 'Free', pro: 'Pro' };
 export const PRO_FEATURES: readonly FeatureId[] = ['export.gif_large', 'export.gif_difference'];
 
 /** Capabilities in no plan until an admin publishes a catalog that includes them (admins have them already). */
-export const UNPUBLISHED_FEATURES: readonly FeatureId[] = ['export.pdf', 'export.worksheets', 'learn.curriculum', 'learn.color', 'learn.challenges'];
+export const UNPUBLISHED_FEATURES: readonly FeatureId[] = [
+  'export.pdf',
+  'export.worksheets',
+  'learn.curriculum',
+  'learn.color',
+  'learn.challenges',
+  'tool.wall',
+  'wall.premium',
+  'wall.lighting',
+  'wall.my_room',
+  'wall.compare',
+  'export.wall_hires',
+];
 
 export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
   free: FEATURES.filter((feature) => !PRO_FEATURES.includes(feature) && !UNPUBLISHED_FEATURES.includes(feature)),
@@ -57,7 +78,7 @@ export const PLAN_FEATURES: Record<PlanId, FeatureId[]> = {
  * so nobody is shown a capability no plan includes.
  */
 export const FEATURE_MATRIX: {
-  id: 'tools' | 'images' | 'gifs' | 'large' | 'difference' | 'pdf' | 'worksheets' | 'learnCurriculum' | 'learnColor' | 'learnChallenges';
+  id: 'tools' | 'images' | 'gifs' | 'large' | 'difference' | 'pdf' | 'worksheets' | 'learnCurriculum' | 'learnColor' | 'learnChallenges' | 'wall' | 'wallPro';
   label: string;
   detail: string;
   features: FeatureId[];
@@ -79,6 +100,15 @@ export const FEATURE_MATRIX: {
   { id: 'learnCurriculum', label: 'Drawing course', detail: 'Step-by-step exercises in drawing from observation, with pencil and paper', features: ['learn.curriculum'], whenOffered: true },
   { id: 'learnColor', label: 'Color course', detail: 'Exercises in seeing and mixing color, after the pencil basics', features: ['learn.color'], whenOffered: true },
   { id: 'learnChallenges', label: 'Drawing challenges', detail: 'Subjects to draw, from quick sketches to longer studies', features: ['learn.challenges'], whenOffered: true },
+  // Art on Your Wall: the tool, and everything Pro adds to it.
+  { id: 'wall', label: 'Art on Your Wall', detail: 'Frame your artwork and see it on a wall, to scale', features: ['tool.wall'], whenOffered: true },
+  {
+    id: 'wallPro',
+    label: 'Art on Your Wall, complete',
+    detail: 'Every frame, rooms and premium walls, gallery lighting, your own room photo, frame comparison and high-resolution images',
+    features: ['wall.premium', 'wall.lighting', 'wall.my_room', 'wall.compare', 'export.wall_hires'],
+    whenOffered: true,
+  },
 ];
 
 /** Short names for usage counts and admin screens. */
@@ -97,6 +127,12 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   'learn.curriculum': 'Drawing curriculum',
   'learn.color': 'Color module',
   'learn.challenges': 'Challenges',
+  'tool.wall': 'Art on Your Wall',
+  'wall.premium': 'Wall: all frames, rooms and premium walls',
+  'wall.lighting': 'Wall: gallery lighting',
+  'wall.my_room': 'Wall: My Room photo mockups',
+  'wall.compare': 'Wall: frame comparison',
+  'export.wall_hires': 'Wall: high-resolution images',
 };
 
 /** The feature each tool needs (the studio's tool ids → catalog features). */
@@ -106,15 +142,26 @@ export const TOOL_FEATURES: Record<ToolId, ToolFeatureId> = {
   color: 'tool.color',
   grid: 'tool.grid',
   compare: 'tool.compare',
+  wall: 'tool.wall',
 };
 
 /** The tools' features: a tool is on or off per plan (it has no quota). */
-export const TOOL_FEATURE_IDS = ['tool.measure', 'tool.study', 'tool.color', 'tool.grid', 'tool.compare'] as const satisfies readonly FeatureId[];
+export const TOOL_FEATURE_IDS = ['tool.measure', 'tool.study', 'tool.color', 'tool.grid', 'tool.compare', 'tool.wall'] as const satisfies readonly FeatureId[];
 export type ToolFeatureId = (typeof TOOL_FEATURE_IDS)[number];
 
 /** Everything that saves or exports something; each use is authorized (and counted) by the server. */
-export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_large', 'export.gif_difference', 'export.pdf', 'export.worksheets'] as const satisfies readonly FeatureId[];
+export const EXPORT_FEATURE_IDS = ['export.image', 'export.gif', 'export.gif_large', 'export.gif_difference', 'export.pdf', 'export.worksheets', 'export.wall_hires'] as const satisfies readonly FeatureId[];
 export type ExportFeatureId = (typeof EXPORT_FEATURE_IDS)[number];
+
+/**
+ * Art on Your Wall's Pro options: on or off per plan (no quota). An image made
+ * with one is authorized with it, so the server refuses what the plan lacks.
+ */
+export const WALL_OPTION_FEATURE_IDS = ['wall.premium', 'wall.lighting', 'wall.my_room', 'wall.compare'] as const satisfies readonly FeatureId[];
+
+/** What a save can be authorized for: its exports and the options it was made with. */
+export const USE_FEATURE_IDS = [...EXPORT_FEATURE_IDS, ...WALL_OPTION_FEATURE_IDS] as const;
+export type UseFeatureId = (typeof USE_FEATURE_IDS)[number];
 
 export const isToolFeature = (feature: FeatureId): feature is ToolFeatureId => (TOOL_FEATURE_IDS as readonly FeatureId[]).includes(feature);
 
@@ -153,8 +200,8 @@ export function featureRows(sets: readonly (readonly FeatureId[])[]): FeatureRow
   );
 }
 
-/** Whether a set of features has every one of the five tools. */
-export const hasAllTools = (features: readonly FeatureId[]): boolean => TOOL_FEATURE_IDS.every((f) => features.includes(f));
+/** Whether a set of features has every one of the five tools (Art on Your Wall has rows of its own). */
+export const hasAllTools = (features: readonly FeatureId[]): boolean => TOOL_ORDER.every((tool) => features.includes(TOOL_FEATURES[tool]));
 
 /**
  * Whether the published plans split as the default texts describe them: Free

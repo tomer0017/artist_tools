@@ -51,6 +51,18 @@ function useFeatureLabel() {
         return t('tools.grid.title');
       case 'tool.compare':
         return t('tools.compare.title');
+      case 'tool.wall':
+        return t('tools.wall.title');
+      case 'wall.premium':
+        return t('account.features.wallPremium');
+      case 'wall.lighting':
+        return t('account.features.wallLighting');
+      case 'wall.my_room':
+        return t('account.features.wallMyRoom');
+      case 'wall.compare':
+        return t('account.features.wallCompare');
+      case 'export.wall_hires':
+        return t('account.features.exportWallHires');
       case 'export.image':
         return t('account.features.exportImage');
       case 'export.gif':

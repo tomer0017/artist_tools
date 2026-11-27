@@ -36,7 +36,7 @@ export default defineConfig({
         {
           name: "iphone-webkit",
           use: { ...devices["iPhone 13"], ...signedIn },
-          testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch|color|grid|worksheets|study|learn-screens|companion)\.spec\.ts/,
+          testMatch: /(navigation|auth|accounts|journey|password|admin|i18n|accessibility|sketch|color|grid|worksheets|study|learn-screens|companion|art-wall)\.spec\.ts/,
           // (username-accounts.spec.ts and entitlements.spec.ts run on the staging-like servers below.)
           testIgnore: /username-accounts|entitlements|learn-admin|companion-admin/,
           grep: /mobile/,

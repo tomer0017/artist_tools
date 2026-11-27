@@ -87,7 +87,7 @@ export interface SampledColor {
 }
 
 export type InteractionMode = 'idle' | 'crop' | 'calibrate' | 'measure' | 'select' | 'eyedropper' | 'pan';
-export type TabId = 'measure' | 'value' | 'color' | 'grid' | 'compare';
+export type TabId = 'measure' | 'value' | 'color' | 'grid' | 'compare' | 'wall';
 // What the navigation bars link to: the Home tool hub and the tools.
 export type NavViewId = 'home' | TabId;
 // Everything the app can show: those, plus the account and plans pages.

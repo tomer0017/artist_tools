@@ -54,6 +54,10 @@ export function TopNav() {
               <NavItemLink id={id} active={activeTab === id} variant="top" />
             </li>
           ))}
+          {/* Art on Your Wall: in the bar on wide screens; everywhere else it is a card on Home. */}
+          <li className="hidden xl:block">
+            <NavItemLink id="wall" active={activeTab === 'wall'} variant="top" />
+          </li>
           {/* Learn (ADR-0018): on wider screens only, and only for accounts Learn is shown to.
               On phones it is reached from Home: the bottom bar keeps its six items (A4). */}
           {learn.visible && (

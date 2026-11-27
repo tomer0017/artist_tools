@@ -3,7 +3,7 @@ import { ChevronRight, Lock } from 'lucide-react';
 import { LanguageSwitch } from '@/components/common/LanguageSwitch';
 import { BrandMark } from '@/components/shell/BrandMark';
 import LegacyHashRedirect from '@/components/shell/LegacyHashRedirect';
-import { HOME_ORDER, TOOLS, TOOL_ART, pathForView } from '@/components/shell/tools';
+import { LANDING_ORDER, TOOLS, TOOL_ART, pathForView } from '@/components/shell/tools';
 import { getRequestLocale, getT } from '@/i18n/server';
 import { localizedPath } from '@/i18n/config';
 import { hasAllTools, isDefaultSplit } from '@/lib/plans';
@@ -121,7 +121,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
         <h2 id="landing-tools" className="text-lg font-semibold text-foreground md:text-xl">{t('toolsHeading')}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{offer && hasAllTools(offer.free) ? t('toolsLead') : t('toolsLeadPartial')}</p>
         <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {HOME_ORDER.map((id) => {
+          {LANDING_ORDER.map((id) => {
             const tool = TOOLS[id];
             const art = TOOL_ART[id];
             const Icon = tool.icon;
