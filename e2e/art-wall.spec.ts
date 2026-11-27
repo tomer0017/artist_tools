@@ -39,6 +39,9 @@ test.describe('Art on Your Wall', () => {
     await expect(page.getByRole('group', { name: 'Crop shape' }).getByRole('button', { name: 'Square' })).toHaveAttribute('aria-pressed', 'true');
     await page.getByLabel('Width').fill('60');
     await expect(page.getByLabel('Height')).toHaveValue('60');
+    // Leave the field; on a phone the bottom bar then comes back: let the layout settle before tapping on.
+    await page.getByLabel('Width').blur();
+    await expect(page.getByRole('navigation', { name: 'Tools' }).first()).toBeVisible();
     await shot(page, '1-crop');
 
     // 2. Frame: floating, light gold.
