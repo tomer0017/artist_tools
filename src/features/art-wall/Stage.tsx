@@ -8,9 +8,9 @@ import { renderPhotoScene, type ArtSource } from './exporter';
 import { centroid, defaultQuad, fittedQuad, quadMeta, translateQuad, type Quad } from './placement';
 import { loadRoomAssets } from './render/assets';
 import { useTranslations } from 'use-intl';
-import { renderScene } from './render/scene';
+import { keepOnWall, renderScene, type Layout, type PieceArt, type Placement } from './render/scene';
 import { ctxOf, makeCanvas } from './render/util';
-import { SHAPES, type FrameSpec, type Pt, type WallProject } from './types';
+import { SHAPES, type FrameSpec, type PieceOffset, type Pt, type WallProject } from './types';
 
 function useBox<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -56,7 +56,21 @@ function usePhotoAt(photo: HTMLCanvasElement | null, w: number, h: number) {
 }
 
 /** One rendered view (wall, room, or the photo when My Room has a placement). */
-export function ScenePreview({ project, art, photo, frame, label, margin = 12 }: { project: WallProject; art: ArtSource; photo: HTMLCanvasElement | null; frame?: FrameSpec; label: string; margin?: number }) {
+export function ScenePreview({ project, art, photo, frame, label, margin = 12, others, selectedId, onSelect, onMove }: {
+  project: WallProject;
+  art: ArtSource;
+  photo: HTMLCanvasElement | null;
+  frame?: FrameSpec;
+  label: string;
+  margin?: number;
+  /** The other artworks on the wall. */
+  others?: PieceArt[];
+  /** The piece being edited (outlined when there are several). */
+  selectedId?: string;
+  /** Tap a piece to edit it; drag it along the wall. */
+  onSelect?: (id: string) => void;
+  onMove?: (id: string, offset: PieceOffset) => void;
+}) {
   const [host, area] = useBox<HTMLDivElement>();
   const canvas = useRef<HTMLCanvasElement>(null);
   const photoMode = project.space.mode === 'photo' && !!photo && !!project.space.photo.quad;
@@ -66,6 +80,8 @@ export function ScenePreview({ project, art, photo, frame, label, margin = 12 }:
   const pw = Math.round(css.w * dpr);
   const ph = Math.round(css.h * dpr);
   const photoAt = usePhotoAt(photoMode ? photo : null, pw, ph);
+  const layoutRef = useRef<Layout | null>(null);
+  const [outline, setOutline] = useState<Placement | null>(null);
 
   const t = useTranslations('wallTool.editor');
   const [status, setStatus] = useState<'ready' | 'loading' | 'error'>('ready');
@@ -75,31 +91,90 @@ export function ScenePreview({ project, art, photo, frame, label, margin = 12 }:
     if (!c || pw < 2 || ph < 2) return;
     let alive = true;
     let raf = 0;
-    setStatus('loading');
+    // "Loading" only when the room really takes a moment (not on every change, which would flicker while dragging).
+    const slow = window.setTimeout(() => alive && setStatus('loading'), 150);
     void loadRoomAssets(project).then(() => {
       if (!alive) return;
       raf = requestAnimationFrame(() => {
-        c.width = pw;
-        c.height = ph;
+        if (c.width !== pw) c.width = pw;
+        if (c.height !== ph) c.height = ph;
         const scaled = photoAt();
-        if (photoMode && scaled) renderPhotoScene(c, project, art, scaled, frame ?? project.frame);
-        else renderScene(c, project, { art: art.canvas, artKey: art.key, frame });
+        if (photoMode && scaled) {
+          renderPhotoScene(c, project, art, scaled, frame ?? project.frame);
+          layoutRef.current = null;
+          setOutline(null);
+        } else {
+          const layout = renderScene(c, project, { art: art.canvas, artKey: art.key, frame, others });
+          layoutRef.current = layout;
+          const mine = layout.places.find((p) => p.id === (selectedId ?? project.pieceId ?? 'p1'));
+          setOutline(layout.places.length > 1 && mine ? mine.place : null);
+        }
+        window.clearTimeout(slow);
         setStatus('ready');
       });
     }).catch(() => alive && setStatus('error'));
-    return () => { alive = false; cancelAnimationFrame(raf); };
-  }, [project, art, frame, pw, ph, photoMode, photoAt, retry]);
+    return () => { alive = false; cancelAnimationFrame(raf); window.clearTimeout(slow); };
+  }, [project, art, frame, others, selectedId, pw, ph, photoMode, photoAt, retry]);
+
+  // Tap a piece to edit it; drag it, kept on the wall.
+  const drag = useRef<{ id: string; x: number; y: number; start: PieceOffset; layout: Layout } | null>(null);
+  const toCanvas = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return { x: ((e.clientX - rect.left) * pw) / rect.width, y: ((e.clientY - rect.top) * ph) / rect.height };
+  };
+  const onDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const layout = layoutRef.current;
+    if (!layout || !onMove) return;
+    const { x, y } = toCanvas(e);
+    const hit = [...layout.places].reverse().find(({ place: p }) => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h);
+    if (!hit) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (hit.id !== (selectedId ?? project.pieceId ?? 'p1')) onSelect?.(hit.id);
+    drag.current = { id: hit.id, x, y, start: hit.piece.offset, layout };
+  };
+  const onDrag = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    if (!d || !onMove) return;
+    const { x, y } = toCanvas(e);
+    const s = d.layout.s;
+    onMove(d.id, keepOnWall(d.layout, d.id, { x: d.start.x + (x - d.x) / s, y: d.start.y - (y - d.y) / s }));
+  };
+  const onUp = () => {
+    drag.current = null;
+  };
 
   return (
     <div ref={host} className="relative flex h-full w-full items-center justify-center">
       {status !== 'ready' && <div role="status" className="absolute z-10 rounded-xl bg-background/90 px-4 py-3 text-xs shadow-lg">{status === 'loading' ? t('loading') : <button onClick={() => setRetry((n) => n + 1)}>{t('retry')}</button>}</div>}
-      {css.w > 0 && <canvas ref={canvas} role="img" aria-label={label} className="block rounded-md shadow-2xl" style={{ width: css.w, height: css.h }} />}
+      {css.w > 0 && (
+        <div className="relative" style={{ width: css.w, height: css.h }}>
+          <canvas
+            ref={canvas}
+            role="img"
+            aria-label={label}
+            className="block rounded-md shadow-2xl"
+            style={{ width: css.w, height: css.h, touchAction: onMove && !photoMode ? 'none' : undefined, cursor: onMove && !photoMode ? 'grab' : undefined }}
+            onPointerDown={onDown}
+            onPointerMove={onDrag}
+            onPointerUp={onUp}
+            onPointerCancel={onUp}
+          />
+          {outline && (
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute border-2 border-dashed border-primary ${outline.round ? 'rounded-full' : 'rounded-sm'}`}
+              style={{ left: outline.x / dpr - 4, top: outline.y / dpr - 4, width: outline.w / dpr + 8, height: outline.h / dpr + 8 }}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 /** Up to four frames side by side; choosing one makes it the frame. */
-export function CompareGrid({ project, art, photo, frames, labels, onUse, label, selected }: { selected?: number; project: WallProject; art: ArtSource; photo: HTMLCanvasElement | null; frames: FrameSpec[]; labels: string[]; onUse: (i: number) => void; label: string }) {
+export function CompareGrid({ project, art, photo, frames, labels, onUse, label, selected, others }: { selected?: number; project: WallProject; art: ArtSource; photo: HTMLCanvasElement | null; frames: FrameSpec[]; labels: string[]; onUse: (i: number) => void; label: string; others?: PieceArt[] }) {
   return (
     <div className={`grid h-full w-full gap-1.5 p-1.5 ${frames.length > 2 ? 'grid-cols-2 grid-rows-2' : 'grid-cols-1 grid-rows-2 sm:grid-cols-2 sm:grid-rows-1'}`}>
       {frames.map((frame, i) => (
@@ -110,7 +185,7 @@ export function CompareGrid({ project, art, photo, frames, labels, onUse, label,
           aria-pressed={selected === i}
           className={`relative min-h-0 min-w-0 overflow-hidden rounded-lg ring-2 ${selected === i ? 'ring-primary' : 'ring-white/10'} transition hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
         >
-          <ScenePreview project={project} art={art} photo={photo} frame={frame} label={`${label}: ${labels[i]}`} margin={4} />
+          <ScenePreview project={project} art={art} photo={photo} frame={frame} label={`${label}: ${labels[i]}`} margin={4} others={others} />
           <span className="absolute start-2 top-2 rounded-full bg-black/70 px-2.5 py-1 text-xs font-semibold text-white">{labels[i]}</span>
         </button>
       ))}

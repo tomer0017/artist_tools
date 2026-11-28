@@ -85,7 +85,7 @@ export interface SpaceSpec {
   mode: SpaceMode;
   wall: { color: string; texture: WallTexture };
   /** The sofa's size against its real one (1 = as made); the artwork keeps its own size. */
-  room: { id: RoomId; sofaStyle: SofaStyle; sofaColor: string; sofaScale: number };
+  room: { id: RoomId; sofaStyle: SofaStyle; sofaColor: string; sofaScale: number; /** The 3D model shown in 3D (sofas.ts), when not the first. */ sofa3d?: string };
   /** Wall Studio: how much of the view's width the framed piece takes (0.25…0.8). */
   zoom: number;
   /** Room Studio: the gap between the sofa's back and the frame's bottom edge, cm. */
@@ -110,6 +110,22 @@ export interface OutputSpec {
   shape: ExportShape;
 }
 
+/** Where a piece sits on the wall: cm right of and above its default spot. */
+export interface PieceOffset {
+  x: number;
+  y: number;
+}
+
+/** One artwork on the wall: its image, crop and size, its frame, and its place. */
+export interface Piece {
+  id: string;
+  artwork: ArtworkSpec;
+  frame: FrameSpec;
+  offset: PieceOffset;
+}
+
+export const MAX_PIECES = 3;
+
 export interface WallProject {
   schema: typeof PROJECT_SCHEMA;
   version: number;
@@ -126,6 +142,15 @@ export interface WallProject {
   output: OutputSpec;
   /** Reserved for later (3D rooms, AR, wall detection): where the piece hangs and how the scene is seen. */
   scene?: { placement?: { wallId?: string; xCm?: number; yCm?: number }; camera?: Record<string, unknown> };
+  /**
+   * More artworks on the same wall (up to MAX_PIECES in all). The piece being
+   * edited is always the one in `artwork` and `frame` (id `pieceId`, moved by
+   * `offset`); choosing another swaps it in (selectPiece), so a project with a
+   * single artwork is exactly as before.
+   */
+  pieceId?: string;
+  offset?: PieceOffset;
+  others?: Piece[];
 }
 
 // ── option lists ────────────────────────────────────────────────────────────
@@ -289,5 +314,35 @@ export function normalizeProject(raw: Partial<WallProject> & { id: string }): Wa
     space,
     light: { ...base.light, ...raw.light },
     output: { ...base.output, ...raw.output },
+    pieceId: raw.pieceId ?? 'p1',
+    offset: { x: raw.offset?.x ?? 0, y: raw.offset?.y ?? 0 },
+    others: (raw.others ?? []).slice(0, MAX_PIECES - 1).map((o) => ({
+      id: o.id,
+      artwork: { ...base.artwork, ...o.artwork, crop: { ...base.artwork.crop, ...o.artwork?.crop } },
+      frame: { ...base.frame, ...o.frame, mat: { ...base.frame.mat, ...o.frame?.mat } },
+      offset: { x: o.offset?.x ?? 0, y: o.offset?.y ?? 0 },
+    })),
   };
 }
+
+/** Every piece on the wall, in a stable order (by id); the one being edited among them. */
+export function piecesOf(p: WallProject): Piece[] {
+  const active: Piece = { id: p.pieceId ?? 'p1', artwork: p.artwork, frame: p.frame, offset: p.offset ?? { x: 0, y: 0 } };
+  return [active, ...(p.others ?? [])].sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }));
+}
+
+/** Make another piece the one being edited (its fields move into artwork/frame/offset). */
+export function selectPiece(p: WallProject, id: string): WallProject {
+  const others = p.others ?? [];
+  const next = others.find((o) => o.id === id);
+  if (!next || id === (p.pieceId ?? 'p1')) return p;
+  const current: Piece = { id: p.pieceId ?? 'p1', artwork: p.artwork, frame: p.frame, offset: p.offset ?? { x: 0, y: 0 } };
+  return { ...p, pieceId: next.id, artwork: next.artwork, frame: next.frame, offset: next.offset, others: [...others.filter((o) => o.id !== id), current] };
+}
+
+/** A free id for a new piece (p1…p3). */
+export const nextPieceId = (p: WallProject): string => {
+  const used = new Set(piecesOf(p).map((x) => x.id));
+  for (let i = 1; i <= MAX_PIECES + 2; i++) if (!used.has(`p${i}`)) return `p${i}`;
+  return `p${Date.now()}`;
+};

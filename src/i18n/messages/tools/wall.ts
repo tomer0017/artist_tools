@@ -1,7 +1,8 @@
 // Art on Your Wall (src/features/art-wall), English and Hebrew.
 
 export const wallEn = {
-  room3D: { loading: 'Preparing your 3D room…', unavailable: '3D could not start on this device. Your 2D editor is ready to use.', back: 'Back to 2D', inspect: 'Inspect frame depth', reset: 'Reset camera', gestures: 'Drag to orbit · Pinch / scroll to zoom · Two fingers / right drag to pan', note: 'One furnished 3D room. Room palette, sofa size and upholstery follow your settings; sofa style and wall texture stay in 2D. Exports use 2D.' },
+  room3D: { loading: 'Preparing your 3D room…', unavailable: '3D could not start on this device. Your 2D editor is ready to use.', back: 'Back to 2D', inspect: 'Inspect frame depth', reset: 'Reset camera', gestures: 'Drag to orbit · Drag an artwork to move it · Pinch / scroll to zoom · Two fingers / right drag to pan', note: 'One furnished 3D room. Room palette, sofa size and upholstery follow your settings; wall texture stays in 2D.', photo: 'Take photo', video: 'Record video', recording: 'Recording…', photoFailed: 'The photo could not be made. Please try again.', videoFailed: 'The video could not be recorded. Please try again, or take a photo.', videoUnsupported: 'This browser cannot record video. Try Safari or Chrome, or take a photo.', dismiss: 'OK' },
+  pieces: { title: 'Artworks on this wall', hint: 'Up to 3. Tap one in the preview to edit it; drag it to move it.', piece: 'Artwork {n}', add: 'Add artwork', duplicate: 'Duplicate', remove: 'Remove', photoNote: 'My room shows the selected artwork only.', pro: 'Several artworks on one wall' },
   comparisonEditor: { use: 'Use & continue editing', replace: 'Replace with current frame' },
   editor: { view3D: '3D View', view2D: '2D View', subtitle: 'Your artwork. Beautifully at home.', artwork: 'Artwork', frame: 'Frame', space: 'Room / Wall', lighting: 'Lighting', export: 'Export', settings: 'Studio settings', live: 'Live preview', crop: 'Edit crop', doneCrop: 'Done cropping', loading: 'Preparing your room…', retry: 'Room could not load. Tap to retry.', photoLight: 'Your photo keeps its original lighting. Adjust the artwork shadow and light matching in Room / Wall → My room.' },
   steps: { artwork: 'Artwork', frame: 'Frame', space: 'Space', export: 'Preview & save' },
@@ -159,10 +160,12 @@ export const wallEn = {
   },
   preview: { label: 'Preview of your framed artwork' },
   imageTitle: 'Your artwork on the wall',
+  videoTitle: 'Your artwork in 3D',
 };
 
 export const wallHe: typeof wallEn = {
-  room3D: { loading: 'מכינים את חדר התלת־ממד…', unavailable: 'לא ניתן להפעיל תלת־ממד במכשיר הזה. עורך ה־2D זמין לשימוש.', back: 'חזרה ל־2D', inspect: 'בדיקת עומק המסגרת', reset: 'איפוס מצלמה', gestures: 'גרירה לסיבוב · צביטה / גלגלת לזום · שתי אצבעות / כפתור ימני להזזה', note: 'חדר תלת־ממד מרוהט אחד. צבעי החדר, גודל הספה והריפוד מתעדכנים; סגנון הספה ומרקם הקיר נשארים ב־2D. הייצוא נעשה ב־2D.' },
+  room3D: { loading: 'מכינים את חדר התלת־ממד…', unavailable: 'לא ניתן להפעיל תלת־ממד במכשיר הזה. עורך ה־2D זמין לשימוש.', back: 'חזרה ל־2D', inspect: 'בדיקת עומק המסגרת', reset: 'איפוס מצלמה', gestures: 'גרירה לסיבוב · גרירת יצירה מזיזה אותה · צביטה / גלגלת לזום · שתי אצבעות / כפתור ימני להזזה', note: 'חדר תלת־ממד מרוהט אחד. צבעי החדר, גודל הספה והריפוד מתעדכנים; מרקם הקיר נשאר ב־2D.', photo: 'צילום תמונה', video: 'הקלטת סרטון', recording: 'מקליטים…', photoFailed: 'לא הצלחנו ליצור את התמונה. אפשר לנסות שוב.', videoFailed: 'לא הצלחנו להקליט את הסרטון. אפשר לנסות שוב או לצלם תמונה.', videoUnsupported: 'הדפדפן הזה לא מקליט וידאו. אפשר לנסות ב־Safari או ב־Chrome, או לצלם תמונה.', dismiss: 'הבנתי' },
+  pieces: { title: 'יצירות על הקיר', hint: 'עד 3. הקשה על יצירה בתצוגה עורכת אותה; גרירה מזיזה אותה.', piece: 'יצירה {n}', add: 'הוספת יצירה', duplicate: 'שכפול', remove: 'הסרה', photoNote: 'ב״החדר שלי״ מוצגת רק היצירה הנבחרת.', pro: 'כמה יצירות על קיר אחד' },
   comparisonEditor: { use: 'בחירה והמשך עריכה', replace: 'החלפה במסגרת הנוכחית' },
   editor: { view3D: 'תצוגת 3D', view2D: 'תצוגת 2D', subtitle: 'היצירה שלך, במקום הראוי לה.', artwork: 'יצירה', frame: 'מסגרת', space: 'חדר / קיר', lighting: 'תאורה', export: 'ייצוא', settings: 'הגדרות הסטודיו', live: 'תצוגה חיה', crop: 'עריכת חיתוך', doneCrop: 'סיום החיתוך', loading: 'מכינים את החדר…', retry: 'החדר לא נטען. לחצו לניסיון נוסף.', photoLight: 'התאורה המקורית של הצילום נשמרת. התאמת הצל והאור של היצירה נמצאת בחדר / קיר ← החדר שלי.' },
   steps: { artwork: 'יצירה', frame: 'מסגרת', space: 'חלל', export: 'תצוגה ושמירה' },
@@ -320,4 +323,5 @@ export const wallHe: typeof wallEn = {
   },
   preview: { label: 'תצוגה של היצירה הממוסגרת' },
   imageTitle: 'היצירה שלך על הקיר',
+  videoTitle: 'היצירה שלך בתלת־ממד',
 };

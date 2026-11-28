@@ -118,8 +118,9 @@ export async function deleteProject(id: string): Promise<void> {
   const gone = all.find((r) => r.id === id);
   await run(PROJECTS, 'readwrite', (s) => s.delete(id));
   if (!gone) return;
-  const used = new Set(all.filter((r) => r.id !== id).flatMap((r) => [r.project.artwork.imageId, r.project.space.photo.imageId]));
-  for (const imageId of [gone.project.artwork.imageId, gone.project.space.photo.imageId]) {
+  const imagesOf = (p: WallProject) => [p.artwork.imageId, p.space.photo.imageId, ...(p.others ?? []).map((o) => o.artwork.imageId)];
+  const used = new Set(all.filter((r) => r.id !== id).flatMap((r) => imagesOf(r.project)));
+  for (const imageId of imagesOf(gone.project)) {
     if (imageId && !used.has(imageId)) await run(IMAGES, 'readwrite', (s) => s.delete(imageId));
   }
 }

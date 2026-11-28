@@ -3,27 +3,29 @@
 // choosing one explains it (onLocked) instead of doing nothing.
 
 import { useEffect, useState } from 'react';
-import { Columns2, Copy, ImagePlus, Loader2, Plus, RotateCcw, RotateCw, Ruler, Undo2, X } from 'lucide-react';
-import { useTranslations } from 'use-intl';
+import { Columns2, Copy, Crown, ImagePlus, Loader2, Plus, RotateCcw, RotateCw, Ruler, Trash2, Undo2, X } from 'lucide-react';
+import { useLocale, useTranslations } from 'use-intl';
 import ImageUploader from '@/components/common/ImageUploader';
 import Slider from '@/components/common/Slider';
 import { cropRatio, fitCrop } from './render/artwork';
 import { SOFAS } from './render/room';
+import { sofa3dOf, sofas2d, sofas3d } from './sofas';
 import { outerCm, quadAngle, quadMeta, quadWidth, rotateQuad, scaleQuad, defaultQuad, fittedQuad, centroid } from './placement';
 import type { StoredImage } from './storage';
 import type { WallState } from './useWallProject';
 import {
   ASPECTS,
   EXPORT_PX,
+  MAX_PIECES,
   FINISHES,
   FRAME_TYPES,
   MAT_COLORS,
   ROOMS,
   SOFA_COLORS,
-  SOFA_STYLES,
   WALL_COLORS,
   WALL_TEXTURES,
   aspectRatioOf,
+  piecesOf,
   type AspectPreset,
   type CropSpec,
   type ExportShape,
@@ -55,6 +57,48 @@ interface PanelProps {
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 const ASPECT_KEYS: Record<AspectPreset, string> = { free: 'free', square: 'square', circle: 'circle', '4:5': 'r45', '3:4': 'r34', '2:3': 'r23', '16:9': 'r169', custom: 'custom' };
+
+// ── The artworks on this wall (up to MAX_PIECES): pick one to edit, add, duplicate, remove ──
+export function PiecesBar({ state, project, access, onLocked }: PanelProps) {
+  const t = useTranslations('wallTool.pieces');
+  const pieces = piecesOf(project);
+  const selected = project.pieceId ?? 'p1';
+  const full = pieces.length >= MAX_PIECES;
+  const button = 'flex h-10 items-center gap-1.5 rounded-lg border border-border bg-secondary/40 px-3 text-[13px] font-medium hover:bg-secondary disabled:opacity-50';
+  return (
+    <Section title={t('title')} hint={access.premium ? t('hint') : undefined}>
+      {pieces.length > 1 && (
+        <div role="group" aria-label={t('title')} className="flex flex-wrap gap-1.5">
+          {pieces.map((p, i) => (
+            <button key={p.id} type="button" aria-pressed={p.id === selected} onClick={() => state.select(p.id)} className={`flex min-h-10 items-center rounded-lg border px-3 text-[13px] font-medium ${p.id === selected ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-secondary/40 text-foreground/85 hover:bg-secondary'}`}>
+              {t('piece', { n: i + 1 })}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {access.premium ? (
+          !full && <ImageUploader compact label={t('add')} icon={<Plus className="h-4 w-4" />} onImageLoad={(url) => void state.addPiece(url)} disabled={state.busy} />
+        ) : (
+          <button type="button" onClick={() => onLocked(t('pro'))} className={button}>
+            <Plus className="h-4 w-4" aria-hidden="true" /> {t('add')} <Crown className="h-3 w-3 text-primary" aria-label="Pro" />
+          </button>
+        )}
+        {access.premium && !full && (
+          <button type="button" onClick={state.duplicatePiece} className={button}>
+            <Copy className="h-4 w-4" aria-hidden="true" /> {t('duplicate')}
+          </button>
+        )}
+        {pieces.length > 1 && (
+          <button type="button" onClick={() => state.removePiece(selected)} className={button}>
+            <Trash2 className="h-4 w-4" aria-hidden="true" /> {t('remove')}
+          </button>
+        )}
+      </div>
+      {project.space.mode === 'photo' && pieces.length > 1 && <p className="text-xs text-muted-foreground">{t('photoNote')}</p>}
+    </Section>
+  );
+}
 
 // ── 1. Artwork ──────────────────────────────────────────────────────────────
 export function ArtworkPanel({ state, project, onLocked }: PanelProps) {
@@ -270,13 +314,17 @@ export function FramePanel({ state, project, access, onLocked, value, onChange }
 }
 
 // ── 3. Space and light ──────────────────────────────────────────────────────
-export function SpacePanel({ state, project, access, onLocked, calibration }: PanelProps & {
+export function SpacePanel({ state, project, access, onLocked, calibration, view3D = false }: PanelProps & {
   calibration: { points: Pt[] | null; start: () => void; cancel: () => void; apply: (cm: number) => void };
+  /** The 3D room is shown: only its sofa models are offered. */
+  view3D?: boolean;
 }) {
   const t = useTranslations('wallTool.space');
+  const he = useLocale() === 'he';
   const tp = useTranslations('wallTool.photo');
   const space = project.space;
   const setSpace = (recipe: (s: WallProject['space']) => WallProject['space']) => state.update((p) => ({ ...p, space: recipe(p.space) }));
+  const sofaW = Math.round((view3D ? sofa3dOf(project).size.w : SOFAS[space.room.sofaStyle].w) * (space.room.sofaScale || 1));
   const modes: { id: SpaceMode; locked: boolean }[] = [
     { id: 'wall', locked: false },
     { id: 'room', locked: !access.premium },
@@ -311,15 +359,20 @@ export function SpacePanel({ state, project, access, onLocked, calibration }: Pa
         <>
           <Section title={t('room')}>
             <div role="group" aria-label={t('room')} className="grid grid-cols-2 gap-2">
-              {ROOMS.map((r) => <button type="button" key={r.id} aria-pressed={space.room.id === r.id} onClick={() => setSpace((s) => ({ ...s, room: { id: r.id, sofaStyle: r.sofa.style, sofaColor: r.sofa.color, sofaScale: s.room.sofaScale } }))} className={`overflow-hidden rounded-xl border text-start transition ${space.room.id === r.id ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-white/40'}`}>
+              {ROOMS.map((r) => <button type="button" key={r.id} aria-pressed={space.room.id === r.id} onClick={() => setSpace((s) => ({ ...s, room: { ...s.room, id: r.id, sofaStyle: r.sofa.style, sofaColor: r.sofa.color } }))} className={`overflow-hidden rounded-xl border text-start transition ${space.room.id === r.id ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-white/40'}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- local optimized studio asset */}
                 <img src={`/images/art-wall/${r.id}.webp`} alt="" loading="lazy" className="aspect-[3/2] w-full object-cover" />
                 <span className="block px-2.5 py-2 text-xs font-medium">{t(`rooms.${r.id}`)}</span>
               </button>)}
             </div>
           </Section>
-          <Section title={t('sofa')} hint={t('scaleNote', { w: Math.round(SOFAS[space.room.sofaStyle].w * (space.room.sofaScale || 1)) })}>
-            <Chips<SofaStyle> label={t('sofa')} columns={2} options={SOFA_STYLES.map((s) => ({ id: s, label: t(`sofas.${s}`) }))} value={space.room.sofaStyle} onChange={(sofaStyle) => setSpace((s) => ({ ...s, room: { ...s.room, sofaStyle } }))} onLocked={onLocked} />
+          <Section title={t('sofa')} hint={t('scaleNote', { w: sofaW })}>
+            {/* Only the sofas this view really has: the photographed ones in 2D, the models in 3D (sofas.ts). */}
+            {view3D ? (
+              <Chips<string> label={t('sofa')} columns={2} options={sofas3d().map((s) => ({ id: s.id, label: he ? s.label.he : s.label.en }))} value={sofa3dOf(project).id} onChange={(sofa3d) => setSpace((s) => ({ ...s, room: { ...s.room, sofa3d } }))} onLocked={onLocked} />
+            ) : (
+              <Chips<SofaStyle> label={t('sofa')} columns={2} options={sofas2d().map((s) => ({ id: s.photo!, label: t(`sofas.${s.photo!}`) }))} value={space.room.sofaStyle} onChange={(sofaStyle) => setSpace((s) => ({ ...s, room: { ...s.room, sofaStyle } }))} onLocked={onLocked} />
+            )}
             <Swatches label={t('sofaColor')} swatches={SOFA_COLORS.map((c) => ({ id: c, color: c, label: c }))} value={space.room.sofaColor} onChange={(sofaColor) => setSpace((s) => ({ ...s, room: { ...s.room, sofaColor } }))} onLocked={onLocked} custom={{ label: t('sofaColor') }} />
             <Slider
               label={t('sofaSize')}
@@ -327,7 +380,7 @@ export function SpacePanel({ state, project, access, onLocked, calibration }: Pa
               max={130}
               step={1}
               value={Math.round((space.room.sofaScale || 1) * 100)}
-              readout={`${Math.round(SOFAS[space.room.sofaStyle].w * (space.room.sofaScale || 1))} cm`}
+              readout={`${sofaW} cm`}
               onChange={(v) => setSpace((s) => ({ ...s, room: { ...s.room, sofaScale: v / 100 } }))}
             />
           </Section>

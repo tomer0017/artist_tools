@@ -40,6 +40,7 @@ import {
   canShareFile,
   downloadBlob,
   isGif,
+  isVideo,
   isIOS,
   isPdf,
   isTouchDevice,
@@ -391,7 +392,8 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
   const [sharing, setSharing] = useState(false);
 
   const gif = isGif(media.mime);
-  const kind = gif ? 'gif' : 'image';
+  const video = isVideo(media.mime);
+  const kind = gif ? 'gif' : video ? 'video' : 'image';
   const file = useMemo(
     () => makeShareFile(media.blob, media.filename, media.mime),
     [media.blob, media.filename, media.mime],
@@ -437,12 +439,16 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
           </button>
         </div>
         <div className="flex flex-1 items-center justify-center overflow-auto px-3">
-          <img
-            src={media.url}
-            alt={t('toSaveAlt', { kind })}
-            className="max-h-full max-w-full select-auto object-contain"
-            style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
-          />
+          {video ? (
+            <video src={media.url} aria-label={t('toSaveAlt', { kind })} controls playsInline muted loop autoPlay className="max-h-full max-w-full object-contain" />
+          ) : (
+            <img
+              src={media.url}
+              alt={t('toSaveAlt', { kind })}
+              className="max-h-full max-w-full select-auto object-contain"
+              style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
+            />
+          )}
         </div>
         <div className="space-y-1 px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3 text-center">
           <p className="text-sm text-white/90">{t('pressAndHold', { kind })}</p>
@@ -474,12 +480,16 @@ function SaveMediaSheet({ media, onClose }: { media: ActiveMedia; onClose: () =>
 
         {/* Actual media preview (renders animated GIFs too). */}
         <div className="mb-3 flex max-h-[42vh] items-center justify-center overflow-hidden rounded-lg bg-black/30">
-          <img
-            src={media.url}
-            alt={t('previewAlt', { kind })}
-            className="max-h-[42vh] w-auto max-w-full object-contain"
-            style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
-          />
+          {video ? (
+            <video src={media.url} aria-label={t('previewAlt', { kind })} controls playsInline muted loop autoPlay className="max-h-[42vh] w-auto max-w-full object-contain" />
+          ) : (
+            <img
+              src={media.url}
+              alt={t('previewAlt', { kind })}
+              className="max-h-[42vh] w-auto max-w-full object-contain"
+              style={{ WebkitTouchCallout: 'default' } as React.CSSProperties}
+            />
+          )}
         </div>
 
         {/* Primary action */}

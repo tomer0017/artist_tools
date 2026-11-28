@@ -127,9 +127,10 @@ test.describe('Art on Your Wall', () => {
     await shot(page, '3d-default');
     const before = await canvas.screenshot();
     const box = (await canvas.boundingBox())!;
-    await page.mouse.move(box.x + box.width * .5, box.y + box.height * .45);
+    // Orbit from the floor (a press on the artwork moves it along the wall instead).
+    await page.mouse.move(box.x + box.width * .5, box.y + box.height * .88);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width * .75, box.y + box.height * .5, { steps: 16 });
+    await page.mouse.move(box.x + box.width * .75, box.y + box.height * .9, { steps: 16 });
     await page.mouse.up();
     await expect.poll(async () => (await canvas.screenshot()).equals(before)).toBe(false);
     await shot(page, '3d-orbit');

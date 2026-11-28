@@ -6,7 +6,7 @@ import { canvasToBlob } from './images';
 import { fittedQuad } from './placement';
 import { frameGeometry } from './render/frame';
 import { composePhoto } from './render/photo';
-import { framedFor, renderScene } from './render/scene';
+import { framedFor, renderScene, type PieceArt } from './render/scene';
 import { ctxOf, makeCanvas } from './render/util';
 import { SHAPES, isRound, type FrameSpec, type Pt, type WallProject } from './types';
 
@@ -36,7 +36,7 @@ export function renderPhotoScene(target: HTMLCanvasElement, project: WallProject
   const edge = Math.max(...[0, 1, 2, 3].map((i) => Math.hypot(corners[(i + 1) % 4].x - corners[i].x, corners[(i + 1) % 4].y - corners[i].y)));
   const g = frameGeometry(project.artwork.widthCm, isRound(project.artwork) ? project.artwork.widthCm : project.artwork.heightCm, frame);
   const s = Math.max(1, Math.min(40, (edge * 1.15) / g.outerW));
-  const framed = framedFor(art.canvas, art.key, project, frame, s, false);
+  const framed = framedFor(art.canvas, art.key, project.artwork, frame, s, false);
   let base = photo;
   if (photo.width !== target.width || photo.height !== target.height) {
     base = makeCanvas(target.width, target.height);
@@ -73,6 +73,8 @@ export interface ExportInput {
   compare: FrameSpec[] | null;
   /** Labels for the compared frames ("Frame 1"…). */
   labels?: string[];
+  /** The other artworks on the wall (wall and room scenes). */
+  others?: PieceArt[];
 }
 
 /** Render the final image and encode it. */
@@ -84,7 +86,7 @@ export async function exportImage(input: ExportInput): Promise<Blob> {
   const single = (frame: FrameSpec, w: number, h: number): HTMLCanvasElement => {
     const canvas = makeCanvas(w, h);
     if (photoMode && photo) renderPhotoScene(canvas, project, art, photo, frame);
-    else renderScene(canvas, project, { art: art.canvas, artKey: art.key, frame });
+    else renderScene(canvas, project, { art: art.canvas, artKey: art.key, frame, others: input.others });
     return canvas;
   };
   let size: { w: number; h: number };

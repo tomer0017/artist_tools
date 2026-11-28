@@ -16,7 +16,8 @@ import { useHasFeature } from '@/components/shell/account';
 import type { UseFeatureId } from '@/lib/plans';
 import { exportImage } from './exporter';
 import { quadMeta, defaultQuad, fittedQuad, centroid } from './placement';
-import { ArtworkPanel, ExportPanel, FramePanel, SavedArtworks, SpacePanel, LightControls, type Access } from './Panels';
+import { ArtworkPanel, ExportPanel, FramePanel, PiecesBar, SavedArtworks, SpacePanel, LightControls, type Access } from './Panels';
+import type { PieceArt } from './render/scene';
 import { CompareGrid, PhotoStage, ScenePreview } from './Stage';
 import { CropEditor } from './CropEditor';
 import type { ProjectSummary } from './storage';
@@ -40,8 +41,11 @@ function withinPlan(p: WallProject, a: Access): WallProject {
   if (!a.premium && WALL_TEXTURES.find((x) => x.id === q.space.wall.texture)?.pro) q = { ...q, space: { ...q.space, wall: { ...q.space.wall, texture: 'plaster' } } };
   if (!a.lighting) q = { ...q, light: { ...q.light, enabled: false, pictureLight: false } };
   if (!a.hires) q = { ...q, output: { ...q.output, size: 'standard' } };
+  // Several artworks on one wall are Pro: without it, only the selected one hangs.
+  if (!a.premium && q.others?.length) q = { ...q, others: [] };
   return q;
 }
+const NO_OTHERS: PieceArt[] = [];
 
 /** What a saved image is authorized with, beyond the image itself. */
 function featuresOf(p: WallProject, compared: FrameSpec[] | null): UseFeatureId[] {
@@ -52,6 +56,7 @@ function featuresOf(p: WallProject, compared: FrameSpec[] | null): UseFeatureId[
   if (p.space.mode !== 'photo' && (p.light.enabled || p.light.pictureLight)) used.push('wall.lighting');
   if (p.space.mode === 'photo') used.push('wall.my_room');
   if (compared) used.push('wall.compare');
+  if (p.others?.length && !used.includes('wall.premium')) used.push('wall.premium');
   return used;
 }
 
@@ -95,6 +100,8 @@ export default function ArtWall() {
   const stepId = STEPS[step];
   const compareOn = comparing && access.compare && !!shown && shown.variants.length >= 2;
   const labels = (shown?.variants ?? []).map((_, i) => t('compare.label', { n: i + 1 }));
+  /** The other artworks shown (Pro), each with its cropped image. */
+  const others = shown?.others?.length ? state.otherArts : NO_OTHERS;
 
   const onLocked = (name: string) => setHint(name);
   const go = (next: number) => {
@@ -129,7 +136,7 @@ export default function ArtWall() {
       const compared = compareOn ? shown.variants : null;
       const exportProject = !compared && step === 4 && shown.variants[selectedVariant] ? { ...shown, frame: shown.variants[selectedVariant] } : shown;
       const exportArt = state.artImage ? { canvas: cropArtwork(state.artImage, shown.artwork.crop, EXPORT_PX[shown.output.size]), key: `${state.art.key}|export-${shown.output.size}` } : state.art;
-      const blob = await exportImage({ project: exportProject, art: exportArt, photo: state.photoImage, long: EXPORT_PX[shown.output.size], compare: compared, labels });
+      const blob = await exportImage({ project: exportProject, art: exportArt, photo: state.photoImage, long: EXPORT_PX[shown.output.size], compare: compared, labels, others });
       const ext = shown.output.format === 'png' ? 'png' : 'jpg';
       await save({ blob, filename: `sketchyartlab-wall-${Date.now()}.${ext}`, mime: shown.output.format === 'png' ? 'image/png' : 'image/jpeg', title: t('imageTitle'), tool: 'wall', features: featuresOf(exportProject, compared) });
     } catch {
@@ -137,6 +144,16 @@ export default function ArtWall() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /** A photo or film of the 3D room, saved like every export (3D is Pro; a large photo is the high-resolution option). */
+  const size3D = access.hires ? 'high' : 'standard';
+  const onMedia = async (blob: Blob, type: string, kind: 'photo' | 'video') => {
+    if (!shown) return;
+    const ext = type === 'image/png' ? 'png' : type === 'image/jpeg' ? 'jpg' : type === 'video/mp4' ? 'mp4' : 'webm';
+    const used = featuresOf({ ...shown, output: { ...shown.output, size: kind === 'photo' ? size3D : 'standard' } }, null);
+    if (!used.includes('wall.premium')) used.push('wall.premium');
+    await save({ blob, filename: `sketchyartlab-wall-3d-${Date.now()}.${ext}`, mime: type, title: kind === 'video' ? t('videoTitle') : t('imageTitle'), tool: 'wall', features: used });
   };
 
   // ── the stage ────────────────────────────────────────────────────────────
@@ -177,9 +194,10 @@ export default function ArtWall() {
       />
     );
   else if (step === 4 && compareOn)
-    stage = <CompareGrid project={shown} art={state.art} photo={state.photoImage} frames={shown.variants} labels={labels} label={t('preview.label')} onUse={setSelectedVariant} selected={selectedVariant} />;
-  else if (view3D && shown.space.mode !== 'photo' && step !== 4) stage = <Room3D project={shown} art={state.art} onExit={() => setView3D(false)} />;
-  else stage = <ScenePreview project={shown} art={state.art} photo={state.photoImage} frame={step === 4 ? shown.variants[selectedVariant] : undefined} label={t('preview.label')} />;
+    stage = <CompareGrid project={shown} art={state.art} photo={state.photoImage} frames={shown.variants} labels={labels} label={t('preview.label')} onUse={setSelectedVariant} selected={selectedVariant} others={others} />;
+  else if (view3D && shown.space.mode !== 'photo' && step !== 4)
+    stage = <Room3D project={shown} art={state.art} others={others} onExit={() => setView3D(false)} onSelect={state.select} onMove={state.movePiece} photo={{ longEdge: EXPORT_PX[size3D], type: shown.output.format === 'png' ? 'image/png' : 'image/jpeg' }} onMedia={onMedia} />;
+  else stage = <ScenePreview project={shown} art={state.art} photo={state.photoImage} frame={step === 4 ? shown.variants[selectedVariant] : undefined} label={t('preview.label')} others={others} selectedId={shown.pieceId} onSelect={state.select} onMove={state.movePiece} />;
 
   // ── the panel ────────────────────────────────────────────────────────────
   let panel: React.ReactNode = null;
@@ -187,11 +205,11 @@ export default function ArtWall() {
     const props = { state, project, access, onLocked };
     panel =
       step === 0 ? (
-        <ArtworkPanel {...props} />
+        <div className="space-y-6"><PiecesBar {...props} /><ArtworkPanel {...props} /></div>
       ) : step === 1 ? (
-        <FramePanel {...props} />
+        <div className="space-y-6"><PiecesBar {...props} /><FramePanel {...props} /></div>
       ) : step === 2 ? (
-        <SpacePanel {...props} calibration={calibration} />
+        <SpacePanel {...props} calibration={calibration} view3D={view3D && shown.space.mode !== 'photo'} />
       ) : step === 3 ? (
         <LightControls {...props} />
       ) : (

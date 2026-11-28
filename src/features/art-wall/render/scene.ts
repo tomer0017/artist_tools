@@ -4,7 +4,7 @@
 // sofa and decor in front. The light's colour reaches the wall, the frame and
 // the room — never the artwork, which only gets brighter or dimmer.
 
-import { finishOf, isRound, roomOf, type FrameSpec, type LightSpec, type LightTemp, type WallProject } from '../types';
+import { finishOf, isRound, roomOf, type ArtworkSpec, type FrameSpec, type LightSpec, type LightTemp, type Piece, type PieceOffset, type WallProject } from '../types';
 import { frameGeometry, renderFramed } from './frame';
 import type { RoomView } from './room';
 import { drawInterior, drawSofaLayer, interiorScale } from './interior';
@@ -24,26 +24,72 @@ export interface Placement {
   round: boolean;
 }
 
-/** Where the framed piece lands on a canvas of W × H for this project (wall or room). */
-export function placeFrame(project: WallProject, frame: FrameSpec, W: number, H: number): { place: Placement; view: RoomView | null } {
-  const art = project.artwork;
-  const round = isRound(art);
-  const g = frameGeometry(art.widthCm, round ? art.widthCm : art.heightCm, frame);
-  const outerH = round ? g.outerW : g.outerH;
+export interface Layout {
+  /** Pixels per centimetre at the wall, shared by every piece. */
+  s: number;
+  view: RoomView | null;
+  places: { id: string; piece: Piece; place: Placement }[];
+  /** The part of the wall a piece may occupy, px. */
+  bounds: { x0: number; y0: number; x1: number; y1: number };
+}
+
+/**
+ * Where every piece lands on a canvas of W × H (wall or room), at one shared
+ * scale. Each starts at its default spot (centred; in a room, hung above the
+ * sofa) and moves by its own offset in cm.
+ */
+export function layoutPieces(project: WallProject, pieces: Piece[], W: number, H: number): Layout {
+  const geo = pieces.map((piece) => {
+    const round = isRound(piece.artwork);
+    const g = frameGeometry(piece.artwork.widthCm, round ? piece.artwork.widthCm : piece.artwork.heightCm, piece.frame);
+    return { piece, round, ow: g.outerW, oh: round ? g.outerW : g.outerH };
+  });
+  // The scale follows the pieces' sizes side by side (never where they were dragged, so a drag never zooms).
+  const spanW = Math.max(1, geo.reduce((sum, g) => sum + g.ow, 0) + 14 * (geo.length - 1));
+  const maxH = Math.max(1, ...geo.map((g) => g.oh));
   if (project.space.mode === 'room') {
-    const { s, artBottom } = interiorScale(project, W, H, g.outerW, outerH);
-    const w = g.outerW * s, h = outerH * s;
+    const { s, artBottom, sofaBottom } = interiorScale(project, W, H, spanW, maxH);
     // Hung at its height above the sofa; a piece too tall for the view comes down
     // (its lower part behind the sofa) so its top, and the picture light, stay in view.
-    const top = Math.max(H * 0.03 + (project.light.pictureLight ? 16 * s : 0), artBottom - h);
-    return { place: { x: (W - w) / 2, y: top, w, h, s, round }, view: { W, H, s, cx: W / 2, horizon: 0 } };
+    const topMargin = H * 0.03 + (project.light.pictureLight ? 16 * s : 0);
+    const places = geo.map(({ piece, round, ow, oh }) => {
+      const w = ow * s;
+      const h = oh * s;
+      return { id: piece.id, piece, place: { x: (W - w) / 2 + piece.offset.x * s, y: Math.max(topMargin, artBottom - h) - piece.offset.y * s, w, h, s, round } };
+    });
+    return { s, view: { W, H, s, cx: W / 2, horizon: 0 }, places, bounds: { x0: W * 0.01, y0: H * 0.01, x1: W * 0.99, y1: sofaBottom } };
   }
-
   const zoom = Math.min(0.8, Math.max(0.2, project.space.zoom));
-  const s = Math.min((W * zoom) / g.outerW, (H * Math.min(0.86, zoom * 1.9)) / outerH);
-  const w = g.outerW * s;
-  const h = outerH * s;
-  return { place: { x: (W - w) / 2, y: (H - h) / 2 - H * 0.02, w, h, s, round }, view: null };
+  const s = Math.min((W * zoom) / spanW, (H * Math.min(0.86, zoom * 1.9)) / maxH);
+  const places = geo.map(({ piece, round, ow, oh }) => {
+    const w = ow * s;
+    const h = oh * s;
+    return { id: piece.id, piece, place: { x: (W - w) / 2 + piece.offset.x * s, y: (H - h) / 2 - H * 0.02 - piece.offset.y * s, w, h, s, round } };
+  });
+  return { s, view: null, places, bounds: { x0: W * 0.01, y0: H * 0.01, x1: W * 0.99, y1: H * 0.99 } };
+}
+
+/** An offset that keeps the piece on the wall (its whole box inside the bounds). */
+export function keepOnWall(layout: Layout, id: string, offset: PieceOffset): PieceOffset {
+  const entry = layout.places.find((p) => p.id === id);
+  if (!entry) return offset;
+  const { place, piece } = entry;
+  const s = layout.s;
+  const homeX = place.x - piece.offset.x * s;
+  const homeY = place.y + piece.offset.y * s;
+  const { x0, y0, x1, y1 } = layout.bounds;
+  const x = Math.min(Math.max(x0, x1 - place.w), Math.max(x0, homeX + offset.x * s));
+  const y = Math.min(Math.max(y0, y1 - place.h), Math.max(y0, homeY - offset.y * s));
+  return { x: Math.round(((x - homeX) / s) * 10) / 10, y: Math.round(((homeY - y) / s) * 10) / 10 };
+}
+
+/** The piece being edited: the project's artwork and frame, at its offset. */
+export const activePiece = (project: WallProject, frame: FrameSpec = project.frame): Piece => ({ id: project.pieceId ?? 'p1', artwork: project.artwork, frame, offset: project.offset ?? { x: 0, y: 0 } });
+
+/** Where the piece being edited lands on a canvas of W × H for this project (wall or room). */
+export function placeFrame(project: WallProject, frame: FrameSpec, W: number, H: number): { place: Placement; view: RoomView | null } {
+  const layout = layoutPieces(project, [activePiece(project, frame)], W, H);
+  return { place: layout.places[0].place, view: layout.view };
 }
 
 function silhouette(ctx: Ctx, p: Placement): void {
@@ -172,12 +218,12 @@ function pictureLightFixture(ctx: Ctx, p: Placement, frame: FrameSpec, light: Li
 
 const framedCache = new Map<string, HTMLCanvasElement>();
 /** The framed piece at a scale (kept for a few calls: sliding the light or the room does not redraw it). */
-export function framedFor(art: HTMLCanvasElement, key: string, project: WallProject, frame: FrameSpec, s: number, lightAbove: boolean): HTMLCanvasElement {
-  const round = isRound(project.artwork);
-  const id = `${key}|${JSON.stringify(frame)}|${project.artwork.widthCm}x${project.artwork.heightCm}|${round}|${Math.round(s * 100)}|${lightAbove}`;
+export function framedFor(art: HTMLCanvasElement, key: string, artwork: ArtworkSpec, frame: FrameSpec, s: number, lightAbove: boolean): HTMLCanvasElement {
+  const round = isRound(artwork);
+  const id = `${key}|${JSON.stringify(frame)}|${artwork.widthCm}x${artwork.heightCm}|${round}|${Math.round(s * 100)}|${lightAbove}`;
   const hit = framedCache.get(id);
   if (hit) return hit;
-  const canvas = renderFramed(art, project.artwork.widthCm, round ? project.artwork.widthCm : project.artwork.heightCm, frame, round, s, { lightAbove });
+  const canvas = renderFramed(art, artwork.widthCm, round ? artwork.widthCm : artwork.heightCm, frame, round, s, { lightAbove });
   framedCache.set(id, canvas);
   if (framedCache.size > 8) framedCache.delete(framedCache.keys().next().value as string);
   return canvas;
@@ -194,21 +240,32 @@ function cached(id: string, W: number, H: number, draw: (ctx: Ctx) => void): HTM
   return canvas;
 }
 
+/** Another piece on the wall, with its cropped artwork. */
+export interface PieceArt {
+  piece: Piece;
+  art: HTMLCanvasElement;
+  artKey: string;
+}
+
 export interface SceneOptions {
   /** The cropped artwork and a key that changes when it does. */
   art: HTMLCanvasElement;
   artKey: string;
   /** Another frame than the project's (a comparison). */
   frame?: FrameSpec;
+  /** The other pieces on the wall (the one being edited is `art`). */
+  others?: PieceArt[];
 }
 
-/** Draw the wall or room scene for this project onto `canvas` (its full size). */
-export function renderScene(canvas: HTMLCanvasElement, project: WallProject, options: SceneOptions): Placement {
+/** Draw the wall or room scene for this project onto `canvas` (its full size); returns where each piece landed. */
+export function renderScene(canvas: HTMLCanvasElement, project: WallProject, options: SceneOptions): Layout {
   const W = canvas.width;
   const H = canvas.height;
   const ctx = ctxOf(canvas);
-  const frame = options.frame ?? project.frame;
-  const { place, view } = placeFrame(project, frame, W, H);
+  const all: PieceArt[] = [{ piece: activePiece(project, options.frame ?? project.frame), art: options.art, artKey: options.artKey }, ...(options.others ?? [])];
+  all.sort((a, b) => a.piece.id.localeCompare(b.piece.id, 'en', { numeric: true }));
+  const layout = layoutPieces(project, all.map((a) => a.piece), W, H);
+  const { view, s } = layout;
   const light = project.light;
   const lightAbove = light.pictureLight;
   const space = project.space;
@@ -217,7 +274,7 @@ export function renderScene(canvas: HTMLCanvasElement, project: WallProject, opt
   if (view) {
     drawInterior(ctx, project, W, H);
   } else {
-    const back = cached(`wall|${space.wall.color}|${space.wall.texture}|${W}x${H}|${place.s.toFixed(4)}`, W, H, (c) => paintWall(c, 0, 0, W, H, space.wall.color, space.wall.texture, place.s));
+    const back = cached(`wall|${space.wall.color}|${space.wall.texture}|${W}x${H}|${s.toFixed(4)}`, W, H, (c) => paintWall(c, 0, 0, W, H, space.wall.color, space.wall.texture, s));
     ctx.drawImage(back, 0, 0);
   }
   // A gentle falloff toward the edges, as in any room.
@@ -227,36 +284,46 @@ export function renderScene(canvas: HTMLCanvasElement, project: WallProject, opt
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
 
-  // 2. Light on the wall.
-  if (light.enabled) galleryLight(ctx, W, H, place, light);
-  if (light.pictureLight) pictureLightCone(ctx, place, light);
+  // 2. Light on the wall: one pool over all the pieces, a cone above each.
+  const places = layout.places.map((p) => p.place);
+  if (light.enabled) {
+    const x0 = Math.min(...places.map((p) => p.x));
+    const y0 = Math.min(...places.map((p) => p.y));
+    const x1 = Math.max(...places.map((p) => p.x + p.w));
+    const y1 = Math.max(...places.map((p) => p.y + p.h));
+    galleryLight(ctx, W, H, { x: x0, y: y0, w: x1 - x0, h: y1 - y0, s, round: false }, light);
+  }
+  if (light.pictureLight) places.forEach((p) => pictureLightCone(ctx, p, light));
 
-  // 3. The piece and its shadow.
-  wallShadow(ctx, place, frame.type === 'frameless' ? 2 : frame.depthCm, lightAbove, light.enabled ? 1.15 : 1);
-  const framed = framedFor(options.art, options.artKey, project, frame, place.s, lightAbove);
-  ctx.drawImage(framed, place.x, place.y, place.w, place.h);
-  if (light.pictureLight) {
-    pictureLightFixture(ctx, place, frame, light);
+  // 3. The pieces and their shadows.
+  for (const { piece, art, artKey } of all) {
+    const place = layout.places.find((p) => p.id === piece.id)!.place;
+    wallShadow(ctx, place, piece.frame.type === 'frameless' ? 2 : piece.frame.depthCm, lightAbove, light.enabled ? 1.15 : 1);
+    const framed = framedFor(art, artKey, piece.artwork, piece.frame, place.s, lightAbove);
+    ctx.drawImage(framed, place.x, place.y, place.w, place.h);
+    if (light.pictureLight) pictureLightFixture(ctx, place, piece.frame, light);
   }
 
-  // 4. The sofa, in front of everything, in the same light as the room.
+  // 4. The sofa, in front of everything, in the same light as the room (cached: dragging stays smooth).
   if (view) {
-    const layer = makeCanvas(W, H);
-    const lc = ctxOf(layer);
-    drawSofaLayer(lc, project, W, place.s, H * 0.93);
-    if (light.enabled) {
-      // The room's dimming and the light's colour, on the sofa's own pixels only (its shadow stays a shadow).
-      const k = light.intensity / 100;
-      lc.globalCompositeOperation = 'source-atop';
-      lc.fillStyle = `rgba(0,0,0,${(0.12 + 0.12 * k).toFixed(3)})`;
-      lc.fillRect(0, 0, W, H);
-      lc.fillStyle = css(LIGHT[light.temperature], 0.1 + 0.1 * k);
-      lc.fillRect(0, 0, W, H);
-    }
+    const room = space.room;
+    const key = `sofa|${room.id}|${room.sofaStyle}|${room.sofaColor}|${room.sofaScale}|${W}x${H}|${s.toFixed(4)}|${light.enabled ? `${light.intensity}${light.temperature}` : 'off'}`;
+    const layer = cached(key, W, H, (lc) => {
+      drawSofaLayer(lc, project, W, s, H * 0.93);
+      if (light.enabled) {
+        // The room's dimming and the light's colour, on the sofa's own pixels only (its shadow stays a shadow).
+        const k = light.intensity / 100;
+        lc.globalCompositeOperation = 'source-atop';
+        lc.fillStyle = `rgba(0,0,0,${(0.12 + 0.12 * k).toFixed(3)})`;
+        lc.fillRect(0, 0, W, H);
+        lc.fillStyle = css(LIGHT[light.temperature], 0.1 + 0.1 * k);
+        lc.fillRect(0, 0, W, H);
+      }
+    });
     ctx.drawImage(layer, 0, 0);
   }
 
-  return place;
+  return layout;
 }
 
 /** The project's wall colour as an RGB (for UI previews). */

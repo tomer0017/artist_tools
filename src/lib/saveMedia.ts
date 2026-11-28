@@ -24,6 +24,8 @@ const MIME_BY_EXT: Record<string, string> = {
   webp: 'image/webp',
   json: 'application/json',
   pdf: 'application/pdf',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -33,6 +35,8 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'application/json': 'json',
   'application/pdf': 'pdf',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
 };
 
 /** Infer a MIME type from a filename's extension. */
@@ -49,6 +53,11 @@ export function extForMime(mime: string): string {
 /** True for a PDF (shown on the save sheet as a picture of its pages). */
 export function isPdf(mime: string): boolean {
   return mime === 'application/pdf';
+}
+
+/** True for a video (shown on the save sheet as a player). */
+export function isVideo(mime: string): boolean {
+  return mime.startsWith('video/');
 }
 
 /** True for GIF media (used to pick "Save GIF" vs "Save Image" wording). */
